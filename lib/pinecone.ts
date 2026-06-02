@@ -5,7 +5,6 @@ const indexName = process.env.PINECONE_INDEX
 if (!apiKey) throw new Error('PINECONE_API_KEY is not configured')
 if (!indexName) throw new Error('PINECONE_INDEX is not configured')
 
-console.log('[pinecone] using index:', indexName)
 const pinecone = new Pinecone({ apiKey })
 export const index = pinecone.index(indexName)
 
@@ -32,6 +31,38 @@ export async function deleteAllEmbeddings(): Promise<void> {
   await index.deleteAll()
 }
 
+export async function searchInNamespace(
+  embedding: number[],
+  namespace: string,
+  topK = 5,
+  minScore = 0.5,
+): Promise<Array<{ id: string; score: number }>> {
+  const results = await index.namespace(namespace).query({
+    vector: embedding,
+    topK,
+    includeMetadata: false,
+  })
+  return (results.matches ?? [])
+    .filter((m) => (m.score ?? 0) >= minScore)
+    .map((m) => ({ id: m.id, score: m.score ?? 0 }))
+}
+
+export async function moveVector(
+  id: string,
+  fromNamespace: string,
+  toNamespace: string,
+): Promise<void> {
+  const fetched = await index.namespace(fromNamespace).fetch([id])
+  const record = fetched.records[id]
+  if (!record) return
+  await index.namespace(toNamespace).upsert([{
+    id,
+    values: record.values,
+    metadata: record.metadata as Record<string, string>,
+  }])
+  await index.namespace(fromNamespace).deleteOne(id)
+}
+
 export async function searchSimilar(
   embedding: number[],
   workspaceId: string,
@@ -46,11 +77,6 @@ export async function searchSimilar(
   })
 
   const raw = results.matches ?? []
-  console.log(
-    '[pinecone] raw matches before score filter:',
-    raw.length,
-    raw.map((m) => ({ id: m.id, score: m.score }))
-  )
 
   return raw
     .filter((m) => (m.score ?? 0) >= minScore)

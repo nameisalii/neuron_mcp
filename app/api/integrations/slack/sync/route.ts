@@ -33,11 +33,6 @@ export async function POST() {
     const secondsSinceSync = integration.lastSyncAt
       ? Math.floor((Date.now() - integration.lastSyncAt.getTime()) / 1000)
       : null
-    console.log(`[slack/sync] lastSyncAt: ${integration.lastSyncAt?.toISOString() ?? 'never'}, secondsSinceSync: ${secondsSinceSync ?? 'never'}`)
-
-    const channelCount = integration.channels.length || '(auto-discover)'
-    console.log(`[slack/sync] channels configured: ${channelCount}`)
-
     const messages = await syncSlackMessages(workspaceId)
     const extracted = await extractKnowledge(messages, workspaceId)
 

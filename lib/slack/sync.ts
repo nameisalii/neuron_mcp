@@ -76,8 +76,6 @@ async function fetchChannelMessages(
       })
     )
 
-    console.log(`[slack/sync] channel ${channelId}: raw API returned ${page.messages?.length ?? 0} messages`)
-
     for (const msg of page.messages ?? []) {
       if (!msg.text?.trim()) continue
       if (msg.bot_id || msg.subtype === 'bot_message') continue
@@ -92,7 +90,6 @@ async function fetchChannelMessages(
     cursor = page.response_metadata?.next_cursor ?? undefined
   } while (cursor)
 
-  console.log(`[slack/sync] channel ${channelId}: ${messages.length} messages after empty-text filter`)
   return messages
 }
 
@@ -116,17 +113,12 @@ export async function syncSlackMessages(workspaceId: string): Promise<SlackMessa
     ? String(Math.floor(integration.lastSyncAt.getTime() / 1000))
     : NINETY_DAYS_AGO
 
-  console.log(`[slack/sync] fetching from ${channelIds.length} channels since ${new Date(Number(oldest) * 1000).toISOString()}`)
-  console.log(`[slack/sync] channelIds:`, channelIds)
-
   const allMessages: SlackMessage[] = []
 
   for (const channelId of channelIds) {
     const messages = await fetchChannelMessages(client, channelId, oldest)
-    console.log(`[slack/sync] channel ${channelId}: ${messages.length} messages`)
     allMessages.push(...messages)
   }
 
-  console.log(`[slack/sync] total messages: ${allMessages.length}`)
   return allMessages
 }

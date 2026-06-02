@@ -6,13 +6,13 @@ import { EXTRACTION_SYSTEM_PROMPT, CONFLICT_SYSTEM_PROMPT } from './prompts'
 import type { SlackMessage, ExtractedItem } from '@/types'
 
 const CHUNK_SIZE = 20
-const CONFIDENCE_THRESHOLD = 0.6
+const CONFIDENCE_THRESHOLD = 0.4
 const CONFLICT_TOP_K = 3
 const DUPLICATE_THRESHOLD = 0.95
 
 const extractedItemSchema = z.object({
   content: z.string().min(1),
-  category: z.enum(['rule', 'decision', 'process', 'idea']),
+  category: z.enum(['rule', 'decision', 'process', 'idea', 'fact']),
   owner: z.string().nullable(),
   confidence: z.number().min(0).max(1),
 })
@@ -21,9 +21,13 @@ function computeContentHash(content: string): string {
   return content.slice(0, 100).toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+function escapeXml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function formatMessages(messages: SlackMessage[]): string {
   return messages
-    .map((m) => `${m.user} (${m.channel}): ${m.text.slice(0, 500)}`)
+    .map((m) => `${escapeXml(m.user)} (${escapeXml(m.channel)}): ${escapeXml(m.text.slice(0, 500))}`)
     .join('\n')
 }
 
@@ -54,7 +58,7 @@ async function extractChunk(messages: SlackMessage[]): Promise<ExtractedItem[]> 
   const raw = response.choices[0]?.message?.content ?? '[]'
   try {
     const validated = z.array(extractedItemSchema).parse(JSON.parse(raw))
-    return validated.filter((item) => item.confidence > CONFIDENCE_THRESHOLD) as ExtractedItem[]
+    return validated.filter((item) => item.confidence >= CONFIDENCE_THRESHOLD) as ExtractedItem[]
   } catch (err) {
     console.error('[extractChunk] Failed to parse or validate LLM output', err)
     return []
@@ -63,7 +67,9 @@ async function extractChunk(messages: SlackMessage[]): Promise<ExtractedItem[]> 
 
 export async function extractKnowledge(
   messages: SlackMessage[],
-  workspaceId: string
+  workspaceId: string,
+  source = 'slack',
+  sourceUrl?: string,
 ): Promise<ExtractedItem[]> {
   const saved: ExtractedItem[] = []
 
@@ -89,7 +95,6 @@ export async function extractKnowledge(
           select: { id: true },
         })
         if (hashExists) {
-          console.log('[extractor] skipped duplicate (hash):', item.content.slice(0, 40))
           continue
         }
 
@@ -99,7 +104,6 @@ export async function extractKnowledge(
 
         const isDuplicate = similar.some((m) => m.score >= DUPLICATE_THRESHOLD)
         if (isDuplicate) {
-          console.log('[extractor] skipped duplicate (vector):', item.content.slice(0, 40))
           continue
         }
 
@@ -130,7 +134,8 @@ export async function extractKnowledge(
               content: item.content,
               contentHash,
               category: item.category,
-              source: 'slack',
+              source,
+              sourceUrl,
               owner: item.owner,
               confidence: item.confidence,
               frozen,
@@ -148,13 +153,12 @@ export async function extractKnowledge(
           await upsertEmbedding(dbItem.id, embedding, {
             workspaceId,
             category: item.category,
-            source: 'slack',
+            source,
           })
           await prisma.knowledgeItem.update({
             where: { id: dbItem.id },
             data: { embeddingId: dbItem.id },
           })
-          console.log('[extractor] saved item', dbItem.id, item.category)
         } catch (pineconeErr) {
           console.error('[extractKnowledge] Pinecone upsert failed, rolling back DB item', pineconeErr)
           await prisma.knowledgeItem.delete({ where: { id: dbItem.id } }).catch(() => null)
