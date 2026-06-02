@@ -26,7 +26,37 @@ export default async function DashboardLayout({ children }: { children: React.Re
         },
         select: { id: true, email: true, onboardingCompleted: true, workspace: { select: { id: true } } },
       })
+      // Seed owner membership so permission checks work immediately
+      if (user.workspace) {
+        await prisma.workspaceMember.upsert({
+          where: { workspaceId_userId: { workspaceId: user.workspace.id, userId } },
+          update: {},
+          create: {
+            workspaceId: user.workspace.id,
+            userId,
+            role: 'owner',
+            displayName: name ?? email,
+            avatarUrl: clerkUser.imageUrl ?? null,
+            status: 'active',
+          },
+        })
+      }
     }
+  }
+
+  // Safety net: owner existed but WorkspaceMember row was never created (e.g. webhook missed)
+  if (user?.workspace) {
+    await prisma.workspaceMember.upsert({
+      where: { workspaceId_userId: { workspaceId: user.workspace.id, userId } },
+      update: {},
+      create: {
+        workspaceId: user.workspace.id,
+        userId,
+        role: 'owner',
+        displayName: user.email,
+        status: 'active',
+      },
+    })
   }
 
   if (user && !user.onboardingCompleted) {
@@ -50,7 +80,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     : [0, 0, 0]
 
   return (
-    <DashboardShell counts={{ brain: knowledgeCount, decisions: decisionCount, ideas: ideaCount }}>
+    <DashboardShell
+      counts={{ brain: knowledgeCount, decisions: decisionCount, ideas: ideaCount }}
+      workspaceId={workspaceId ?? undefined}
+    >
       {children}
     </DashboardShell>
   )

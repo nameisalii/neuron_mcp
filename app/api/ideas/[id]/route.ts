@@ -15,20 +15,20 @@ export async function PATCH(_req: Request, { params }: { params: { id: string } 
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
-    const idea = await prisma.idea.findFirst({
-      where: { id: params.id, workspaceId: user.workspace.id },
+    const idea = await prisma.knowledgeItem.findFirst({
+      where: { id: params.id, workspaceId: user.workspace.id, category: 'idea' },
       select: { id: true },
     })
     if (!idea) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const updated = await prisma.idea.update({
+    const updated = await prisma.knowledgeItem.update({
       where: { id: idea.id },
-      data: { actionedAt: new Date() },
+      data: { verified: true, verifiedAt: new Date() },
     })
 
-    return NextResponse.json({ id: updated.id, actionedAt: updated.actionedAt })
+    return NextResponse.json({ id: updated.id, actionedAt: updated.verifiedAt })
   } catch (err) {
     console.error('[ideas/patch]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

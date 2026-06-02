@@ -13,25 +13,27 @@ export default async function IdeasPage() {
   })
 
   const ideas = user?.workspace
-    ? await prisma.idea.findMany({
-        where: { workspaceId: user.workspace.id },
+    ? await prisma.knowledgeItem.findMany({
+        where: { workspaceId: user.workspace.id, category: 'idea' },
         orderBy: { createdAt: 'desc' },
         take: 100,
         select: {
           id: true,
           content: true,
           source: true,
-          relatedIds: true,
-          actionedAt: true,
+          verifiedAt: true,
           createdAt: true,
         },
       })
     : []
 
-  const serialized = ideas.map((idea) => ({
-    ...idea,
-    createdAt: idea.createdAt.toISOString(),
-    actionedAt: idea.actionedAt?.toISOString() ?? null,
+  const serialized = ideas.map((item) => ({
+    id: item.id,
+    content: item.content,
+    source: item.source,
+    relatedIds: [] as string[],
+    actionedAt: item.verifiedAt?.toISOString() ?? null,
+    createdAt: item.createdAt.toISOString(),
   }))
 
   return (
