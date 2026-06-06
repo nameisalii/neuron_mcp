@@ -23,6 +23,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   decision: 'bg-purple-100 text-purple-700',
   process: 'bg-amber-100 text-amber-700',
   idea: 'bg-emerald-100 text-emerald-700',
+  fact: 'bg-sky-100 text-sky-700',
 }
 
 const FILTERS = [
@@ -31,6 +32,7 @@ const FILTERS = [
   { label: 'Decisions', value: 'decision' },
   { label: 'Processes', value: 'process' },
   { label: 'Ideas', value: 'idea' },
+  { label: 'Facts', value: 'fact' },
 ]
 
 interface BrainGridProps {

@@ -16,9 +16,7 @@ export async function POST(req: Request) {
     return new Response('Missing svix headers', { status: 400 })
   }
 
-  // Use raw text to avoid JSON round-trip changing key order and breaking the HMAC
   const body = await req.text()
-
   const wh = new Webhook(WEBHOOK_SECRET)
   let evt: WebhookEvent
 
@@ -33,27 +31,37 @@ export async function POST(req: Request) {
   }
 
   if (evt.type === 'user.created') {
-    const { id, email_addresses, first_name, last_name } = evt.data
+    const { id: clerkId, email_addresses, first_name, last_name, image_url } = evt.data
     const email = email_addresses[0]?.email_address
     const name = [first_name, last_name].filter(Boolean).join(' ') || null
 
-    if (!email) {
-      return new Response('No email address', { status: 400 })
-    }
+    if (!email) return new Response('No email address', { status: 400 })
 
-    // Idempotent: upsert so Clerk webhook retries don't create duplicates
-    await prisma.user.upsert({
-      where: { clerkId: id },
+    // 1. Upsert user (idempotent for webhook retries)
+    const user = await prisma.user.upsert({
+      where: { clerkId },
+      update: {},
+      create: { clerkId, email, name },
+    })
+
+    // 2. Upsert solo workspace owned by this user's DB id
+    const workspace = await prisma.workspace.upsert({
+      where: { ownerId: user.id },
+      update: {},
+      create: { ownerId: user.id, type: 'solo', plan: 'free' },
+    })
+
+    // 3. Seed owner membership so permission system works immediately
+    await prisma.workspaceMember.upsert({
+      where: { workspaceId_userId: { workspaceId: workspace.id, userId: clerkId } },
       update: {},
       create: {
-        clerkId: id,
-        email,
-        name,
-        workspace: {
-          create: {
-            name: name ? `${name}'s Brain` : 'My Brain',
-          },
-        },
+        workspaceId: workspace.id,
+        userId: clerkId,
+        role: 'owner',
+        displayName: name ?? email,
+        avatarUrl: image_url ?? null,
+        status: 'active',
       },
     })
   }

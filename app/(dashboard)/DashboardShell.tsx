@@ -3,9 +3,11 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
-import { Brain, Lightbulb, GitBranch, Search, Plug, Menu, X } from 'lucide-react'
+import { Brain, Lightbulb, GitBranch, Search, Plug, Menu, X, FileText, Settings, Activity } from 'lucide-react'
 import { useState } from 'react'
 import { clsx } from 'clsx'
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher'
+import UpgradeModal from '@/components/UpgradeModal'
 
 interface NavCounts {
   brain: number
@@ -26,10 +28,13 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Overview', icon: Brain, exact: true },
   { href: '/dashboard/brain', label: 'Brain', icon: Brain, countKey: 'brain' },
+  { href: '/dashboard/notion', label: 'Notion', icon: FileText },
   { href: '/dashboard/decisions', label: 'Decisions', icon: GitBranch, countKey: 'decisions' },
   { href: '/dashboard/ideas', label: 'Ideas', icon: Lightbulb, countKey: 'ideas' },
   { href: '/dashboard/query', label: 'Query', icon: Search },
+  { href: '/dashboard/activity', label: 'Activity', icon: Activity },
   { href: '/dashboard/integrations', label: 'Integrations', icon: Plug },
+  { href: '/dashboard/settings/capture', label: 'Capture', icon: Settings },
 ]
 
 interface NavLinkProps extends NavItem {
@@ -71,11 +76,14 @@ function NavLink({ href, label, icon: Icon, exact, count }: NavLinkProps) {
 export default function DashboardShell({
   children,
   counts,
+  workspaceId,
 }: {
   children: React.ReactNode
   counts: NavCounts
+  workspaceId?: string
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showUpgrade, setShowUpgrade] = useState(false)
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -99,6 +107,22 @@ export default function DashboardShell({
           </div>
           <span className="font-semibold text-gray-900">Neuron</span>
         </div>
+
+        {workspaceId && (
+          <>
+            <div className="border-b border-gray-100">
+              <WorkspaceSwitcher
+                currentWorkspaceId={workspaceId}
+                onUpgradeClick={() => setShowUpgrade(true)}
+              />
+            </div>
+            <UpgradeModal
+              isOpen={showUpgrade}
+              onClose={() => setShowUpgrade(false)}
+              onUpgradeComplete={() => setShowUpgrade(false)}
+            />
+          </>
+        )}
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems.map((item) => (

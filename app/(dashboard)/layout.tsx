@@ -4,8 +4,9 @@ import { prisma } from '@/lib/db'
 import DashboardShell from './DashboardShell'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { userId } = await auth()
-  if (!userId) redirect('/sign-in')
+  const { userId: rawUserId } = await auth()
+  if (!rawUserId) redirect('/sign-in')
+  const userId = rawUserId
 
   let user = await prisma.user.findUnique({
     where: { clerkId: userId },

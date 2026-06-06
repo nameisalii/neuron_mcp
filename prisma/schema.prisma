@@ -21,16 +21,31 @@ model User {
 }
 
 model Workspace {
-  id             String          @id @default(cuid())
-  name           String
-  ownerId        String          @unique
-  owner          User            @relation(fields: [ownerId], references: [id])
+  id             String             @id @default(cuid())
+  name           String?
+  type           String             @default("solo")
+  ownerId        String             @unique
+  owner          User               @relation(fields: [ownerId], references: [id])
+  iconUrl        String?
+  plan           String             @default("free")
   knowledgeItems KnowledgeItem[]
   decisions      Decision[]
   ideas          Idea[]
   clients        Client[]
   integrations   Integration[]
-  createdAt      DateTime        @default(now())
+  notionPages    NotionPage[]
+  members        WorkspaceMember[]
+  invitations    Invitation[]
+  activityEvents ActivityEvent[]
+  queryLogs      QueryLog[]
+  captureRules   CaptureRule[]
+  captureLogs    CaptureLog[]
+  syncStatuses   SyncStatus[]
+  digests        Digest[]
+  alerts         Alert[]
+  userPreferences UserPreference[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @default(now()) @updatedAt
 }
 
 model KnowledgeItem {
@@ -51,15 +66,20 @@ model KnowledgeItem {
   conflictNote String?
   reason       String?
   alternatives String?
-  contentHash  String?
-  clientId     String?
-  client       Client?   @relation(fields: [clientId], references: [id])
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  contentHash      String?
+  clientId         String?
+  client           Client?     @relation(fields: [clientId], references: [id])
+  label            String?
+  notionPageId     String?
+  notionPage       NotionPage? @relation(fields: [notionPageId], references: [id])
+  notionPageTitle  String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   @@unique([workspaceId, contentHash])
   @@index([workspaceId, category])
   @@index([workspaceId, verified])
+  @@index([workspaceId, notionPageId])
 }
 
 model Decision {
@@ -101,6 +121,41 @@ model Client {
   createdAt      DateTime        @default(now())
 }
 
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  role        String    @default("member")
+  displayName String
+  avatarUrl   String?
+  department  String?
+  joinedAt    DateTime  @default(now())
+  invitedBy   String?
+  status      String    @default("active")
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        String    @default("member")
+  invitedBy   String
+  status      String    @default("pending")
+  token       String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([token])
+}
+
 model Integration {
   id          String    @id @default(cuid())
   workspaceId String
@@ -116,4 +171,187 @@ model Integration {
   createdAt   DateTime  @default(now())
 
   @@unique([workspaceId, type])
+}
+
+model NotionPage {
+  id             String          @id @default(cuid())
+  notionPageId   String
+  workspaceId    String
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title          String
+  parentPageId   String?
+  content        String
+  blockStructure Json
+  iconUrl        String?
+  lastEditedAt   DateTime
+  syncedBy       String?
+  syncedAt       DateTime
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  chunks         NotionChunk[]
+  knowledgeItems KnowledgeItem[]
+
+  @@unique([workspaceId, notionPageId])
+  @@index([workspaceId])
+  @@index([parentPageId])
+}
+
+model NotionChunk {
+  id              String     @id @default(cuid())
+  notionPageId    String
+  page            NotionPage @relation(fields: [notionPageId], references: [id], onDelete: Cascade)
+  workspaceId     String
+  content         String
+  blockType       String
+  position        Int
+  metadata        Json?
+  pineconeId      String?
+  labels          Json       @default("[]")
+  labeledBy       Json       @default("[]")
+  visibility      String     @default("team")
+  visibilitySetBy String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([notionPageId])
+  @@index([workspaceId])
+  @@index([workspaceId, visibility])
+}
+
+model ActivityEvent {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  displayName String
+  eventType   String
+  description String
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([workspaceId, createdAt])
+  @@index([userId])
+}
+
+model QueryLog {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId         String
+  displayName    String
+  query          String
+  answer         String
+  sourceChunkIds Json     @default("[]")
+  createdAt      DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([workspaceId, createdAt])
+}
+
+model CaptureRule {
+  id          String       @id @default(cuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  integration String       // "notion" | "slack"
+  ruleType    String       // "include" | "exclude"
+  target      String       // pageId, channelId, or keyword pattern
+  targetName  String       // human-readable label
+  createdBy   String       // Clerk userId — attribution
+  createdAt   DateTime     @default(now())
+  captureLogs CaptureLog[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, integration])
+}
+
+model CaptureLog {
+  id             String       @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  timestamp      DateTime     @default(now())
+  source         String       // "notion" | "slack"
+  sourceId       String       // pageId or channelId
+  contentPreview String       // first 50 chars
+  status         String       // "captured" | "skipped" | "excluded"
+  reason         String
+  captureRuleId  String?
+  captureRule    CaptureRule? @relation(fields: [captureRuleId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([workspaceId, timestamp])
+  @@index([workspaceId, source])
+  @@index([workspaceId, status])
+}
+
+model SyncStatus {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  integration  String    // "notion" | "slack"
+  mode         String    @default("manual")  // "manual" | "background"
+  lastSyncAt   DateTime?
+  nextSyncAt   DateTime?
+  status       String    @default("active")  // "active" | "paused" | "error"
+  errorMessage String?
+  configuredBy String    // Clerk userId — attribution
+
+  @@unique([workspaceId, integration])
+  @@index([workspaceId])
+  @@index([integration, mode, status])
+}
+
+model UserPreference {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId             String    // Clerk userId
+  focusAreas         Json      @default("[]")
+  digestEnabled      Boolean   @default(true)
+  digestTime         Int       @default(8)  // UTC hour 0–23
+  emailDigest        Boolean   @default(false)
+  alertsEnabled      Boolean   @default(true)
+  staleThresholdDays Int       @default(30)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+}
+
+model Digest {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String    // Clerk userId
+  date        DateTime  // calendar date this digest covers
+  content     Json      // { summary, highlights, stats }
+  type        String    // "daily" | "weekly"
+  deliveredAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([workspaceId, userId, type])
+}
+
+model Alert {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type           String    // "conflict" | "stale" | "important"
+  title          String
+  description    String
+  sourceChunkIds Json      @default("[]")
+  targetUserId   String?   // nullable — workspace-wide vs user-targeted
+  status         String    @default("unread")  // "unread" | "read" | "resolved"
+  resolvedBy     String?   // Clerk userId — ATTRIBUTION
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, type])
+  @@index([targetUserId])
 }

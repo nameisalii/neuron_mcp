@@ -15,10 +15,9 @@ import { POST } from '@/app/api/webhooks/clerk/route'
 // ── Prisma mock ───────────────────────────────────────────────────────────────
 jest.mock('@/lib/db', () => ({
   prisma: {
-    user: {
-      create: jest.fn(),
-      upsert: jest.fn(),
-    },
+    user: { create: jest.fn(), upsert: jest.fn() },
+    workspace: { upsert: jest.fn() },
+    workspaceMember: { upsert: jest.fn() },
   },
 }))
 
@@ -135,24 +134,18 @@ describe('POST /api/webhooks/clerk', () => {
 
   describe('user.created — happy path', () => {
     it('calls prisma.user.upsert with correct data and returns 200', async () => {
-      const mockCreate = prisma.user.upsert as jest.Mock
-      mockCreate.mockResolvedValue({ id: 'db_user_1' })
+      const mockUserUpsert = prisma.user.upsert as jest.Mock
+      const mockWorkspaceUpsert = (prisma.workspace as jest.Mocked<typeof prisma.workspace>).upsert as jest.Mock
+      mockUserUpsert.mockResolvedValue({ id: 'db_user_1' })
+      mockWorkspaceUpsert.mockResolvedValue({ id: 'ws_1' })
 
       const res = await POST(buildRequest(USER_CREATED_EVENT))
 
       expect(res.status).toBe(200)
-      expect(mockCreate).toHaveBeenCalledTimes(1)
-      expect(mockCreate).toHaveBeenCalledWith({
+      expect(mockUserUpsert).toHaveBeenCalledWith({
         where: { clerkId: 'user_clerk_123' },
         update: {},
-        create: {
-          clerkId: 'user_clerk_123',
-          email: 'alice@example.com',
-          name: 'Alice Smith',
-          workspace: {
-            create: { name: "Alice Smith's Brain" },
-          },
-        },
+        create: { clerkId: 'user_clerk_123', email: 'alice@example.com', name: 'Alice Smith' },
       })
     })
 
@@ -167,31 +160,30 @@ describe('POST /api/webhooks/clerk', () => {
         },
       }
       mockVerify.mockReturnValue(eventNoName)
-      const mockCreate = prisma.user.upsert as jest.Mock
-      mockCreate.mockResolvedValue({ id: 'db_user_2' })
+      const mockUserUpsert = prisma.user.upsert as jest.Mock
+      const mockWorkspaceUpsert = (prisma.workspace as jest.Mocked<typeof prisma.workspace>).upsert as jest.Mock
+      mockUserUpsert.mockResolvedValue({ id: 'db_user_2' })
+      mockWorkspaceUpsert.mockResolvedValue({ id: 'ws_2' })
 
       const res = await POST(buildRequest(eventNoName))
 
       expect(res.status).toBe(200)
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          create: expect.objectContaining({
-            name: null,
-            workspace: { create: { name: 'My Brain' } },
-          }),
-        })
+      expect(mockUserUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({ create: expect.objectContaining({ name: null }) }),
       )
     })
 
-    it('creates a Workspace row inside the nested create call', async () => {
-      const mockCreate = prisma.user.upsert as jest.Mock
-      mockCreate.mockResolvedValue({ id: 'db_user_3' })
+    it('upserts a Workspace row linked to the user', async () => {
+      const mockUserUpsert = prisma.user.upsert as jest.Mock
+      const mockWorkspaceUpsert = (prisma.workspace as jest.Mocked<typeof prisma.workspace>).upsert as jest.Mock
+      mockUserUpsert.mockResolvedValue({ id: 'db_user_3' })
+      mockWorkspaceUpsert.mockResolvedValue({ id: 'ws_3' })
 
       await POST(buildRequest(USER_CREATED_EVENT))
 
-      const callArg = mockCreate.mock.calls[0][0]
-      expect(callArg.create.workspace.create).toBeDefined()
-      expect(typeof callArg.create.workspace.create.name).toBe('string')
+      expect(mockWorkspaceUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({ create: expect.objectContaining({ ownerId: 'db_user_3' }) }),
+      )
     })
   })
 

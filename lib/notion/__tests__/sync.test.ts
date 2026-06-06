@@ -520,6 +520,152 @@ describe('ActivityEvent', () => {
   })
 })
 
+// ─── toggle block children ────────────────────────────────────────────────────
+
+describe('toggle block children', () => {
+  function makeToggle(id: string, titleText: string, hasChildren = true) {
+    return {
+      type: 'toggle',
+      id,
+      has_children: hasChildren,
+      toggle: { rich_text: richText(titleText) },
+    }
+  }
+
+  it('fetches children of a toggle block using the toggle block id', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [makeToggle('toggle-1', 'My Toggle')],
+      next_cursor: null,
+      has_more: false,
+    })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [makeBlock('paragraph')],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    expect(mockBlocksList).toHaveBeenCalledTimes(2)
+    expect(mockBlocksList).toHaveBeenNthCalledWith(2, expect.objectContaining({ block_id: 'toggle-1' }))
+  })
+
+  it('indexes content inside a toggle as chunks', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [makeToggle('toggle-1', 'Toggle Title')],
+      next_cursor: null,
+      has_more: false,
+    })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [{ type: 'paragraph', id: 'p1', has_children: false, paragraph: { rich_text: richText('Content inside toggle') } }],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string; blockType: string }>
+    expect(chunks?.some((c) => c.content.includes('Toggle Title'))).toBe(true)
+    expect(chunks?.some((c) => c.content.includes('Content inside toggle'))).toBe(true)
+  })
+
+  it('indexes a toggle with empty title but non-empty children', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [{ type: 'toggle', id: 'toggle-empty', has_children: true, toggle: { rich_text: [] } }],
+      next_cursor: null,
+      has_more: false,
+    })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [{ type: 'paragraph', id: 'p1', has_children: false, paragraph: { rich_text: richText('Hidden content') } }],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
+    expect(chunks?.some((c) => c.content.includes('Hidden content'))).toBe(true)
+  })
+
+  it('indexes nested bullets inside a toggle', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [makeToggle('toggle-1', 'Toggle')],
+      next_cursor: null,
+      has_more: false,
+    })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [
+        { type: 'bulleted_list_item', id: 'b1', has_children: false, bulleted_list_item: { rich_text: richText('bullet one') } },
+        { type: 'bulleted_list_item', id: 'b2', has_children: false, bulleted_list_item: { rich_text: richText('bullet two') } },
+      ],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
+    expect(chunks?.some((c) => c.content.includes('bullet one'))).toBe(true)
+    expect(chunks?.some((c) => c.content.includes('bullet two'))).toBe(true)
+  })
+
+  it('does not recurse into child_page blocks', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [{ type: 'child_page', id: 'cp-1', has_children: true, child_page: { title: 'Sub Page' } }],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    expect(mockBlocksList).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not recurse into child_database blocks', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [{ type: 'child_database', id: 'cd-1', has_children: true, child_database: { title: 'My DB' } }],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    expect(mockBlocksList).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries on 429 when fetching toggle children', async () => {
+    jest.useFakeTimers()
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [makeToggle('toggle-1', 'Toggle')],
+      next_cursor: null,
+      has_more: false,
+    })
+    const rateLimitError = Object.assign(new Error('rate limited'), { status: 429 })
+    mockBlocksList
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce({
+        results: [{ type: 'paragraph', id: 'p1', has_children: false, paragraph: { rich_text: richText('Recovered') } }],
+        next_cursor: null,
+        has_more: false,
+      })
+
+    const syncPromise = syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+    await jest.runAllTimersAsync()
+    await syncPromise
+
+    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
+    expect(chunks?.some((c) => c.content.includes('Recovered'))).toBe(true)
+    jest.useRealTimers()
+  })
+})
+
 // ─── return shape ─────────────────────────────────────────────────────────────
 
 describe('return value', () => {

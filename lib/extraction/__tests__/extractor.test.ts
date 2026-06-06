@@ -89,17 +89,41 @@ describe('extractKnowledge', () => {
     expect(mockUpsertEmbedding).toHaveBeenCalledTimes(1)
   })
 
-  it('filters out items with confidence ≤ 0.6', async () => {
+  it('keeps items at confidence >= 0.4 and drops items below it', async () => {
     mockChatCreate.mockResolvedValue(extraction([
       { content: 'Strong rule', category: 'rule', owner: null, confidence: 0.85 },
-      { content: 'Weak noise', category: 'idea', owner: null, confidence: 0.5 },
-      { content: 'Boundary', category: 'idea', owner: null, confidence: 0.6 },
+      { content: 'Borderline fact', category: 'fact', owner: null, confidence: 0.4 },
+      { content: 'Too weak', category: 'idea', owner: null, confidence: 0.39 },
+    ]))
+
+    const result = await extractKnowledge(twoMessages, 'ws-1')
+
+    expect(result).toHaveLength(2)
+    expect(result.map((r) => r.confidence)).toEqual(expect.arrayContaining([0.85, 0.4]))
+  })
+
+  it('drops items with confidence below 0.4', async () => {
+    mockChatCreate.mockResolvedValue(extraction([
+      { content: 'Too weak', category: 'idea', owner: null, confidence: 0.39 },
+    ]))
+
+    const result = await extractKnowledge(twoMessages, 'ws-1')
+
+    expect(result).toHaveLength(0)
+  })
+
+  it('extracts and stores items with category fact', async () => {
+    mockChatCreate.mockResolvedValue(extraction([
+      { content: 'Project X is a B2B HR tool in closed beta', category: 'fact', owner: null, confidence: 0.8 },
     ]))
 
     const result = await extractKnowledge(twoMessages, 'ws-1')
 
     expect(result).toHaveLength(1)
-    expect(result[0].confidence).toBe(0.85)
+    expect(result[0].category).toBe('fact')
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ category: 'fact' }) })
+    )
   })
 
   it('returns empty array when LLM returns []', async () => {

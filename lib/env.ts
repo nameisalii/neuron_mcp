@@ -14,6 +14,8 @@ const REQUIRED_VARS = [
   'NEXT_PUBLIC_APP_URL',
   'NEURON_API_KEY',
   'NEURON_WORKSPACE_ID',
+  'NOTION_TOKEN',
+  'CRON_SECRET',
 ] as const
 
 export function validateEnv(): void {

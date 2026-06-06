@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db'
 import { Brain, GitBranch, Lightbulb, Clock } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { clsx } from 'clsx'
-import QuickQuery from './QuickQuery'
 import SyncButton from './integrations/SyncButton'
 import CopyContextButton from './CopyContextButton'
 import Link from 'next/link'
@@ -140,11 +139,6 @@ export default async function DashboardPage() {
           </Link>
         </div>
       )}
-
-      <Card padding="md">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Ask your Brain</h2>
-        <QuickQuery />
-      </Card>
 
       <div>
         <h2 className="text-sm font-semibold text-gray-700 mb-3">Recent Activity</h2>
