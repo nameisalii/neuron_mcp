@@ -4,6 +4,45 @@ import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { FileText, ChevronRight, RefreshCw } from 'lucide-react'
 import ChunkBlock from './ChunkBlock'
+import ToggleBlock, { type ChunkNode, type ChunkMeta } from './ToggleBlock'
+
+function buildTree(chunks: Array<{
+  id: string; content: string; blockType: string; position: number
+  labels: unknown; labeledBy: unknown; visibility: string
+  visibilitySetBy: string | null; metadata: unknown
+}>): ChunkNode[] {
+  const nodeMap = new Map<string, ChunkNode>()
+  const roots: ChunkNode[] = []
+
+  for (const chunk of chunks) {
+    const meta = (chunk.metadata ?? {}) as Record<string, unknown>
+    const node: ChunkNode = {
+      chunk: {
+        id: chunk.id,
+        content: chunk.content,
+        blockType: chunk.blockType,
+        position: chunk.position,
+        labels: chunk.labels,
+        labeledBy: chunk.labeledBy,
+        visibility: chunk.visibility,
+        metadata: meta,
+      } satisfies ChunkMeta,
+      children: [],
+    }
+
+    const notionBlockId = meta.notionBlockId as string | undefined
+    if (notionBlockId) nodeMap.set(notionBlockId, node)
+
+    const parentId = meta.parentNotionBlockId as string | undefined
+    if (parentId && nodeMap.has(parentId)) {
+      nodeMap.get(parentId)!.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+
+  return roots
+}
 
 function timeAgo(date: Date): string {
   const s = Math.floor((Date.now() - date.getTime()) / 1000)
@@ -136,21 +175,13 @@ export default async function NotionPageDetail({
 
           {/* Chunks */}
           <div className="space-y-2">
-            {visibleChunks.map((chunk) => (
-              <ChunkBlock
-                key={chunk.id}
-                chunk={{
-                  id: chunk.id,
-                  content: chunk.content,
-                  blockType: chunk.blockType,
-                  position: chunk.position,
-                  labels: chunk.labels,
-                  labeledBy: chunk.labeledBy,
-                  visibility: chunk.visibility,
-                }}
-                userId={userId}
-              />
-            ))}
+            {buildTree(visibleChunks).map((node) =>
+              node.chunk.blockType === 'toggle' ? (
+                <ToggleBlock key={node.chunk.id} node={node} userId={userId} />
+              ) : (
+                <ChunkBlock key={node.chunk.id} chunk={node.chunk} userId={userId} />
+              ),
+            )}
           </div>
         </div>
 

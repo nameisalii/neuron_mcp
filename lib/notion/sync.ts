@@ -24,6 +24,14 @@ interface ChunkData {
   metadata: Record<string, unknown>
 }
 
+interface AnnotatedBlock {
+  block: BlockObjectResponse
+  depth: number
+  parentNotionBlockId: string | null
+  parentBlockType: string | null
+  parentTitle: string | null
+}
+
 export function escapeXml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -67,8 +75,12 @@ function blockToRawChunk(block: BlockObjectResponse): { content: string; metadat
       return { content: richTextToPlain(b.quote.rich_text), metadata: {} }
     case 'image': {
       const caption = (b.image.caption as RichTextItemResponse[]) ?? []
-      if (caption.length === 0) return null
-      return { content: richTextToPlain(caption), metadata: {} }
+      const imageUrl: string =
+        b.image.type === 'external'
+          ? (b.image.external.url as string)
+          : ((b.image.file?.url as string) ?? '')
+      const content = caption.length > 0 ? richTextToPlain(caption) : '[Image]'
+      return { content, metadata: { imageUrl } }
     }
     case 'embed':
       return { content: b.embed.url as string, metadata: {} }
@@ -81,16 +93,25 @@ function blockToRawChunk(block: BlockObjectResponse): { content: string; metadat
   }
 }
 
-function extractChunks(blocks: BlockObjectResponse[]): ChunkData[] {
+function extractChunks(annotatedBlocks: AnnotatedBlock[]): ChunkData[] {
   const chunks: ChunkData[] = []
-  for (const block of blocks) {
+  for (const { block, depth, parentNotionBlockId, parentBlockType, parentTitle } of annotatedBlocks) {
     const raw = blockToRawChunk(block)
     if (!raw || !raw.content.trim()) continue
+
+    const metadata: Record<string, unknown> = { ...raw.metadata, notionBlockId: block.id }
+    if (parentNotionBlockId) {
+      metadata.parentNotionBlockId = parentNotionBlockId
+      metadata.parentBlockType = parentBlockType
+      metadata.parentTitle = parentTitle
+      metadata.depth = depth
+    }
+
     chunks.push({
       content: escapeXml(raw.content),
       blockType: block.type,
       position: chunks.length,
-      metadata: raw.metadata,
+      metadata,
     })
   }
   return chunks
@@ -131,23 +152,39 @@ async function fetchDirectChildren(notion: Client, blockId: string): Promise<Blo
   return blocks
 }
 
-async function fetchAllBlocks(notion: Client, blockId: string): Promise<BlockObjectResponse[]> {
+async function fetchAllAnnotatedBlocks(
+  notion: Client,
+  blockId: string,
+  depth = 0,
+  parentNotionBlockId: string | null = null,
+  parentBlockType: string | null = null,
+  parentTitle: string | null = null,
+): Promise<AnnotatedBlock[]> {
   const direct = await fetchDirectChildren(notion, blockId)
-  const all: BlockObjectResponse[] = []
+  const all: AnnotatedBlock[] = []
 
   for (const block of direct) {
-    all.push(block)
+    all.push({ block, depth, parentNotionBlockId, parentBlockType, parentTitle })
+
     if (block.has_children && !SKIP_CHILDREN_TYPES.has(block.type)) {
-      const children = await fetchAllBlocks(notion, block.id)
-      all.push(...children)
+      const blockRaw = blockToRawChunk(block)
+      const blockTitle = blockRaw?.content ?? null
+      // Cap nesting at depth 3 to avoid runaway recursion on deeply nested pages
+      if (depth < 3) {
+        const children = await fetchAllAnnotatedBlocks(
+          notion,
+          block.id,
+          depth + 1,
+          block.id,
+          block.type,
+          blockTitle,
+        )
+        all.push(...children)
+      }
     }
   }
 
   return all
-}
-
-async function fetchBlocksWithRetry(notion: Client, pageId: string): Promise<BlockObjectResponse[]> {
-  return fetchAllBlocks(notion, pageId)
 }
 
 function getParentPageId(page: PageObjectResponse): string | null {
@@ -193,8 +230,9 @@ export async function syncNotionPages(
       }
 
       try {
-        const blocks = await fetchBlocksWithRetry(notion, page.id)
-        const chunks = extractChunks(blocks)
+        const annotatedBlocks = await fetchAllAnnotatedBlocks(notion, page.id)
+        const blocks = annotatedBlocks.map((a) => a.block)
+        const chunks = extractChunks(annotatedBlocks)
         const title = getPageTitle(page)
         const content = chunks.map((c) => c.content).join('\n')
         const parentPageId = getParentPageId(page)

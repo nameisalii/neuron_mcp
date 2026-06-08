@@ -166,7 +166,7 @@ describe('block extraction — all supported types', () => {
     expect(chunks?.some((c) => c.content.includes('image caption'))).toBe(true)
   })
 
-  it('skips image blocks with no caption', async () => {
+  it('stores image blocks without captions as [Image] placeholder with imageUrl metadata', async () => {
     mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
     mockBlocksList.mockResolvedValueOnce({
       results: [{ type: 'image', id: 'b1', has_children: false, image: { type: 'external', external: { url: 'https://img.test/a.png' }, caption: [] } }],
@@ -176,7 +176,10 @@ describe('block extraction — all supported types', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    expect(mockChunkCreateMany).not.toHaveBeenCalled()
+    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string; metadata: Record<string, unknown> }>
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0].content).toBe('[Image]')
+    expect(chunks[0].metadata.imageUrl).toBe('https://img.test/a.png')
   })
 
   it('extracts embed URL as chunk content', async () => {
@@ -466,7 +469,7 @@ describe('edge cases', () => {
     expect(result.pages).toBe(1)
   })
 
-  it('handles image-only page — no chunks if all images lack captions', async () => {
+  it('handles image-only page — creates image chunk even without caption, skips unsupported blocks', async () => {
     mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Images')], next_cursor: null, has_more: false })
     mockBlocksList.mockResolvedValueOnce({
       results: [
@@ -479,7 +482,10 @@ describe('edge cases', () => {
 
     const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    expect(mockChunkCreateMany).not.toHaveBeenCalled()
+    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string; metadata: Record<string, unknown> }>
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0].content).toBe('[Image]')
+    expect(chunks[0].metadata.imageUrl).toBe('x')
     expect(result.pages).toBe(1)
   })
 

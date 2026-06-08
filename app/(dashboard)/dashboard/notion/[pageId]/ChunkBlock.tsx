@@ -17,7 +17,7 @@ const LABEL_COLORS: Record<string, { bg: string; text: string }> = {
 
 const PRESET_LABELS = ['rule', 'decision', 'process', 'idea', 'fact', 'context', 'reference', 'meeting_note']
 
-interface ChunkData {
+export interface ChunkData {
   id: string
   content: string
   blockType: string
@@ -25,6 +25,7 @@ interface ChunkData {
   labels: unknown
   labeledBy: unknown
   visibility: string
+  metadata?: Record<string, unknown>
 }
 
 interface ChunkBlockProps {
@@ -81,6 +82,22 @@ function ContentNode({ chunk }: { chunk: ChunkData }) {
           ))}
         </div>
       )
+    case 'image': {
+      const imageUrl = chunk.metadata?.imageUrl as string | undefined
+      if (!imageUrl) return <p className="text-sm text-gray-400 italic">[Image]</p>
+      return (
+        <img
+          src={imageUrl}
+          alt={chunk.content !== '[Image]' ? chunk.content : 'Image'}
+          className="max-w-full rounded-md"
+          onError={(e) => {
+            const el = e.target as HTMLImageElement
+            el.style.display = 'none'
+            el.insertAdjacentHTML('afterend', '<p class="text-sm text-gray-400 italic">[Image]</p>')
+          }}
+        />
+      )
+    }
     default:
       return <p className="text-sm text-gray-700 leading-relaxed">{chunk.content}</p>
   }
