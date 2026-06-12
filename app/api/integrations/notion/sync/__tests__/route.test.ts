@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  */
-import { POST } from '../route'
+import { maxDuration, POST } from '../route'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { syncNotionPages } from '@/lib/notion/sync'
@@ -54,6 +54,10 @@ beforeEach(() => {
 })
 
 describe('POST /api/integrations/notion/sync', () => {
+  it('allows enough runtime for Notion API, embedding, and Pinecone writes', () => {
+    expect(maxDuration).toBe(120)
+  })
+
   it('returns 401 when not authenticated', async () => {
     mockAuth.mockResolvedValue({ userId: null } as never)
     const res = await POST(makeRequest({ workspaceId: WORKSPACE_ID }))

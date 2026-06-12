@@ -29,6 +29,16 @@ export async function POST() {
     }
 
     const workspaceId = user.workspace.id
+
+    const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { role: true },
+    })
+    if (!member || !ALLOWED_ROLES.has(member.role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const integration = user.workspace.integrations[0]
     const secondsSinceSync = integration.lastSyncAt
       ? Math.floor((Date.now() - integration.lastSyncAt.getTime()) / 1000)

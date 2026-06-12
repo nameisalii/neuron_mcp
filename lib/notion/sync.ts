@@ -9,6 +9,7 @@ import { prisma } from '@/lib/db'
 import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
+import { escapeXml } from '@/lib/utils'
 
 export interface SyncResult {
   pages: number
@@ -30,10 +31,6 @@ interface AnnotatedBlock {
   parentNotionBlockId: string | null
   parentBlockType: string | null
   parentTitle: string | null
-}
-
-export function escapeXml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 function richTextToPlain(richText: RichTextItemResponse[]): string {
@@ -267,28 +264,39 @@ export async function syncNotionPages(
             where: { page: { notionPageId: page.id } },
           })
 
-          const chunkRecords = []
+          // Maps notionBlockId → DB chunk id so children can reference their parent.
+          const notionBlockToChunkId = new Map<string, string>()
+
           for (const chunk of chunks) {
             const pineconeId = `${workspaceId}-${page.id}-${chunk.position}`
             const embedding = await generateEmbedding(chunk.content)
             await upsertEmbedding(pineconeId, embedding, { workspaceId, source: 'notion' })
 
-            chunkRecords.push({
-              notionPageId: dbPage.id,
-              workspaceId,
-              content: chunk.content,
-              blockType: chunk.blockType,
-              position: chunk.position,
-              metadata: chunk.metadata as Prisma.InputJsonValue,
-              pineconeId,
-              visibility: 'team',
-              labels: [] as Prisma.InputJsonValue,
-              labeledBy: [] as Prisma.InputJsonValue,
-            })
-          }
+            const parentNotionBlockId = chunk.metadata.parentNotionBlockId as string | undefined
+            const parentChunkId = parentNotionBlockId
+              ? (notionBlockToChunkId.get(parentNotionBlockId) ?? null)
+              : null
 
-          const created = await prisma.notionChunk.createMany({ data: chunkRecords })
-          totalChunks += created.count
+            const created = await prisma.notionChunk.create({
+              data: {
+                notionPageId: dbPage.id,
+                workspaceId,
+                content: chunk.content,
+                blockType: chunk.blockType,
+                position: chunk.position,
+                metadata: { ...chunk.metadata, parentChunkId } as Prisma.InputJsonValue,
+                pineconeId,
+                visibility: 'team',
+                labels: [] as Prisma.InputJsonValue,
+                labeledBy: [] as Prisma.InputJsonValue,
+              },
+            })
+
+            totalChunks++
+
+            const notionBlockId = chunk.metadata.notionBlockId as string | undefined
+            if (notionBlockId) notionBlockToChunkId.set(notionBlockId, created.id)
+          }
         }
 
         totalPages++

@@ -1,7 +1,8 @@
 /**
  * @jest-environment node
  */
-import { syncNotionPages, escapeXml } from '../sync'
+import { syncNotionPages } from '../sync'
+import { escapeXml } from '@/lib/utils'
 import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding, deleteEmbeddings } from '@/lib/pinecone'
 import { prisma } from '@/lib/db'
@@ -22,7 +23,7 @@ jest.mock('@notionhq/client', () => ({
 jest.mock('@/lib/db', () => ({
   prisma: {
     notionPage: { upsert: jest.fn(), findUnique: jest.fn() },
-    notionChunk: { createMany: jest.fn(), deleteMany: jest.fn() },
+    notionChunk: { create: jest.fn(), deleteMany: jest.fn() },
   },
 }))
 
@@ -37,7 +38,7 @@ const mockUpsertEmbedding = jest.mocked(upsertEmbedding)
 const mockDeleteEmbeddings = jest.mocked(deleteEmbeddings)
 const mockPageUpsert = jest.mocked(prisma.notionPage.upsert)
 const mockPageFindUnique = jest.mocked(prisma.notionPage.findUnique)
-const mockChunkCreateMany = jest.mocked(prisma.notionChunk.createMany)
+const mockChunkCreate = jest.mocked(prisma.notionChunk.create)
 const mockChunkDeleteMany = jest.mocked(prisma.notionChunk.deleteMany)
 const mockTrackEvent = jest.mocked(trackEvent)
 
@@ -100,7 +101,10 @@ beforeEach(() => {
   mockUpsertEmbedding.mockResolvedValue(undefined)
   mockDeleteEmbeddings.mockResolvedValue(undefined)
   mockChunkDeleteMany.mockResolvedValue({ count: 0 })
-  mockChunkCreateMany.mockResolvedValue({ count: 1 })
+  let chunkSeq = 0
+  ;(mockChunkCreate as jest.Mock).mockImplementation((args: { data: Record<string, unknown> }) =>
+    Promise.resolve({ id: `chunk-${++chunkSeq}`, ...args.data }),
+  )
   mockTrackEvent.mockResolvedValue(undefined)
   // Default: page not in DB yet (no diff skip)
   mockPageFindUnique.mockResolvedValue(null)
@@ -139,9 +143,8 @@ describe('block extraction — all supported types', () => {
 
       await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-      const createCall = mockChunkCreateMany.mock.calls[0]?.[0]
-      const chunks = createCall?.data as Array<{ content: string; blockType: string }>
-      expect(chunks?.some((c) => c.blockType === blockType && c.content.includes(expectedContent))).toBe(true)
+      const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string; blockType: string })
+      expect(chunks.some((c) => c.blockType === blockType && c.content.includes(expectedContent))).toBe(true)
     })
   }
 
@@ -162,8 +165,8 @@ describe('block extraction — all supported types', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
-    expect(chunks?.some((c) => c.content.includes('image caption'))).toBe(true)
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string })
+    expect(chunks.some((c) => c.content.includes('image caption'))).toBe(true)
   })
 
   it('stores image blocks without captions as [Image] placeholder with imageUrl metadata', async () => {
@@ -176,7 +179,7 @@ describe('block extraction — all supported types', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string; metadata: Record<string, unknown> }>
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string; metadata: Record<string, unknown> })
     expect(chunks).toHaveLength(1)
     expect(chunks[0].content).toBe('[Image]')
     expect(chunks[0].metadata.imageUrl).toBe('https://img.test/a.png')
@@ -188,8 +191,8 @@ describe('block extraction — all supported types', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
-    expect(chunks?.some((c) => c.content.includes('https://embed.test/video'))).toBe(true)
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string })
+    expect(chunks.some((c) => c.content.includes('https://embed.test/video'))).toBe(true)
   })
 
   it('skips divider blocks', async () => {
@@ -198,7 +201,7 @@ describe('block extraction — all supported types', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    expect(mockChunkCreateMany).not.toHaveBeenCalled()
+    expect(mockChunkCreate).not.toHaveBeenCalled()
   })
 
   it('extracts table_row cells joined with separator', async () => {
@@ -207,8 +210,8 @@ describe('block extraction — all supported types', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string; blockType: string }>
-    const row = chunks?.find((c) => c.blockType === 'table_row')
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string; blockType: string })
+    const row = chunks.find((c) => c.blockType === 'table_row')
     expect(row?.content).toContain('col A')
     expect(row?.content).toContain('col B')
   })
@@ -219,8 +222,7 @@ describe('block extraction — all supported types', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ metadata: unknown }>
-    const chunk = chunks?.[0]
+    const chunk = mockChunkCreate.mock.calls[0]?.[0]?.data as { metadata: unknown }
     expect(JSON.stringify(chunk?.metadata)).toContain('typescript')
   })
 
@@ -230,8 +232,8 @@ describe('block extraction — all supported types', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ metadata: unknown }>
-    expect(JSON.stringify(chunks?.[0]?.metadata)).toContain('2')
+    const chunk = mockChunkCreate.mock.calls[0]?.[0]?.data as { metadata: unknown }
+    expect(JSON.stringify(chunk?.metadata)).toContain('2')
   })
 })
 
@@ -251,8 +253,8 @@ describe('escapeXml applied before storage', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
-    expect(chunks?.[0]?.content).toBe('Foo &amp; Bar &lt;baz&gt;')
+    const chunk = mockChunkCreate.mock.calls[0]?.[0]?.data as { content: string }
+    expect(chunk?.content).toBe('Foo &amp; Bar &lt;baz&gt;')
   })
 })
 
@@ -269,8 +271,8 @@ describe('chunk positions and visibility', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ position: number }>
-    expect(chunks?.map((c) => c.position)).toEqual([0, 1, 2])
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { position: number })
+    expect(chunks.map((c) => c.position)).toEqual([0, 1, 2])
   })
 
   it('new chunks default to visibility "team"', async () => {
@@ -279,8 +281,8 @@ describe('chunk positions and visibility', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ visibility: string }>
-    expect(chunks?.every((c) => c.visibility === 'team')).toBe(true)
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { visibility: string })
+    expect(chunks.every((c) => c.visibility === 'team')).toBe(true)
   })
 })
 
@@ -296,7 +298,7 @@ describe('diff sync — skip unchanged pages', () => {
     const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
     expect(mockBlocksList).not.toHaveBeenCalled()
-    expect(mockChunkCreateMany).not.toHaveBeenCalled()
+    expect(mockChunkCreate).not.toHaveBeenCalled()
     expect(result.skipped).toBe(1)
   })
 
@@ -310,7 +312,7 @@ describe('diff sync — skip unchanged pages', () => {
 
     expect(mockBlocksList).toHaveBeenCalledTimes(1)
     expect(mockChunkDeleteMany).toHaveBeenCalled()
-    expect(mockChunkCreateMany).toHaveBeenCalled()
+    expect(mockChunkCreate).toHaveBeenCalled()
   })
 })
 
@@ -326,7 +328,7 @@ describe('upsert on re-sync', () => {
     const deleteCall = mockChunkDeleteMany.mock.calls[0]?.[0]
     expect(deleteCall?.where).toMatchObject({ page: { notionPageId: 'page-1' } })
     expect(mockChunkDeleteMany.mock.invocationCallOrder[0]).toBeLessThan(
-      mockChunkCreateMany.mock.invocationCallOrder[0],
+      mockChunkCreate.mock.invocationCallOrder[0],
     )
   })
 })
@@ -390,8 +392,7 @@ describe('pagination', () => {
 
     expect(mockBlocksList).toHaveBeenCalledTimes(2)
     expect(mockBlocksList).toHaveBeenNthCalledWith(2, expect.objectContaining({ start_cursor: 'block-cursor' }))
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as unknown[]
-    expect(chunks?.length).toBe(2)
+    expect(mockChunkCreate).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -464,7 +465,7 @@ describe('edge cases', () => {
 
     const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    expect(mockChunkCreateMany).not.toHaveBeenCalled()
+    expect(mockChunkCreate).not.toHaveBeenCalled()
     expect(mockUpsertEmbedding).not.toHaveBeenCalled()
     expect(result.pages).toBe(1)
   })
@@ -482,7 +483,7 @@ describe('edge cases', () => {
 
     const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string; metadata: Record<string, unknown> }>
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string; metadata: Record<string, unknown> })
     expect(chunks).toHaveLength(1)
     expect(chunks[0].content).toBe('[Image]')
     expect(chunks[0].metadata.imageUrl).toBe('x')
@@ -524,6 +525,89 @@ describe('ActivityEvent', () => {
       expect.any(Object),
     )
   })
+})
+
+// ─── parentChunkId linking ────────────────────────────────────────────────────
+
+describe('parentChunkId linking', () => {
+  function makeToggleBlock(id: string, titleText: string) {
+    return { type: 'toggle', id, has_children: true, toggle: { rich_text: richText(titleText) } }
+  }
+
+  function withChunkCreate(test: (mockCreate: jest.Mock) => Promise<void>) {
+    return async () => {
+      let count = 0
+      const mockCreate = jest.fn().mockImplementation((args: { data: Record<string, unknown> }) =>
+        Promise.resolve({ id: `chunk-${++count}`, ...args.data }),
+      )
+      const original = (prisma.notionChunk as unknown as Record<string, jest.Mock>).create
+      ;(prisma.notionChunk as unknown as Record<string, jest.Mock>).create = mockCreate
+      try {
+        await test(mockCreate)
+      } finally {
+        ;(prisma.notionChunk as unknown as Record<string, jest.Mock>).create = original
+      }
+    }
+  }
+
+  it('stores parentChunkId on child chunks pointing to the toggle DB id', withChunkCreate(async (mockCreate) => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({ results: [makeToggleBlock('toggle-1', 'My Toggle')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [{ type: 'paragraph', id: 'para-1', has_children: false, paragraph: { rich_text: richText('Child content') } }],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    expect(mockCreate).toHaveBeenCalledTimes(2)
+    const toggleCall = mockCreate.mock.calls[0][0].data
+    const childCall = mockCreate.mock.calls[1][0].data
+    expect(toggleCall.blockType).toBe('toggle')
+    expect(toggleCall.metadata.parentChunkId).toBeNull()
+    expect(childCall.blockType).toBe('paragraph')
+    expect(childCall.metadata.parentChunkId).toBe('chunk-1')
+  }))
+
+  it('sets parentChunkId to null for all top-level chunks', withChunkCreate(async (mockCreate) => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [makeBlock('paragraph'), makeBlock('heading_1')],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    for (const call of mockCreate.mock.calls) {
+      expect(call[0].data.metadata.parentChunkId).toBeNull()
+    }
+  }))
+
+  it('children of a toggle are NOT stored as top-level (parentChunkId is set)', withChunkCreate(async (mockCreate) => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({ results: [makeToggleBlock('t1', 'LS in 3 unknowns')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [
+        { type: 'paragraph', id: 'step-0', has_children: false, paragraph: { rich_text: richText('Step by step solution:') } },
+        { type: 'numbered_list_item', id: 'step-4', has_children: false, numbered_list_item: { rich_text: richText('Step four') } },
+        { type: 'paragraph', id: 'answer', has_children: false, paragraph: { rich_text: richText('(x, y, z) = (1, 2, 3)') } },
+      ],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    // toggle is chunk-1; all three children must have parentChunkId='chunk-1'
+    expect(mockCreate).toHaveBeenCalledTimes(4)
+    const [toggleCall, ...childCalls] = mockCreate.mock.calls.map((c) => c[0].data)
+    expect(toggleCall.metadata.parentChunkId).toBeNull()
+    for (const child of childCalls) {
+      expect(child.metadata.parentChunkId).toBe('chunk-1')
+    }
+  }))
 })
 
 // ─── toggle block children ────────────────────────────────────────────────────
@@ -572,9 +656,9 @@ describe('toggle block children', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string; blockType: string }>
-    expect(chunks?.some((c) => c.content.includes('Toggle Title'))).toBe(true)
-    expect(chunks?.some((c) => c.content.includes('Content inside toggle'))).toBe(true)
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string; blockType: string })
+    expect(chunks.some((c) => c.content.includes('Toggle Title'))).toBe(true)
+    expect(chunks.some((c) => c.content.includes('Content inside toggle'))).toBe(true)
   })
 
   it('indexes a toggle with empty title but non-empty children', async () => {
@@ -592,8 +676,8 @@ describe('toggle block children', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
-    expect(chunks?.some((c) => c.content.includes('Hidden content'))).toBe(true)
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string })
+    expect(chunks.some((c) => c.content.includes('Hidden content'))).toBe(true)
   })
 
   it('indexes nested bullets inside a toggle', async () => {
@@ -614,9 +698,9 @@ describe('toggle block children', () => {
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
-    expect(chunks?.some((c) => c.content.includes('bullet one'))).toBe(true)
-    expect(chunks?.some((c) => c.content.includes('bullet two'))).toBe(true)
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string })
+    expect(chunks.some((c) => c.content.includes('bullet one'))).toBe(true)
+    expect(chunks.some((c) => c.content.includes('bullet two'))).toBe(true)
   })
 
   it('does not recurse into child_page blocks', async () => {
@@ -666,8 +750,8 @@ describe('toggle block children', () => {
     await jest.runAllTimersAsync()
     await syncPromise
 
-    const chunks = mockChunkCreateMany.mock.calls[0]?.[0]?.data as Array<{ content: string }>
-    expect(chunks?.some((c) => c.content.includes('Recovered'))).toBe(true)
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { content: string })
+    expect(chunks.some((c) => c.content.includes('Recovered'))).toBe(true)
     jest.useRealTimers()
   })
 })
@@ -678,8 +762,6 @@ describe('return value', () => {
   it('returns { pages, chunks, skipped, failed }', async () => {
     mockSearch.mockResolvedValueOnce({ results: [makePage('p1', 'Page')], next_cursor: null, has_more: false })
     mockBlocksList.mockResolvedValueOnce({ results: [makeBlock('paragraph'), makeBlock('heading_1')], next_cursor: null, has_more: false })
-    mockChunkCreateMany.mockResolvedValueOnce({ count: 2 })
-
     const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
     expect(result).toMatchObject({ pages: 1, chunks: 2, skipped: 0, failed: [] })

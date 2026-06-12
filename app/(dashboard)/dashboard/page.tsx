@@ -108,7 +108,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <CopyContextButton />
-          <SyncButton />
+          <SyncButton endpoint="/api/integrations/slack/sync" showReset resultLabel="messages" />
         </div>
       </div>
 

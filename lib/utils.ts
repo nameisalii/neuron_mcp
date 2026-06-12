@@ -1,3 +1,7 @@
+export function escapeXml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 export function timeAgo(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
   const seconds = Math.floor((Date.now() - d.getTime()) / 1000)

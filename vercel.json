@@ -15,8 +15,13 @@
     "app/api/integrations/slack/sync/route.ts": {
       "maxDuration": 60
     },
+    "app/api/integrations/notion/sync/route.ts": {
+      "maxDuration": 120
+    },
     "app/api/query/route.ts": {
       "maxDuration": 30
-    }
+    },
+    "app/api/integrations/linear/sync/route.ts": { "maxDuration": 60 },
+    "app/api/query/story/route.ts": { "maxDuration": 30 }
   }
 }

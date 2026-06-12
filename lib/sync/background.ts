@@ -8,7 +8,7 @@ import { extractKnowledge } from '@/lib/extraction/extractor'
 import { evaluateCapture } from './capture-rules'
 import { detectConflicts } from '@/lib/alerts/conflict-detector'
 import type { SyncResult } from '@/lib/notion/sync'
-import { escapeXml } from '@/lib/notion/sync'
+import { escapeXml } from '@/lib/utils'
 import type { BlockObjectResponse, RichTextItemResponse } from '@notionhq/client/build/src/api-endpoints'
 
 export interface SlackMessageEvent {

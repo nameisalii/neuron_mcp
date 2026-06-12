@@ -73,6 +73,7 @@ model KnowledgeItem {
   notionPageId     String?
   notionPage       NotionPage? @relation(fields: [notionPageId], references: [id])
   notionPageTitle  String?
+  sourceCreatedAt  DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 

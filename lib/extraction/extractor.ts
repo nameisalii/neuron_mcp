@@ -3,6 +3,7 @@ import { openai, generateEmbedding } from '@/lib/openai'
 import { prisma } from '@/lib/db'
 import { upsertEmbedding, searchSimilar, deleteEmbedding } from '@/lib/pinecone'
 import { EXTRACTION_SYSTEM_PROMPT, CONFLICT_SYSTEM_PROMPT } from './prompts'
+import { escapeXml } from '@/lib/utils'
 import type { SlackMessage, ExtractedItem } from '@/types'
 
 const CHUNK_SIZE = 20
@@ -19,10 +20,6 @@ const extractedItemSchema = z.object({
 
 function computeContentHash(content: string): string {
   return content.slice(0, 100).toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-function escapeXml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 function formatMessages(messages: SlackMessage[]): string {
@@ -79,6 +76,10 @@ export async function extractKnowledge(
   }
 
   for (const chunk of chunks) {
+    const batchSourceCreatedAt = chunk.length > 0 && chunk[0].ts
+      ? new Date(parseFloat(chunk[0].ts) * 1000)
+      : null
+
     let items: ExtractedItem[]
     try {
       items = await extractChunk(chunk)
@@ -140,6 +141,7 @@ export async function extractKnowledge(
               confidence: item.confidence,
               frozen,
               conflictNote: frozen ? 'Conflict detected during extraction' : null,
+              sourceCreatedAt: batchSourceCreatedAt,
             },
             select: { id: true },
           })

@@ -5,7 +5,7 @@ import { POST } from '../route'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { generateEmbedding, openai } from '@/lib/openai'
-import { searchInNamespace } from '@/lib/pinecone'
+import { searchSimilar } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
 
 jest.mock('@clerk/nextjs/server', () => ({ auth: jest.fn() }))
@@ -15,6 +15,7 @@ jest.mock('@/lib/db', () => ({
     workspaceMember: { findUnique: jest.fn() },
     workspace: { findUnique: jest.fn() },
     notionChunk: { findMany: jest.fn() },
+    knowledgeItem: { findMany: jest.fn() },
     queryLog: { create: jest.fn() },
   },
 }))
@@ -22,7 +23,7 @@ jest.mock('@/lib/openai', () => ({
   generateEmbedding: jest.fn(),
   openai: { chat: { completions: { create: jest.fn() } } },
 }))
-jest.mock('@/lib/pinecone', () => ({ searchInNamespace: jest.fn() }))
+jest.mock('@/lib/pinecone', () => ({ searchSimilar: jest.fn() }))
 jest.mock('@/lib/activity', () => ({ trackEvent: jest.fn() }))
 
 const mockAuth = jest.mocked(auth)
@@ -32,7 +33,7 @@ const mockWorkspaceFind = jest.mocked(prisma.workspace.findUnique)
 const mockChunkFindMany = jest.mocked(prisma.notionChunk.findMany)
 const mockQueryLogCreate = jest.mocked(prisma.queryLog.create)
 const mockEmbed = jest.mocked(generateEmbedding)
-const mockSearchNs = jest.mocked(searchInNamespace)
+const mockSearch = jest.mocked(searchSimilar)
 const mockChat = jest.mocked(openai.chat.completions.create)
 const mockTrackEvent = jest.mocked(trackEvent)
 
@@ -83,8 +84,9 @@ beforeEach(() => {
   mockMemberFind.mockResolvedValue({ role: 'member', status: 'active', displayName: DISPLAY_NAME, department: 'Engineering' } as never)
   mockWorkspaceFind.mockResolvedValue({ id: WORKSPACE_ID, name: WORKSPACE_NAME, type: 'team' } as never)
   mockEmbed.mockResolvedValue(mockEmbedding)
-  mockSearchNs.mockResolvedValue([{ id: 'pin-1', score: 0.88 }])
+  mockSearch.mockResolvedValue([{ id: 'pin-1', score: 0.88 }])
   mockChunkFindMany.mockResolvedValue([mockChunk] as never)
+  jest.mocked(prisma.knowledgeItem.findMany).mockResolvedValue([] as never)
   mockQueryLogCreate.mockResolvedValue({ id: 'log-1' } as never)
   mockTrackEvent.mockResolvedValue(undefined)
   mockChat.mockResolvedValue(mockStream('Refunds over $500 require manager approval.') as never)
@@ -121,14 +123,14 @@ describe('POST /api/query', () => {
     expect(res.status).toBe(403)
   })
 
-  it('searches team namespace (workspaceId)', async () => {
+  it('calls searchSimilar with workspaceId metadata filter', async () => {
     await POST(makeRequest({ question: 'What is the refund policy?' }))
-    expect(mockSearchNs).toHaveBeenCalledWith(mockEmbedding, WORKSPACE_ID, expect.any(Number), expect.any(Number))
+    expect(mockSearch).toHaveBeenCalledWith(mockEmbedding, WORKSPACE_ID, 10, 0.3)
   })
 
-  it('searches personal namespace (workspaceId:userId)', async () => {
+  it('calls searchSimilar exactly once (no dual-namespace search)', async () => {
     await POST(makeRequest({ question: 'What is the refund policy?' }))
-    expect(mockSearchNs).toHaveBeenCalledWith(mockEmbedding, `${WORKSPACE_ID}:${CLERK_ID}`, expect.any(Number), expect.any(Number))
+    expect(mockSearch).toHaveBeenCalledTimes(1)
   })
 
   it('fetches NotionChunks by pineconeId from both namespaces', async () => {
@@ -217,7 +219,7 @@ describe('POST /api/query', () => {
   })
 
   it('returns no-information SSE done event when no chunks found', async () => {
-    mockSearchNs.mockResolvedValue([])
+    mockSearch.mockResolvedValue([])
     mockChunkFindMany.mockResolvedValue([] as never)
     const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
     expect(res.status).toBe(200)

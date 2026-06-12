@@ -7,6 +7,7 @@ import { openai, generateEmbedding } from '@/lib/openai'
 import { searchSimilar } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
 import { buildQuerySystemPrompt } from '@/lib/extraction/prompts'
+import { escapeXml } from '@/lib/utils'
 import type { LabeledByEntry } from '@/types'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
@@ -14,10 +15,6 @@ const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 const QuerySchema = z.object({
   question: z.string().min(3).max(500),
 })
-
-function escapeXml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 function sendSSE(controller: ReadableStreamDefaultController, data: object) {
   controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`))

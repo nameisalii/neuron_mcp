@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { syncNotionPages } from '@/lib/notion/sync'
 
+export const maxDuration = 120
+
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 
 export async function POST(req: Request) {

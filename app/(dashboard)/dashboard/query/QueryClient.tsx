@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import ShimmerCard from './ShimmerCard'
 import SourceCard from './SourceCard'
 import CitationText from './CitationText'
+import StoryTimeline from './StoryTimeline'
 import type { SourceItem } from './SourceCard'
 import type { WorkspaceType } from '@/types'
 
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export default function QueryClient({ recentQueries }: Props) {
+  const [storyMode, setStoryMode] = useState(false)
   const [queryState, setQueryState] = useState<QueryState>('idle')
   const [question, setQuestion] = useState('')
   const [sources, setSources] = useState<SourceItem[]>([])
@@ -145,7 +147,26 @@ export default function QueryClient({ recentQueries }: Props) {
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSubmit} className="flex gap-3">
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit">
+        <button
+          type="button"
+          onClick={() => setStoryMode(false)}
+          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${!storyMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Search
+        </button>
+        <button
+          type="button"
+          onClick={() => setStoryMode(true)}
+          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${storyMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Story
+        </button>
+      </div>
+      {storyMode ? (
+        <StoryTimeline />
+      ) : (
+      <><form onSubmit={handleSubmit} className="flex gap-3">
         <motion.div
           className="flex-1 rounded-md"
           animate={
@@ -292,6 +313,7 @@ export default function QueryClient({ recentQueries }: Props) {
           ))}
         </div>
       )}
+      </>)}
     </div>
   )
 }

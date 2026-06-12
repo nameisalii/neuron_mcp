@@ -1,9 +1,6 @@
 import { prisma } from '@/lib/db'
 import { openai } from '@/lib/openai'
-
-function escapeXml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+import { escapeXml } from '@/lib/utils'
 
 export interface DigestStats {
   synced: number
