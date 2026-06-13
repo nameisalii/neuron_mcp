@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
-import { Brain, Search, Plug, Menu, X, Settings, Activity } from 'lucide-react'
+import { Brain, Search, Plug, Menu, X, Settings, Activity, MessageSquare } from 'lucide-react'
 import { useState } from 'react'
 import { clsx } from 'clsx'
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher'
@@ -26,17 +26,13 @@ interface NavItem {
   countKey?: CountKey
 }
 
-function NotionIcon({ className }: { className?: string }) {
-  return <img src="/icons/notion.svg" alt="" className={clsx('opacity-90', className)} />
-}
-
 const navItems: NavItem[] = [
   { href: '/dashboard/overview', label: 'Overview', icon: Brain },
-  { href: '/dashboard/notion', label: 'Notion', icon: NotionIcon },
   { href: '/dashboard/query', label: 'Query', icon: Search },
   { href: '/dashboard/activity', label: 'Activity', icon: Activity },
   { href: '/dashboard/integrations', label: 'Integrations', icon: Plug },
   { href: '/dashboard/settings/capture', label: 'Capture', icon: Settings },
+  { href: '/dashboard/feedback', label: 'Feedback', icon: MessageSquare },
 ]
 
 interface NavLinkProps extends NavItem {
