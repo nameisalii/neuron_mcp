@@ -30,10 +30,14 @@ function buildTree(chunks: Array<{
       children: [],
     }
 
+    // Support both newly synced chunks and existing chunks created before parentChunkId.
+    nodeMap.set(chunk.id, node)
     const notionBlockId = meta.notionBlockId as string | undefined
     if (notionBlockId) nodeMap.set(notionBlockId, node)
 
-    const parentId = meta.parentNotionBlockId as string | undefined
+    const parentId =
+      (meta.parentChunkId as string | undefined) ??
+      (meta.parentNotionBlockId as string | undefined)
     if (parentId && nodeMap.has(parentId)) {
       nodeMap.get(parentId)!.children.push(node)
     } else {
@@ -64,11 +68,12 @@ const LABEL_COLORS: Record<string, { bg: string; text: string }> = {
   meeting_note: { bg: 'bg-pink-100',    text: 'text-pink-700' },
 }
 
-export default async function NotionPageDetail({
-  params,
-}: {
-  params: { pageId: string }
-}) {
+export default async function NotionPageDetail(
+  props: {
+    params: Promise<{ pageId: string }>
+  }
+) {
+  const params = await props.params;
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
 
@@ -128,7 +133,7 @@ export default async function NotionPageDetail({
       <nav className="flex items-center gap-1.5 text-xs text-gray-400 mb-4">
         <Link href="/dashboard" className="hover:text-gray-600">Dashboard</Link>
         <ChevronRight className="w-3 h-3" />
-        <Link href="/dashboard/notion" className="hover:text-gray-600">Notion</Link>
+        <Link href="/dashboard/integrations/notion" className="hover:text-gray-600">Notion</Link>
         {parentPage && (
           <>
             <ChevronRight className="w-3 h-3" />

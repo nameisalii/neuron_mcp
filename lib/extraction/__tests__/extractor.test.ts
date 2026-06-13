@@ -1,9 +1,9 @@
 /**
  * @jest-environment node
  */
-import { extractKnowledge } from '../extractor'
+import { extractKnowledge, extractKnowledgeDetailed } from '../extractor'
 import { openai, generateEmbedding } from '@/lib/openai'
-import { searchSimilar, upsertEmbedding } from '@/lib/pinecone'
+import { searchSimilar, searchInNamespace, upsertEmbedding, upsertEmbeddingInNamespace } from '@/lib/pinecone'
 import { prisma } from '@/lib/db'
 import type { SlackMessage } from '@/types'
 
@@ -16,7 +16,9 @@ jest.mock('@/lib/openai', () => ({
 
 jest.mock('@/lib/pinecone', () => ({
   searchSimilar: jest.fn(),
+  searchInNamespace: jest.fn(),
   upsertEmbedding: jest.fn(),
+  upsertEmbeddingInNamespace: jest.fn(),
 }))
 
 jest.mock('@/lib/db', () => ({
@@ -26,6 +28,7 @@ jest.mock('@/lib/db', () => ({
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
     },
   },
 }))
@@ -35,7 +38,9 @@ jest.mock('@/lib/db', () => ({
 const mockChatCreate = jest.mocked(openai.chat.completions.create)
 const mockGenerateEmbedding = jest.mocked(generateEmbedding)
 const mockSearchSimilar = jest.mocked(searchSimilar)
+const mockSearchInNamespace = jest.mocked(searchInNamespace)
 const mockUpsertEmbedding = jest.mocked(upsertEmbedding)
+const mockUpsertEmbeddingInNamespace = jest.mocked(upsertEmbeddingInNamespace)
 const mockCreate = jest.mocked(prisma.knowledgeItem.create)
 const mockFindUnique = jest.mocked(prisma.knowledgeItem.findUnique)
 const mockFindFirst = jest.mocked(prisma.knowledgeItem.findFirst)
@@ -67,7 +72,9 @@ beforeEach(() => {
   mockGenerateEmbedding.mockResolvedValue(mockEmbedding)
   mockFindUnique.mockResolvedValue(null)
   mockSearchSimilar.mockResolvedValue([])
+  mockSearchInNamespace.mockResolvedValue([])
   mockUpsertEmbedding.mockResolvedValue(undefined)
+  mockUpsertEmbeddingInNamespace.mockResolvedValue(undefined)
   mockCreate.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
     Promise.resolve({ id: `item-${++itemCounter}`, ...data }) as never
   )
@@ -124,6 +131,49 @@ describe('extractKnowledge', () => {
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ category: 'fact' }) })
     )
+  })
+
+  it('uses Gmail-specific guidance and accepts follow-up items', async () => {
+    mockChatCreate.mockResolvedValue(extraction([
+      { content: 'Send the refund policy by Friday', category: 'follow_up', owner: null, confidence: 0.9 },
+      { content: 'Customers can get a full refund within 30 days', category: 'rule', owner: null, confidence: 0.9 },
+    ]))
+
+    const result = await extractKnowledgeDetailed(twoMessages, 'ws-1', 'gmail')
+
+    expect(result.items.map((item) => item.category)).toEqual(['follow_up', 'rule'])
+    expect(mockChatCreate).toHaveBeenCalledWith(expect.objectContaining({
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('private personal memory from email'),
+        }),
+      ]),
+    }))
+  })
+
+  it('uses the personal namespace for Gmail duplicate checks and embeddings', async () => {
+    mockChatCreate.mockResolvedValue(extraction([
+      { content: 'Product Hunt launch is delayed until integrations are stable', category: 'decision', owner: null, confidence: 0.9 },
+    ]))
+
+    await extractKnowledge(twoMessages, 'ws-1', 'gmail', undefined, 'thread-1', undefined, {
+      namespace: 'ws-1:user-1',
+      visibility: 'personal',
+      visibilitySetBy: 'user-1',
+    })
+
+    expect(mockSearchInNamespace).toHaveBeenCalledWith(mockEmbedding, 'ws-1:user-1', expect.any(Number), expect.any(Number))
+    expect(mockSearchSimilar).not.toHaveBeenCalled()
+    expect(mockUpsertEmbeddingInNamespace).toHaveBeenCalledWith(
+      expect.any(String),
+      mockEmbedding,
+      expect.objectContaining({ source: 'gmail' }),
+      'ws-1:user-1',
+    )
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ visibility: 'personal', visibilitySetBy: 'user-1' }),
+    }))
   })
 
   it('returns empty array when LLM returns []', async () => {

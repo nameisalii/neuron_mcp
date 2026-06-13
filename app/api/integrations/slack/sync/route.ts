@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { syncSlackMessages } from '@/lib/slack/sync'
 import { extractKnowledge } from '@/lib/extraction/extractor'
 
+const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
+
 export async function POST() {
   try {
     const { userId } = await auth()
@@ -30,7 +32,6 @@ export async function POST() {
 
     const workspaceId = user.workspace.id
 
-    const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
     const member = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
       select: { role: true },

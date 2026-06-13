@@ -12,7 +12,7 @@ interface SyncResult {
   error?: string
 }
 
-export default function NotionSyncButton({ workspaceId }: { workspaceId?: string }) {
+export default function NotionSyncButton({ workspaceId, label = 'Sync Now' }: { workspaceId?: string; label?: string }) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<SyncResult | null>(null)
   const router = useRouter()
@@ -44,7 +44,7 @@ export default function NotionSyncButton({ workspaceId }: { workspaceId?: string
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-        {loading ? 'Syncing…' : 'Sync Now'}
+        {loading ? 'Syncing…' : label}
       </button>
       {result?.success && (
         <p className="text-xs text-gray-500">

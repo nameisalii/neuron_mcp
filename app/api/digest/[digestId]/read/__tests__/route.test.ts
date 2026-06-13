@@ -26,16 +26,16 @@ function req() { return new Request('http://localhost/api/digest/d1/read', { met
 describe('PATCH /api/digest/[digestId]/read', () => {
   it('returns 401 when not authenticated', async () => {
     mockAuth.mockResolvedValue({ userId: null } as never)
-    expect((await PATCH(req(), { params: { digestId: 'd1' } })).status).toBe(401)
+    expect((await PATCH(req(), { params: Promise.resolve({ digestId: 'd1' }) })).status).toBe(401)
   })
 
   it('returns 404 for another user digest', async () => {
     mockFind.mockResolvedValue({ id: 'd1', userId: 'other' } as never)
-    expect((await PATCH(req(), { params: { digestId: 'd1' } })).status).toBe(404)
+    expect((await PATCH(req(), { params: Promise.resolve({ digestId: 'd1' }) })).status).toBe(404)
   })
 
   it('sets readAt and returns updated digest', async () => {
-    const res = await PATCH(req(), { params: { digestId: 'd1' } })
+    const res = await PATCH(req(), { params: Promise.resolve({ digestId: 'd1' }) })
     expect(res.status).toBe(200)
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { readAt: expect.any(Date) } }))
   })

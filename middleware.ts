@@ -21,7 +21,14 @@ const isApiKeyRoute = createRouteMatcher([
   '/api/decisions/create(.*)',
 ])
 
+const isPublicIntegrationRoute = createRouteMatcher([
+  '/api/integrations/linear/webhook',
+  '/api/integrations/slack/events',
+])
+
 export default clerkMiddleware(async (auth, req) => {
+  if (isPublicIntegrationRoute(req)) return NextResponse.next()
+
   // Allow requests with a Bearer token through to the route handler,
   // which performs its own timing-safe API key validation
   if (isApiKeyRoute(req) && req.headers.get('authorization')?.startsWith('Bearer ')) {

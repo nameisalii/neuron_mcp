@@ -3,7 +3,7 @@ import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoint
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { generateEmbedding } from '@/lib/openai'
-import { upsertEmbedding } from '@/lib/pinecone'
+import { deleteEmbeddings, upsertEmbedding } from '@/lib/pinecone'
 import { extractKnowledge } from '@/lib/extraction/extractor'
 import { evaluateCapture } from './capture-rules'
 import { detectConflicts } from '@/lib/alerts/conflict-detector'
@@ -195,6 +195,29 @@ export async function runNotionBackgroundSync(workspaceId: string): Promise<Sync
           for (const saved of savedChunks) {
             void detectConflicts(workspaceId, saved.id)
           }
+
+          const priorKnowledge = await prisma.knowledgeItem.findMany({
+            where: { workspaceId, source: 'notion', sourceExternalId: page.id },
+            select: { id: true, embeddingId: true },
+          })
+          await deleteEmbeddings(priorKnowledge.map((item) => item.embeddingId ?? item.id))
+          await prisma.knowledgeItem.deleteMany({
+            where: { id: { in: priorKnowledge.map((item) => item.id) }, workspaceId },
+          })
+          await extractKnowledge(
+            chunks.map((chunk) => ({
+              text: chunk.content,
+              user: 'Notion',
+              channel: title,
+              ts: String(new Date(page.last_edited_time).getTime() / 1000),
+              permalink: page.url,
+            })),
+            workspaceId,
+            'notion',
+            page.url,
+            page.id,
+            { id: dbPage.id, title },
+          )
         }
 
         totalPages++

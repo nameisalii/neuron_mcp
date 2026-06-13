@@ -1,1 +1,20 @@
+# dependencies
 node_modules
+
+# next.js build output
+.next/
+
+# tests
+coverage/
+
+# environment files — never commit secrets
+.env*
+!.env.example
+
+# tooling
+.gstack/
+.swc/
+*.tsbuildinfo
+
+# os
+.DS_Store

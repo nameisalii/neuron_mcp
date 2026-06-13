@@ -57,3 +57,21 @@ Vercel → Project → Deployments → Redeploy latest.
 
 ### 7. Set NEURON_WORKSPACE_ID
 After first sign-up, find the workspace ID in your DB and add it to Vercel env vars. Then redeploy.
+## Linear
+
+Set `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET`, `LINEAR_WEBHOOK_SECRET`,
+`ENCRYPTION_KEY`, and `NEXT_PUBLIC_APP_URL=https://tryneuron.net`.
+
+Configure the Linear OAuth callback as:
+
+- Local: `http://localhost:3000/api/integrations/linear/callback`
+- Production: `https://tryneuron.net/api/integrations/linear/callback`
+
+Configure the Linear webhook URL as
+`https://tryneuron.net/api/integrations/linear/webhook` and use the same secret
+as `LINEAR_WEBHOOK_SECRET`.
+
+The Linear OAuth application must allow the `read` scope. This grants read access
+to the connected user's accessible issues, comments, teams, projects, and users.
+Neuron enumerates every team returned for that user and does not require issues
+to have descriptions.

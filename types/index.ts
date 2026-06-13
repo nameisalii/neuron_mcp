@@ -1,4 +1,13 @@
-export type KnowledgeCategory = 'rule' | 'decision' | 'process' | 'idea' | 'fact' | 'context' | 'reference' | 'meeting_note'
+export type KnowledgeCategory =
+  | 'rule'
+  | 'decision'
+  | 'process'
+  | 'idea'
+  | 'plan'
+  | 'follow_up'
+  | 'status_update'
+  | 'reference'
+  | 'fact'
 
 export type WorkspaceType = 'solo' | 'team'
 export type WorkspacePlan = 'free' | 'starter' | 'team' | 'business'
@@ -96,6 +105,28 @@ export interface SlackOAuthToken {
     name: string
   }
   error?: string
+}
+
+export interface GmailSyncMetadata {
+  selectedLabels: string[]
+  selectedLabelNames: string[]
+  timeWindow: number
+  syncFrom?: string
+  lastSyncAttemptAt?: string
+  lastSuccessfulImportAt?: string
+  senderFilter: string[]
+  excludeFilter?: string[]
+  maxMessages?: number
+  threadCount?: number
+  status?: string
+  privacy?: 'personal'
+}
+
+export interface GmailLabelInfo {
+  id: string
+  name: string
+  type: 'system' | 'user'
+  messageCount: number
 }
 
 export interface QueryResult {

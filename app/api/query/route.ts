@@ -4,9 +4,11 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { openai, generateEmbedding } from '@/lib/openai'
-import { searchSimilar } from '@/lib/pinecone'
+import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
 import { buildQuerySystemPrompt } from '@/lib/extraction/prompts'
+import { splitRankedSources, type QuerySource } from '@/lib/query/source-ranking'
+import { gmailThreadUrl } from '@/lib/gmail/api'
 import { escapeXml } from '@/lib/utils'
 import type { LabeledByEntry } from '@/types'
 
@@ -23,10 +25,14 @@ function sendSSE(controller: ReadableStreamDefaultController, data: object) {
 function makeEmptyStream(answer: string): ReadableStream {
   return new ReadableStream({
     start(controller) {
-      sendSSE(controller, { type: 'done', answer, sources: [], confidence: 0 })
+      sendSSE(controller, { type: 'done', answer, sources: [], topSources: [], remainingSources: [], totalSources: 0, confidence: 0 })
       controller.close()
     },
   })
+}
+
+function dateToIso(value: Date | null | undefined): string | null {
+  return value ? value.toISOString() : null
 }
 
 export async function POST(req: Request) {
@@ -74,36 +80,74 @@ export async function POST(req: Request) {
     const workspaceName = workspace?.name ?? 'your workspace'
 
     const embedding = await generateEmbedding(question)
+    const personalNamespace = `${workspaceId}:${userId}`
 
-    const matches = await searchSimilar(embedding, workspaceId, 10, 0.3)
+    const [teamMatches, personalMatches] = await Promise.all([
+      searchSimilar(embedding, workspaceId, 10, 0.3),
+      searchInNamespace(embedding, personalNamespace, 25, 0.3),
+    ])
 
     const scoreMap = new Map<string, number>()
-    for (const m of matches) {
-      scoreMap.set(m.id, m.score)
+    for (const m of [...teamMatches, ...personalMatches]) {
+      scoreMap.set(m.id, Math.max(scoreMap.get(m.id) ?? 0, m.score))
     }
 
     const allPineconeIds = [...scoreMap.keys()]
 
-    const chunkInclude = { page: { select: { id: true, title: true, notionPageId: true } } } as const
+    const chunkInclude = { page: { select: { id: true, title: true, notionPageId: true, lastEditedAt: true } } } as const
 
-    let chunks = allPineconeIds.length > 0
-      ? await prisma.notionChunk.findMany({
+    let [chunks, knowledgeItems] = allPineconeIds.length > 0
+      ? await Promise.all([
+        prisma.notionChunk.findMany({
           where: { pineconeId: { in: allPineconeIds }, workspaceId },
           include: chunkInclude,
-        })
-      : []
+        }),
+          prisma.knowledgeItem.findMany({
+            where: {
+              workspaceId,
+              id: { in: allPineconeIds },
+              OR: [
+                { visibility: 'team' },
+                { visibility: 'personal', visibilitySetBy: userId },
+              ],
+            },
+            select: {
+              id: true,
+              content: true,
+              source: true,
+              sourceUrl: true,
+              sourceExternalId: true,
+              category: true,
+              label: true,
+              owner: true,
+              notionPageTitle: true,
+              sourceCreatedAt: true,
+              updatedAt: true,
+              visibility: true,
+              visibilitySetBy: true,
+            },
+          }),
+        ])
+      : [[], []]
 
     type KnowledgeItemResult = {
       id: string
       content: string
       source: string
       sourceUrl: string | null
+      sourceExternalId: string | null
       category: string
       label: string | null
+      owner: string | null
+      notionPageTitle: string | null
+      sourceCreatedAt: Date | null
+      updatedAt: Date
+      visibility: string
+      visibilitySetBy: string | null
     }
-    let knowledgeItems: KnowledgeItemResult[] = []
+    knowledgeItems = knowledgeItems as KnowledgeItemResult[]
 
-    if (chunks.length === 0) {
+    if (chunks.length === 0 && knowledgeItems.length === 0) {
       // Pinecone returned nothing — fall back to Postgres keyword search
       const keywords = question.trim().split(/\s+/).filter(w => w.length > 2)
       if (keywords.length > 0) {
@@ -116,8 +160,33 @@ export async function POST(req: Request) {
             orderBy: { position: 'asc' },
           }),
           prisma.knowledgeItem.findMany({
-            where: { workspaceId, OR: keywordFilter },
-            select: { id: true, content: true, source: true, sourceUrl: true, category: true, label: true },
+            where: {
+              workspaceId,
+              AND: [
+                {
+                  OR: [
+                    { visibility: 'team' },
+                    { visibility: 'personal', visibilitySetBy: userId },
+                  ],
+                },
+                { OR: keywordFilter },
+              ],
+            },
+            select: {
+              id: true,
+              content: true,
+              source: true,
+              sourceUrl: true,
+              sourceExternalId: true,
+              category: true,
+              label: true,
+              owner: true,
+              notionPageTitle: true,
+              sourceCreatedAt: true,
+              updatedAt: true,
+              visibility: true,
+              visibilitySetBy: true,
+            },
             take: 10,
           }),
         ])
@@ -140,7 +209,48 @@ export async function POST(req: Request) {
       return `[${i + 1}] ${pageRef} ${chunk.content}${labelNote}`
     })
 
+    const gmailThreadIds = [...new Set(knowledgeItems.filter((item) => item.source === 'gmail' && item.sourceExternalId).map((item) => item.sourceExternalId!))]
+    const gmailThreads = gmailThreadIds.length > 0
+      ? await prisma.emailThread.findMany({
+          where: { workspaceId, gmailThreadId: { in: gmailThreadIds } },
+          select: {
+            gmailThreadId: true,
+            subject: true,
+            labelNames: true,
+            lastMessageAt: true,
+            chunks: {
+              take: 1,
+              orderBy: { position: 'asc' },
+              select: { metadata: true },
+            },
+          },
+        })
+      : []
+    const gmailThreadMap = new Map(gmailThreads.map((thread) => {
+      const firstChunkMeta = (thread.chunks[0]?.metadata as Record<string, unknown> | null) ?? {}
+      const sender = typeof firstChunkMeta.from === 'string' ? firstChunkMeta.from : null
+      const url = typeof firstChunkMeta.url === 'string' ? firstChunkMeta.url : gmailThreadUrl(thread.gmailThreadId)
+      return [thread.gmailThreadId, {
+        subject: thread.subject,
+        labelNames: thread.labelNames ?? [],
+        lastMessageAt: thread.lastMessageAt,
+        sender,
+        url,
+      }] as const
+    }))
+
     const knowledgeContext = knowledgeItems.map((item, i) => {
+      if (item.source === 'gmail') {
+        const gmail = item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId) : null
+        const meta = [
+          gmail?.subject ? `Subject: ${gmail.subject}` : null,
+          gmail?.sender ? `Sender: ${gmail.sender}` : null,
+          gmail?.labelNames?.length ? `Labels: ${gmail.labelNames.join(', ')}` : null,
+          gmail?.lastMessageAt ? `Date: ${gmail.lastMessageAt.toISOString()}` : null,
+        ].filter(Boolean).join(' · ')
+        const ref = `[Gmail: ${gmail?.subject ?? item.notionPageTitle ?? item.sourceExternalId ?? 'Email'}]`
+        return `[${chunks.length + i + 1}] ${ref} ${meta}\n${item.content}`
+      }
       const sourceLabel = item.source.charAt(0).toUpperCase() + item.source.slice(1)
       const ref = `[${sourceLabel}: ${item.category}]`
       return `[${chunks.length + i + 1}] ${ref} ${item.content}`
@@ -155,33 +265,59 @@ export async function POST(req: Request) {
       department: department ?? null,
     })
 
-    const avgScore =
-      chunks.length > 0
-        ? chunks.reduce((sum, c) => sum + (scoreMap.get(c.pineconeId ?? '') ?? 0), 0) / chunks.length
-        : 0
+    const matchedScores = [...chunks.map((c) => scoreMap.get(c.pineconeId ?? '') ?? 0), ...knowledgeItems.map((item) => scoreMap.get(item.id) ?? 0)]
+    const avgScore = matchedScores.length > 0 ? matchedScores.reduce((sum, score) => sum + score, 0) / matchedScores.length : 0
     const confidence = Math.round(avgScore * 100)
 
-    const chunkSources = chunks.map((c) => ({
+    const chunkSources: QuerySource[] = chunks.map((c) => ({
       chunkId: c.id,
       pageId: c.page.id,
       pageTitle: c.page.title,
       notionPageId: c.page.notionPageId,
-      content: c.content.slice(0, 200),
-      labels: c.labels,
+      content: c.content,
+      labels: Array.isArray(c.labels) ? c.labels.filter((label): label is string => typeof label === 'string') : [],
+      source: 'notion',
+      sourceUrl: null,
+      sourceExternalId: c.page.notionPageId,
+      owner: null,
+      sourceCreatedAt: c.page.lastEditedAt?.toISOString() ?? null,
+      updatedAt: c.updatedAt?.toISOString() ?? null,
+      relevanceScore: scoreMap.get(c.pineconeId ?? '') ?? 0,
     }))
 
-    const knowledgeSources = knowledgeItems.map((item) => ({
+    const knowledgeSources: QuerySource[] = knowledgeItems.map((item) => ({
       chunkId: item.id,
-      pageId: null as string | null,
-      pageTitle: item.category,
-      notionPageId: null as string | null,
-      content: item.content.slice(0, 200),
-      labels: item.label ? [item.label] : [],
+      pageId: null,
+      pageTitle: item.source === 'gmail'
+        ? (item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.subject : null) ?? item.notionPageTitle ?? item.category
+        : item.notionPageTitle ?? item.category,
+      notionPageId: null,
+      content: item.content,
+      labels: [
+        ...new Set([
+          item.category,
+          item.label,
+          ...(item.source === 'gmail' && item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.labelNames ?? [] : []),
+        ].filter((label): label is string => Boolean(label))),
+      ],
       source: item.source,
-      sourceUrl: item.sourceUrl,
+      sourceUrl: item.source === 'gmail'
+        ? (item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.url : null) ?? item.sourceUrl ?? null
+        : item.sourceUrl ?? null,
+      sourceExternalId: item.sourceExternalId ?? null,
+      owner: item.source === 'gmail'
+        ? (item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.sender : null) ?? item.owner ?? null
+        : item.owner ?? null,
+      sourceCreatedAt: item.source === 'gmail'
+        ? dateToIso(item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.lastMessageAt ?? null : null)
+          ?? item.sourceCreatedAt?.toISOString()
+          ?? null
+        : item.sourceCreatedAt?.toISOString() ?? null,
+      updatedAt: item.updatedAt?.toISOString() ?? null,
+      relevanceScore: scoreMap.get(item.id) ?? 0,
     }))
 
-    const sources = [...chunkSources, ...knowledgeSources]
+    const ranked = splitRankedSources([...chunkSources, ...knowledgeSources])
 
     const openaiStream = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -198,7 +334,7 @@ export async function POST(req: Request) {
 
     const readable = new ReadableStream({
       async start(controller) {
-        sendSSE(controller, { type: 'sources', sources, confidence })
+        sendSSE(controller, { type: 'sources', ...ranked, confidence })
         let fullAnswer = ''
         try {
           for await (const chunk of openaiStream as AsyncIterable<{ choices: Array<{ delta?: { content?: string }; finish_reason?: string | null }> }>) {
@@ -213,7 +349,8 @@ export async function POST(req: Request) {
             ...knowledgeItems.map((k) => k.id),
           ])
           void trackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, {})
-          sendSSE(controller, { type: 'done', answer: fullAnswer, sources, confidence })
+          const answer = fullAnswer.trim() || 'I could not find enough information to answer confidently, but these are the closest sources I found.'
+          sendSSE(controller, { type: 'done', answer, ...ranked, confidence })
         } finally {
           controller.close()
         }

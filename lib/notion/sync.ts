@@ -7,9 +7,11 @@ import type {
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { generateEmbedding } from '@/lib/openai'
-import { upsertEmbedding } from '@/lib/pinecone'
+import { deleteEmbeddings, upsertEmbedding } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
 import { escapeXml } from '@/lib/utils'
+import { extractKnowledge } from '@/lib/extraction/extractor'
+import type { SlackMessage } from '@/types'
 
 export interface SyncResult {
   pages: number
@@ -191,6 +193,23 @@ function getParentPageId(page: PageObjectResponse): string | null {
   return null
 }
 
+function notionExtractionMessages(content: string, title: string, lastEditedAt: string, url: string): SlackMessage[] {
+  const paragraphs = content.split('\n').filter(Boolean)
+  const grouped: string[] = []
+  for (const paragraph of paragraphs) {
+    const current = grouped[grouped.length - 1]
+    if (!current || current.length + paragraph.length > 12_000) grouped.push(paragraph)
+    else grouped[grouped.length - 1] = `${current}\n${paragraph}`
+  }
+  return grouped.map((text) => ({
+    text,
+    user: 'Notion',
+    channel: title,
+    ts: String(new Date(lastEditedAt).getTime() / 1000),
+    permalink: url,
+  }))
+}
+
 export async function syncNotionPages(
   workspaceId: string,
   userId: string,
@@ -221,8 +240,23 @@ export async function syncNotionPages(
       const existing = await prisma.notionPage.findUnique({
         where: { workspaceId_notionPageId: { workspaceId, notionPageId: page.id } },
       })
+      const existingKnowledgeCount = existing
+        ? await prisma.knowledgeItem.count({ where: { workspaceId, source: 'notion', sourceExternalId: page.id } })
+        : 0
       if (existing && new Date(page.last_edited_time).getTime() === existing.lastEditedAt.getTime()) {
-        skipped++
+        if (existingKnowledgeCount > 0) {
+          skipped++
+          continue
+        }
+        await extractKnowledge(
+          notionExtractionMessages(existing.content, existing.title, page.last_edited_time, page.url),
+          workspaceId,
+          'notion',
+          page.url,
+          page.id,
+          { id: existing.id, title: existing.title },
+        )
+        totalPages++
         continue
       }
 
@@ -297,6 +331,23 @@ export async function syncNotionPages(
             const notionBlockId = chunk.metadata.notionBlockId as string | undefined
             if (notionBlockId) notionBlockToChunkId.set(notionBlockId, created.id)
           }
+
+          const priorKnowledge = await prisma.knowledgeItem.findMany({
+            where: { workspaceId, source: 'notion', sourceExternalId: page.id },
+            select: { id: true, embeddingId: true },
+          })
+          await deleteEmbeddings(priorKnowledge.map((item) => item.embeddingId ?? item.id))
+          await prisma.knowledgeItem.deleteMany({
+            where: { id: { in: priorKnowledge.map((item) => item.id) }, workspaceId },
+          })
+          await extractKnowledge(
+            notionExtractionMessages(content, title, page.last_edited_time, page.url),
+            workspaceId,
+            'notion',
+            page.url,
+            page.id,
+            { id: dbPage.id, title },
+          )
         }
 
         totalPages++

@@ -2,7 +2,8 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 
-export async function GET(_req: Request, { params }: { params: { digestId: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ digestId: string }> }) {
+  const params = await props.params;
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

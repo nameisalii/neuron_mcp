@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { CheckCircle, AlertTriangle, ShieldCheck } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import KnowledgeCard from '@/components/KnowledgeCard'
 import { clsx } from 'clsx'
 
 export interface KnowledgeItemRow {
@@ -16,38 +18,39 @@ export interface KnowledgeItemRow {
   frozen: boolean
   conflictNote: string | null
   createdAt: string
-}
-
-const CATEGORY_COLORS: Record<string, string> = {
-  rule: 'bg-blue-100 text-blue-700',
-  decision: 'bg-purple-100 text-purple-700',
-  process: 'bg-amber-100 text-amber-700',
-  idea: 'bg-emerald-100 text-emerald-700',
-  fact: 'bg-sky-100 text-sky-700',
+  sourceUrl?: string | null
+  sourceExternalId?: string | null
+  owner?: string | null
+  sourceCreatedAt?: string | null
+  updatedAt?: string | null
+  notionPageTitle?: string | null
 }
 
 const FILTERS = [
   { label: 'All', value: 'all' },
-  { label: 'Rules', value: 'rule' },
-  { label: 'Decisions', value: 'decision' },
-  { label: 'Processes', value: 'process' },
-  { label: 'Ideas', value: 'idea' },
-  { label: 'Facts', value: 'fact' },
+  { label: 'Rules', value: 'rules', category: 'rule' },
+  { label: 'Decisions', value: 'decisions', category: 'decision' },
+  { label: 'Processes', value: 'processes', category: 'process' },
+  { label: 'Ideas', value: 'ideas', category: 'idea' },
+  { label: 'Facts', value: 'facts', category: 'fact' },
 ]
 
 interface BrainGridProps {
   items: KnowledgeItemRow[]
+  activeFilter?: string
 }
 
-export default function BrainGrid({ items }: BrainGridProps) {
-  const [activeFilter, setActiveFilter] = useState('all')
+export default function BrainGrid({ items, activeFilter = 'all' }: BrainGridProps) {
   const [search, setSearch] = useState('')
   const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set())
   const [verifyingIds, setVerifyingIds] = useState<Set<string>>(new Set())
   const [verifyError, setVerifyError] = useState<string | null>(null)
 
-  const filtered = items.filter((item) => {
-    const matchesFilter = activeFilter === 'all' || item.category === activeFilter
+  const router = useRouter()
+  const activeCategory = FILTERS.find((filter) => filter.value === activeFilter)?.category
+  const displayItems = dedupeLinearItems(items)
+  const filtered = displayItems.filter((item) => {
+    const matchesFilter = !activeCategory || item.category === activeCategory
     const matchesSearch =
       !search || item.content.toLowerCase().includes(search.toLowerCase())
     return matchesFilter && matchesSearch
@@ -85,7 +88,7 @@ export default function BrainGrid({ items }: BrainGridProps) {
           {FILTERS.map((f) => (
             <button
               key={f.value}
-              onClick={() => setActiveFilter(f.value)}
+              onClick={() => router.push(`/dashboard/overview?filter=${f.value}`)}
               className={clsx(
                 'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
                 activeFilter === f.value
@@ -122,17 +125,15 @@ export default function BrainGrid({ items }: BrainGridProps) {
             const isVerifying = verifyingIds.has(item.id)
 
             return (
-              <Card key={item.id} padding="sm" className="flex flex-col gap-3">
-                <div className="flex items-start justify-between gap-2">
-                  <span
-                    className={clsx(
-                      'inline-flex px-2 py-0.5 rounded text-xs font-medium shrink-0',
-                      CATEGORY_COLORS[item.category] ?? 'bg-gray-100 text-gray-700'
-                    )}
-                  >
-                    {item.category}
-                  </span>
-                  <div className="flex items-center gap-1.5 shrink-0">
+              <KnowledgeCard
+                key={item.id}
+                item={{
+                  ...item,
+                  title: item.notionPageTitle,
+                  updatedAt: item.updatedAt ?? item.createdAt,
+                }}
+                footer={
+                  <div className="flex items-center gap-1.5">
                     {item.frozen && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
                         <AlertTriangle className="w-3 h-3" />
@@ -145,18 +146,7 @@ export default function BrainGrid({ items }: BrainGridProps) {
                         Verified
                       </span>
                     )}
-                  </div>
-                </div>
-
-                <p className="text-sm text-gray-800 flex-1">{item.content}</p>
-
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <span>{item.source}</span>
-                    <span>·</span>
-                    <span>{Math.round(item.confidence * 100)}% confidence</span>
-                  </div>
-                  {!isVerified && !item.frozen && (
+                    {!isVerified && !item.frozen && (
                     <button
                       onClick={() => handleVerify(item.id)}
                       disabled={isVerifying}
@@ -165,17 +155,34 @@ export default function BrainGrid({ items }: BrainGridProps) {
                       <ShieldCheck className="w-3 h-3" />
                       {isVerifying ? 'Verifying…' : 'Verify'}
                     </button>
-                  )}
-                </div>
-              </Card>
+                    )}
+                  </div>
+                }
+              />
             )
           })}
         </div>
       )}
 
       <p className="text-xs text-gray-400 text-right">
-        {filtered.length} of {items.length} items
+        {filtered.length} of {displayItems.length} items
       </p>
     </div>
   )
+}
+
+function dedupeLinearItems(items: KnowledgeItemRow[]): KnowledgeItemRow[] {
+  const grouped = new Map<string, KnowledgeItemRow>()
+  for (const item of items) {
+    const key = item.source === 'linear' && (item.sourceExternalId || item.sourceUrl)
+      ? `linear:${item.sourceExternalId ?? item.sourceUrl}`
+      : `${item.source}:${item.id}`
+    const existing = grouped.get(key)
+    if (!existing || linearCardQuality(item) > linearCardQuality(existing)) grouped.set(key, item)
+  }
+  return [...grouped.values()]
+}
+
+function linearCardQuality(item: KnowledgeItemRow): number {
+  return Number(/^Linear issue\s+[^:]+:/i.test(item.content)) * 10 + item.content.length / 10000
 }

@@ -4,10 +4,8 @@ import { prisma } from '@/lib/db'
 
 const WRITE_ROLES = new Set(['owner', 'admin'])
 
-export async function DELETE(
-  _req: Request,
-  { params }: { params: { ruleId: string } },
-) {
+export async function DELETE(_req: Request, props: { params: Promise<{ ruleId: string }> }) {
+  const params = await props.params;
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

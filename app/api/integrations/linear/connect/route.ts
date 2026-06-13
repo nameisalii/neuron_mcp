@@ -2,12 +2,14 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { randomBytes } from 'crypto'
+import { getLinearRedirectUri } from '@/lib/linear/oauth'
 
 export async function GET() {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const state = randomBytes(16).toString('hex')
+  const stateToken = randomBytes(16).toString('hex')
+  const state = `${stateToken}.${userId}`
   const cookieStore = await cookies()
   cookieStore.set('linear_oauth_state', state, {
     httpOnly: true,
@@ -19,7 +21,7 @@ export async function GET() {
 
   const params = new URLSearchParams({
     client_id: process.env.LINEAR_CLIENT_ID!,
-    redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/linear/callback`,
+    redirect_uri: getLinearRedirectUri(),
     response_type: 'code',
     scope: 'read',
     state,

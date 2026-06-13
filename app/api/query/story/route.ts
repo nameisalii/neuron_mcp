@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { openai, generateEmbedding } from '@/lib/openai'
-import { searchSimilar } from '@/lib/pinecone'
+import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { escapeXml } from '@/lib/utils'
 
 const MAX_STORY_EVENTS = 30
@@ -67,7 +67,12 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       try {
         const embedding = await generateEmbedding(question)
-        const matches = await searchSimilar(embedding, workspaceId, MAX_STORY_EVENTS * 2, 0.6)
+        const personalNamespace = `${workspaceId}:${userId}`
+        const [teamMatches, personalMatches] = await Promise.all([
+          searchSimilar(embedding, workspaceId, MAX_STORY_EVENTS * 2, 0.6),
+          searchInNamespace(embedding, personalNamespace, MAX_STORY_EVENTS * 2, 0.6),
+        ])
+        const matches = [...teamMatches, ...personalMatches]
 
         if (matches.length === 0) {
           sendSSE(controller, {
@@ -75,7 +80,6 @@ export async function POST(req: NextRequest) {
             answer: 'No relevant information found to reconstruct a story.',
             events: [],
           })
-          controller.close()
           return
         }
 
@@ -83,8 +87,15 @@ export async function POST(req: NextRequest) {
 
         const [knowledgeItems, notionChunks] = await Promise.all([
           prisma.knowledgeItem.findMany({
-            where: { id: { in: matchIds }, workspaceId },
-            select: { id: true, content: true, source: true, sourceUrl: true, owner: true, category: true, sourceCreatedAt: true },
+            where: {
+              workspaceId,
+              id: { in: matchIds },
+              OR: [
+                { visibility: 'team' },
+                { visibility: 'personal', visibilitySetBy: userId },
+              ],
+            },
+            select: { id: true, content: true, source: true, sourceUrl: true, owner: true, category: true, sourceCreatedAt: true, visibility: true, visibilitySetBy: true },
           }),
           prisma.notionChunk.findMany({
             where: { pineconeId: { in: matchIds }, workspaceId },
@@ -143,7 +154,7 @@ export async function POST(req: NextRequest) {
             {
               role: 'system',
               content:
-                "You are a company historian. Given timestamped knowledge items from Slack, Notion, and Linear, reconstruct a clear chronological narrative answering the user's question. Be concise and factual. Cite sources inline as [slack], [notion], or [linear].",
+                "You are a company historian. Given timestamped knowledge items from Slack, Notion, Linear, and Gmail, reconstruct a clear chronological narrative answering the user's question. Be concise and factual. Cite sources inline as [slack], [notion], [linear], or [gmail].",
             },
             {
               role: 'user',

@@ -16,6 +16,20 @@ export async function upsertEmbedding(
   await index.upsert([{ id, values: embedding, metadata }])
 }
 
+export async function upsertEmbeddingInNamespace(
+  id: string,
+  embedding: number[],
+  metadata: Record<string, string>,
+  namespace: string,
+): Promise<void> {
+  await index.namespace(namespace).upsert([{ id, values: embedding, metadata }])
+}
+
+export async function deleteEmbeddingsInNamespace(ids: string[], namespace: string): Promise<void> {
+  if (ids.length === 0) return
+  await index.namespace(namespace).deleteMany(ids)
+}
+
 export async function deleteEmbedding(id: string): Promise<void> {
   await index.deleteOne(id)
 }

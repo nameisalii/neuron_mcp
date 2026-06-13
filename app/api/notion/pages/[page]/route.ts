@@ -5,10 +5,8 @@ import { trackEvent } from '@/lib/activity'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { page: string } },
-) {
+export async function GET(_req: Request, props: { params: Promise<{ page: string }> }) {
+  const params = await props.params;
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

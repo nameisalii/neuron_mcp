@@ -20,6 +20,13 @@ const BRAND_LABEL: Record<BrandKey, string> = {
   discord: 'Discord',
 }
 
+// Brands with a bundled, full-color asset are served locally so they match the
+// product everywhere they appear, rather than the monochrome simpleicons CDN.
+const LOCAL_BRAND_ASSET: Partial<Record<BrandKey, string>> = {
+  gmail: '/icons/gmail.png',
+  slack: '/icons/slack.png',
+}
+
 interface BrandLogoProps {
   brand: BrandKey
   className?: string
@@ -27,10 +34,11 @@ interface BrandLogoProps {
 }
 
 export default function BrandLogo({ brand, className, tone = 'color' }: BrandLogoProps) {
-  const hex = tone === 'navy' ? '1A2540' : BRAND_HEX[brand]
+  const localAsset = LOCAL_BRAND_ASSET[brand]
+  const src = localAsset ?? `https://cdn.simpleicons.org/${brand}/${tone === 'navy' ? '1A2540' : BRAND_HEX[brand]}`
   return (
     <img
-      src={`https://cdn.simpleicons.org/${brand}/${hex}`}
+      src={src}
       alt={`${BRAND_LABEL[brand]} logo`}
       className={clsx('object-contain', className)}
       loading="lazy"

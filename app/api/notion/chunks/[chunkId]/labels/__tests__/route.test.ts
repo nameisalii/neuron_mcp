@@ -77,7 +77,7 @@ beforeEach(() => {
 describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
   it('returns 401 when not authenticated', async () => {
     mockAuth.mockResolvedValue({ userId: null } as never)
-    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(401)
   })
 
@@ -85,35 +85,35 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
     authed()
     withMember()
     mockChunkFind.mockResolvedValue(null as never)
-    const res = await PATCH(makeRequest('bad-id', { labels: ['rule'] }), { params: { chunkId: 'bad-id' } })
+    const res = await PATCH(makeRequest('bad-id', { labels: ['rule'] }), { params: Promise.resolve({ chunkId: 'bad-id' }) })
     expect(res.status).toBe(404)
   })
 
   it('returns 403 when user is not a workspace member', async () => {
     authed()
     mockMemberFind.mockResolvedValue(null as never)
-    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(403)
   })
 
   it('returns 403 when user has viewer role', async () => {
     authed()
     withMember('viewer')
-    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(403)
   })
 
   it('returns 400 when labels is missing from body', async () => {
     authed()
     withMember()
-    const res = await PATCH(makeRequest(CHUNK_ID, {}), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, {}), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(400)
   })
 
   it('returns 400 when labels is not an array', async () => {
     authed()
     withMember()
-    const res = await PATCH(makeRequest(CHUNK_ID, { labels: 'rule' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { labels: 'rule' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(400)
   })
 
@@ -121,7 +121,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
     authed()
     withMember()
     const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'], visibility: 'public' }), {
-      params: { chunkId: CHUNK_ID },
+      params: Promise.resolve({ chunkId: CHUNK_ID }),
     })
     expect(res.status).toBe(400)
   })
@@ -129,7 +129,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
   it('updates chunk with new labels appended', async () => {
     authed()
     withMember()
-    await PATCH(makeRequest(CHUNK_ID, { labels: ['rule', 'decision'] }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { labels: ['rule', 'decision'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(mockChunkUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: CHUNK_ID },
@@ -143,7 +143,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
   it('appends to labeledBy with attribution', async () => {
     authed()
     withMember()
-    await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     const call = mockChunkUpdate.mock.calls[0][0]
     const labeledBy = call.data.labeledBy as object[]
     expect(labeledBy).toEqual(
@@ -157,7 +157,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
     authed()
     withMember()
     await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'], visibility: 'personal' }), {
-      params: { chunkId: CHUNK_ID },
+      params: Promise.resolve({ chunkId: CHUNK_ID }),
     })
     expect(mockChunkUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -169,7 +169,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
   it('does not update visibility when not provided', async () => {
     authed()
     withMember()
-    await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     const call = mockChunkUpdate.mock.calls[0][0]
     expect(call.data).not.toHaveProperty('visibility')
   })
@@ -179,7 +179,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
     withMember()
     const updated = { ...SAMPLE_CHUNK, labels: ['rule'] }
     mockChunkUpdate.mockResolvedValue(updated as never)
-    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.success).toBe(true)
@@ -189,7 +189,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
   it('creates an ActivityEvent with label attribution', async () => {
     authed()
     withMember()
-    await PATCH(makeRequest(CHUNK_ID, { labels: ['decision'] }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { labels: ['decision'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(mockTrackEvent).toHaveBeenCalledWith(
       WORKSPACE_ID,
       CLERK_ID,
@@ -209,7 +209,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
       mockPageFind.mockResolvedValue(SAMPLE_PAGE as never)
       mockTrackEvent.mockResolvedValue(undefined)
       withMember(role)
-      const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: { chunkId: CHUNK_ID } })
+      const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
       expect(res.status).toBe(200)
     }
   })
@@ -218,7 +218,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/labels', () => {
     authed()
     withMember()
     mockChunkUpdate.mockRejectedValue(new Error('DB error'))
-    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { labels: ['rule'] }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(500)
   })
 })

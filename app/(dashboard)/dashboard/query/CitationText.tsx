@@ -27,7 +27,7 @@ export default function CitationText({ text, sources }: Props) {
       parts.push(
         <Link
           key={match.index}
-          href={`/dashboard/notion/${source.pageId}`}
+          href={source.sourceUrl ?? `/dashboard/notion/${source.pageId}`}
           className="bg-blue-50 text-blue-700 px-1 rounded hover:bg-blue-100"
           title={source.content}
         >

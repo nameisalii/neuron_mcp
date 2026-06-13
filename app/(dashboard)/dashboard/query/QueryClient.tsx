@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { ChevronDown, ChevronUp } from 'lucide-react'
 import ShimmerCard from './ShimmerCard'
-import SourceCard from './SourceCard'
-import CitationText from './CitationText'
+import QueryResults from './QueryResults'
 import StoryTimeline from './StoryTimeline'
 import type { SourceItem } from './SourceCard'
 import type { WorkspaceType } from '@/types'
@@ -18,16 +16,6 @@ const STATUS_MSGS = [
   'Cross-referencing knowledge...',
   'Checking sources...',
 ]
-
-const containerVariants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.1 } },
-}
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: { opacity: 1, y: 0, scale: 1 },
-}
 
 interface Props {
   workspaceType: WorkspaceType
@@ -42,7 +30,6 @@ export default function QueryClient({ recentQueries }: Props) {
   const [streamText, setStreamText] = useState('')
   const [confidence, setConfidence] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [sourcesOpen, setSourcesOpen] = useState(true)
   const [copied, setCopied] = useState(false)
   const [statusIndex, setStatusIndex] = useState(0)
   const shouldReduceMotion = useReducedMotion()
@@ -64,7 +51,6 @@ export default function QueryClient({ recentQueries }: Props) {
     setStreamText('')
     setConfidence(0)
     setError(null)
-    setSourcesOpen(true)
     setCopied(false)
     setStatusIndex(0)
 
@@ -140,7 +126,6 @@ export default function QueryClient({ recentQueries }: Props) {
   }
 
   const isActive = queryState === 'thinking' || queryState === 'sources_found' || queryState === 'streaming'
-  const showSources = queryState === 'sources_found' || queryState === 'streaming' || queryState === 'complete'
   const showAnswer = queryState === 'streaming' || queryState === 'complete'
 
   void confidence // used in sources SSE, available for future display
@@ -235,60 +220,14 @@ export default function QueryClient({ recentQueries }: Props) {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showSources && sources.length > 0 && (
-          <motion.ul
-            key="sources"
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-2 list-none p-0"
-          >
-            {sources.map((source, i) => (
-              <SourceCard key={source.chunkId} source={source} i={i} variants={itemVariants} />
-            ))}
-          </motion.ul>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showAnswer && streamText && (
+        {showAnswer && (
           <motion.div
-            key="answer"
+            key="results"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration }}
-            className="bg-white rounded-lg border border-gray-200 p-4"
           >
-            {streamText.toLowerCase().includes('conflict') && (
-              <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700">
-                Conflict detected in your knowledge base — review sources for inconsistencies.
-              </div>
-            )}
-            <p className="text-gray-900 text-sm leading-relaxed">
-              <CitationText text={streamText} sources={sources} />
-            </p>
-
-            {queryState === 'complete' && (
-              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                <button
-                  onClick={() => setSourcesOpen((prev) => !prev)}
-                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  {sourcesOpen ? (
-                    <ChevronUp className="w-3 h-3" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" />
-                  )}
-                  Sources ({sources.length})
-                </button>
-                <button
-                  onClick={handleCopy}
-                  className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  {copied ? 'Copied!' : 'Copy answer'}
-                </button>
-              </div>
-            )}
+            <QueryResults answer={streamText} sources={sources} complete={queryState === 'complete'} copied={copied} onCopy={handleCopy} />
           </motion.div>
         )}
       </AnimatePresence>

@@ -37,28 +37,28 @@ beforeEach(() => {
 describe('PATCH /api/alerts/[alertId]', () => {
   it('returns 401 when not authenticated', async () => {
     mockAuth.mockResolvedValue({ userId: null } as never)
-    expect((await PATCH(req({ status: 'read' }), { params: { alertId: 'a1' } })).status).toBe(401)
+    expect((await PATCH(req({ status: 'read' }), { params: Promise.resolve({ alertId: 'a1' }) })).status).toBe(401)
   })
 
   it('returns 404 when alert not in workspace', async () => {
     mockFind.mockResolvedValue({ id: 'a1', workspaceId: 'other' } as never)
-    expect((await PATCH(req({ status: 'read' }), { params: { alertId: 'a1' } })).status).toBe(404)
+    expect((await PATCH(req({ status: 'read' }), { params: Promise.resolve({ alertId: 'a1' }) })).status).toBe(404)
   })
 
   it('marks alert as read', async () => {
-    const res = await PATCH(req({ status: 'read' }), { params: { alertId: 'a1' } })
+    const res = await PATCH(req({ status: 'read' }), { params: Promise.resolve({ alertId: 'a1' }) })
     expect(res.status).toBe(200)
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'read' }) }))
   })
 
   it('stores resolvedBy when resolved', async () => {
-    await PATCH(req({ status: 'resolved' }), { params: { alertId: 'a1' } })
+    await PATCH(req({ status: 'resolved' }), { params: Promise.resolve({ alertId: 'a1' }) })
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ resolvedBy: 'u-1', resolvedAt: expect.any(Date) }) }),
     )
   })
 
   it('returns 400 for invalid status', async () => {
-    expect((await PATCH(req({ status: 'deleted' }), { params: { alertId: 'a1' } })).status).toBe(400)
+    expect((await PATCH(req({ status: 'deleted' }), { params: Promise.resolve({ alertId: 'a1' }) })).status).toBe(400)
   })
 })

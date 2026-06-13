@@ -1,0 +1,118 @@
+Build Neuron's next two highest-impact features: (1) Linear integration and (2) cross-tool story reconstruction. We are deliberately NOT building every integration at once — these two unlock the most-cited customer pain ("Slack has the discussion, Linear has the decision, Notion has the summary"). Email, Discord, and Drive come later based on customer pull.
+
+Use the agents exactly as marked at each phase. Do not type ECC agents as slash commands — adopt their methodology. gstack skills are slash commands.
+
+Codebase notes: Next.js 14 App Router, TypeScript, Clerk auth, Prisma + Neon Postgres, OpenAI GPT-4o, Pinecone. Import prisma from '@/lib/db'. Auth is inline: auth() -> prisma.user.findUnique({ clerkId }) -> prisma.workspaceMember.findUnique. WorkspaceMember.userId is the Clerk userId. Knowledge chunks have visibility "personal" | "team" and dual Pinecone namespaces (team = workspaceId, personal = workspaceId:userId). All extracted text passes through escapeXml() before LLM/embedding calls. Every action is attributed.
+
+======================================================================
+PHASE 0 — LOCK THE APPROACH (gstack)
+======================================================================
+
+Run /plan-eng-review on this whole task before writing any code.
+
+Specifically pressure-test:
+- The Linear connector should mirror the EXISTING Slack/Notion connector pattern, not invent a new one. First read lib/slack/sync.ts and lib/notion/sync.ts and the integration model in prisma/schema.prisma to learn the established pattern.
+- Cross-tool story reconstruction is the harder, novel feature. Lock its data model and retrieval flow before building. Edge cases: the same decision referenced in 3 tools, conflicting versions across tools, a story with only 1 source, ordering by true chronology across sources with different timestamp formats.
+- Confirm the plan reuses the existing extraction pipeline (decisions/rules/ideas labeling), Pinecone namespaces, attribution, and visibility — so Linear content and story reconstruction inherit all of it for free.
+
+Output a milestone checklist. Then proceed.
+
+======================================================================
+PHASE 1 — INVESTIGATE THE EXISTING PATTERN
+======================================================================
+
+Use /investigate to map exactly how the current integrations work, so Linear is a faithful mirror:
+1. Read lib/slack/sync.ts, lib/notion/sync.ts, and any lib/slack/* connect/callback files
+2. Read the Integration model and how OAuth tokens are stored (check lib/crypto.ts for token encryption)
+3. Read how synced content becomes NotionChunk / knowledge records, gets labeled, and gets embedded into Pinecone
+4. Read app/api/integrations/slack/* routes (connect, callback, sync) as the template
+Report the exact pattern Linear must follow.
+
+======================================================================
+PHASE 2 — LINEAR INTEGRATION (ECC architect + ECC tdd-guide)
+======================================================================
+
+Adopt the ECC architect methodology to design, then ECC tdd-guide to build tests-first.
+
+Build a Linear connector that mirrors the Slack pattern:
+
+Schema / data:
+- Reuse the Integration model with type = "linear" (encrypted access token via lib/crypto.ts)
+- Linear content becomes chunks in the same store as Slack/Notion, with source = "linear", carrying: issue id, issue title, team/project, status, assignee, and a deep link back to the Linear issue
+- Inherit visibility, attribution (syncedBy), and dual-namespace Pinecone embedding
+
+Connector (lib/linear/sync.ts), mirroring lib/slack/sync.ts:
+- Use the Linear API (GraphQL) to pull issues, their comments, status changes, and key fields
+- For each issue: create chunks for the description and each comment; capture metadata { issueId, issueIdentifier, title, status, assignee, projectName, url }
+- Run everything through the SAME extraction/labeling pipeline so Linear content is auto-sorted into decisions/rules/ideas just like Slack/Notion
+- escapeXml() on all text; embed to Pinecone namespace = workspaceId (team) by default
+- Diff sync: only re-pull issues updated since lastSyncAt
+- On completion, create an ActivityEvent ("[Ali] synced N Linear issues") and update Integration.lastSyncAt
+
+API routes, mirroring the Slack ones:
+- GET/POST app/api/integrations/linear/connect (OAuth start)
+- app/api/integrations/linear/callback (OAuth callback, store encrypted token)
+- POST app/api/integrations/linear/sync (member role+, attributed)
+
+UI:
+- Add a Linear card to the integrations page (app/(dashboard)/dashboard/integrations/page.tsx), matching the Slack/Notion cards: connection status, last synced, "Sync Now", and the Linear logo (bundle public/icons/linear.svg)
+
+Tests (write FIRST):
+- Linear sync creates chunks with correct metadata and source = "linear"
+- Issues + comments both become chunks
+- Auto-labeling runs on Linear content
+- Diff sync skips unchanged issues
+- escapeXml applied; attribution recorded
+- Auth + role checks on all routes
+
+======================================================================
+PHASE 3 — CROSS-TOOL STORY RECONSTRUCTION (ECC architect + ECC tdd-guide)
+======================================================================
+
+This is the differentiator. When a user asks "what happened with pricing?", Neuron must return ONE connected timeline that stitches the Slack discussion, the Linear decision/ticket, and the Notion summary into a single story — not three separate search results.
+
+Adopt ECC architect methodology to design, then ECC tdd-guide to build.
+
+Design:
+- New retrieval mode on top of the existing query pipeline. After the normal vector search returns relevant chunks across ALL sources (Slack, Notion, Linear), group them into a coherent "story":
+  - Cluster chunks that refer to the same topic/decision (by embedding similarity + shared entities/keywords)
+  - Order them chronologically using each chunk's source timestamp (normalize Slack/Notion/Linear timestamps to a common format)
+  - Tag each chunk's role in the story: discussion (Slack), decision/execution (Linear), documentation (Notion)
+- Send the ordered, role-tagged chunks to GPT-4o with a prompt that reconstructs the narrative: "Here is what happened, in order, across your tools," with inline citations to each source and a deep link.
+- Flag conflicts: if two sources disagree (e.g., Slack says price = $20, Notion doc says $25), surface it explicitly using the existing conflict-detection idea.
+
+Data:
+- No heavy new schema needed if chunks already carry source, timestamp, and metadata. Add a lightweight StoryThread concept only if needed to cache reconstructed stories. Prefer computing on the fly first; cache later if slow.
+
+API:
+- Extend POST /api/query with a mode (e.g. { mode: "story" }) OR add POST /api/query/story that returns the reconstructed timeline: an ordered array of { source, role, content, author, timestamp, url, labels } plus a synthesized narrative answer and any conflicts.
+
+UI:
+- In the query page, when results form a story, render a vertical timeline: each node shows the source icon (Slack/Notion/Linear), the role tag (Discussion / Decision / Summary), the snippet, who said it, when, and a link out. Above it, the synthesized "here's the full story" answer with citations. Use Framer Motion for the timeline reveal (staggered).
+- This is the screenshot-able moment — make it clean and obviously magical.
+
+Tests (write FIRST):
+- Chunks from 3 sources about one topic cluster into one story
+- Story is ordered correctly by true chronology across mixed timestamp formats
+- Each chunk gets the right role tag by source
+- Single-source query still returns a sensible (degenerate) story
+- Conflicting values across sources are flagged
+- Visibility respected: personal chunks from other users never appear
+
+======================================================================
+PHASE 4 — VERIFY (gstack)
+======================================================================
+
+1. /qa — open the running app in a browser. Connect Linear (or mock it), sync, then run a query that should reconstruct a story across Slack + Notion + Linear. Confirm the timeline renders, citations link out, and nothing is broken. Fix any UI defects found.
+2. npx tsc --noEmit and npx jest --no-coverage — all green
+3. /review — run a pre-merge review to catch prod-breaking bugs that pass CI (auth gaps, N+1 queries, missing visibility checks, timestamp-normalization bugs)
+4. /cso — quick security pass on the new Linear OAuth flow and token storage
+5. Commit: git add -A && git commit -m "feat: Linear integration + cross-tool story reconstruction"
+
+======================================================================
+WHAT NOT TO DO
+======================================================================
+
+- Do NOT build Email, Discord, Google Drive, Loom, or Jira in this pass. Those come later based on customer pull. Stay focused on Linear + story reconstruction.
+- Do NOT invent a new connector architecture. Mirror the existing Slack/Notion pattern exactly.
+- Do NOT break existing Slack/Notion sync, query, labeling, visibility, or attribution. Story reconstruction is additive.

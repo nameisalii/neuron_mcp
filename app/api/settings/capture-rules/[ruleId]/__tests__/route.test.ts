@@ -38,30 +38,30 @@ beforeEach(() => {
 describe('DELETE /api/settings/capture-rules/[ruleId]', () => {
   it('returns 401 when not authenticated', async () => {
     mockAuth.mockResolvedValue({ userId: null } as never)
-    const res = await DELETE(req(), { params: { ruleId: 'r1' } })
+    const res = await DELETE(req(), { params: Promise.resolve({ ruleId: 'r1' }) })
     expect(res.status).toBe(401)
   })
 
   it('returns 403 for member role', async () => {
     mockMemberFind.mockResolvedValue({ role: 'member' } as never)
-    const res = await DELETE(req(), { params: { ruleId: 'r1' } })
+    const res = await DELETE(req(), { params: Promise.resolve({ ruleId: 'r1' }) })
     expect(res.status).toBe(403)
   })
 
   it('returns 404 when rule not found', async () => {
     mockRuleFind.mockResolvedValue(null)
-    const res = await DELETE(req(), { params: { ruleId: 'r1' } })
+    const res = await DELETE(req(), { params: Promise.resolve({ ruleId: 'r1' }) })
     expect(res.status).toBe(404)
   })
 
   it('returns 404 when rule belongs to different workspace', async () => {
     mockRuleFind.mockResolvedValue({ id: 'r1', workspaceId: 'other-ws' } as never)
-    const res = await DELETE(req(), { params: { ruleId: 'r1' } })
+    const res = await DELETE(req(), { params: Promise.resolve({ ruleId: 'r1' }) })
     expect(res.status).toBe(404)
   })
 
   it('deletes and returns success', async () => {
-    const res = await DELETE(req(), { params: { ruleId: 'r1' } })
+    const res = await DELETE(req(), { params: Promise.resolve({ ruleId: 'r1' }) })
     expect(res.status).toBe(200)
     expect(mockRuleDelete).toHaveBeenCalledWith({ where: { id: 'r1' } })
   })

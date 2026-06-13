@@ -100,7 +100,7 @@ beforeEach(() => {
 describe('GET /api/notion/pages/[page]', () => {
   it('returns 401 when not authenticated', async () => {
     mockAuth.mockResolvedValue({ userId: null } as never)
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     expect(res.status).toBe(401)
   })
 
@@ -108,28 +108,28 @@ describe('GET /api/notion/pages/[page]', () => {
     authed()
     withMember()
     mockPageFind.mockResolvedValue(null as never)
-    const res = await GET(makeRequest('nonexistent'), { params: { page: 'nonexistent' } })
+    const res = await GET(makeRequest('nonexistent'), { params: Promise.resolve({ page: 'nonexistent' }) })
     expect(res.status).toBe(404)
   })
 
   it('returns 403 when user is not a member of the page workspace', async () => {
     authed()
     mockMemberFind.mockResolvedValue(null as never)
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     expect(res.status).toBe(403)
   })
 
   it('returns 403 when user has viewer role', async () => {
     authed()
     withMember('viewer')
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     expect(res.status).toBe(403)
   })
 
   it('returns 200 with page and chunks on happy path', async () => {
     authed()
     withMember()
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.success).toBe(true)
@@ -140,7 +140,7 @@ describe('GET /api/notion/pages/[page]', () => {
   it('includes team chunks for all members', async () => {
     authed()
     withMember()
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     const body = await res.json()
     const chunkIds = body.data.chunks.map((c: { id: string }) => c.id)
     expect(chunkIds).toContain('chunk-1')
@@ -149,7 +149,7 @@ describe('GET /api/notion/pages/[page]', () => {
   it('includes own personal chunks', async () => {
     authed()
     withMember()
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     const body = await res.json()
     const chunkIds = body.data.chunks.map((c: { id: string }) => c.id)
     expect(chunkIds).toContain('chunk-2')
@@ -158,7 +158,7 @@ describe('GET /api/notion/pages/[page]', () => {
   it('excludes other users personal chunks', async () => {
     authed()
     withMember()
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     const body = await res.json()
     const chunkIds = body.data.chunks.map((c: { id: string }) => c.id)
     expect(chunkIds).not.toContain('chunk-3')
@@ -167,7 +167,7 @@ describe('GET /api/notion/pages/[page]', () => {
   it('orders chunks by position', async () => {
     authed()
     withMember()
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     const body = await res.json()
     const positions = body.data.chunks.map((c: { position: number }) => c.position)
     expect(positions).toEqual([...positions].sort((a, b) => a - b))
@@ -176,7 +176,7 @@ describe('GET /api/notion/pages/[page]', () => {
   it('includes label distribution', async () => {
     authed()
     withMember()
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     const body = await res.json()
     expect(body.data.labelDistribution).toBeDefined()
     expect(typeof body.data.labelDistribution).toBe('object')
@@ -185,7 +185,7 @@ describe('GET /api/notion/pages/[page]', () => {
   it('counts labels correctly in distribution', async () => {
     authed()
     withMember()
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     const body = await res.json()
     expect(body.data.labelDistribution.rule).toBe(1)
   })
@@ -193,7 +193,7 @@ describe('GET /api/notion/pages/[page]', () => {
   it('includes attribution info (syncedBy, labeledBy) in page', async () => {
     authed()
     withMember()
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     const body = await res.json()
     expect(body.data.page.syncedBy).toBeDefined()
     expect(body.data.chunks[0].labeledBy).toBeDefined()
@@ -202,7 +202,7 @@ describe('GET /api/notion/pages/[page]', () => {
   it('fires a page_viewed activity event', async () => {
     authed()
     withMember('member')
-    await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     expect(mockTrackEvent).toHaveBeenCalledWith(
       WORKSPACE_ID,
       CLERK_ID,
@@ -217,7 +217,7 @@ describe('GET /api/notion/pages/[page]', () => {
     authed()
     withMember()
     mockPageFind.mockRejectedValue(new Error('DB error'))
-    const res = await GET(makeRequest(PAGE_ID), { params: { page: PAGE_ID } })
+    const res = await GET(makeRequest(PAGE_ID), { params: Promise.resolve({ page: PAGE_ID }) })
     expect(res.status).toBe(500)
   })
 })

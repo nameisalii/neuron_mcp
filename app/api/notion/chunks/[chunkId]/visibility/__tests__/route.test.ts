@@ -77,7 +77,7 @@ beforeEach(() => {
 describe('PATCH /api/notion/chunks/[chunkId]/visibility', () => {
   it('returns 401 when not authenticated', async () => {
     mockAuth.mockResolvedValue({ userId: null } as never)
-    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(401)
   })
 
@@ -85,49 +85,49 @@ describe('PATCH /api/notion/chunks/[chunkId]/visibility', () => {
     authed()
     withMember()
     mockChunkFind.mockResolvedValue(null as never)
-    const res = await PATCH(makeRequest('bad', { visibility: 'personal' }), { params: { chunkId: 'bad' } })
+    const res = await PATCH(makeRequest('bad', { visibility: 'personal' }), { params: Promise.resolve({ chunkId: 'bad' }) })
     expect(res.status).toBe(404)
   })
 
   it('returns 403 when user is not a member of the chunk workspace', async () => {
     authed()
     mockMemberFind.mockResolvedValue(null as never)
-    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(403)
   })
 
   it('returns 400 when visibility value is invalid', async () => {
     authed()
     withMember()
-    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'public' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'public' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(400)
   })
 
   it('allows chunk syncedBy user to change visibility', async () => {
     authed(CLERK_ID)
     withMember('member')
-    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(200)
   })
 
   it('allows admin to change visibility on any chunk', async () => {
     authed('clerk-admin')
     mockMemberFind.mockResolvedValue({ role: 'admin', status: 'active', displayName: 'Admin' } as never)
-    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(200)
   })
 
   it('returns 403 when a non-owner member tries to change a chunk they did not label', async () => {
     authed('clerk-other')
     mockMemberFind.mockResolvedValue({ role: 'member', status: 'active', displayName: 'Other' } as never)
-    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(403)
   })
 
   it('updates chunk visibility and visibilitySetBy', async () => {
     authed()
     withMember()
-    await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(mockChunkUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: CHUNK_ID },
@@ -139,7 +139,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/visibility', () => {
   it('calls moveVector when visibility changes from team to personal', async () => {
     authed()
     withMember()
-    await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(mockMoveVector).toHaveBeenCalledWith(
       expect.any(String),
       WORKSPACE_ID,
@@ -151,7 +151,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/visibility', () => {
     authed()
     withMember()
     mockChunkFind.mockResolvedValue({ ...TEAM_CHUNK, visibility: 'personal' } as never)
-    await PATCH(makeRequest(CHUNK_ID, { visibility: 'team' }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { visibility: 'team' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(mockMoveVector).toHaveBeenCalledWith(
       expect.any(String),
       `${WORKSPACE_ID}:${CLERK_ID}`,
@@ -162,14 +162,14 @@ describe('PATCH /api/notion/chunks/[chunkId]/visibility', () => {
   it('does not call moveVector when visibility is unchanged', async () => {
     authed()
     withMember()
-    await PATCH(makeRequest(CHUNK_ID, { visibility: 'team' }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { visibility: 'team' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(mockMoveVector).not.toHaveBeenCalled()
   })
 
   it('creates ActivityEvent with change description', async () => {
     authed()
     withMember()
-    await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(mockTrackEvent).toHaveBeenCalledWith(
       WORKSPACE_ID,
       CLERK_ID,
@@ -183,7 +183,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/visibility', () => {
   it('returns updated chunk on success', async () => {
     authed()
     withMember()
-    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.success).toBe(true)
@@ -194,7 +194,7 @@ describe('PATCH /api/notion/chunks/[chunkId]/visibility', () => {
     authed()
     withMember()
     mockChunkUpdate.mockRejectedValue(new Error('DB error'))
-    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: { chunkId: CHUNK_ID } })
+    const res = await PATCH(makeRequest(CHUNK_ID, { visibility: 'personal' }), { params: Promise.resolve({ chunkId: CHUNK_ID }) })
     expect(res.status).toBe(500)
   })
 })

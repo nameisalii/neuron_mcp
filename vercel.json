@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/sync-notion",      "schedule": "*/5 * * * *"  },
+    { "path": "/api/cron/sync-linear",      "schedule": "*/5 * * * *"  },
     { "path": "/api/cron/daily-digest",     "schedule": "0 8 * * *"    },
     { "path": "/api/cron/weekly-digest",    "schedule": "0 8 * * 1"    },
     { "path": "/api/cron/detect-conflicts", "schedule": "*/10 * * * *" },
@@ -8,6 +9,7 @@
   ],
   "functions": {
     "app/api/cron/sync-notion/route.ts":      { "maxDuration": 120 },
+    "app/api/cron/sync-linear/route.ts":      { "maxDuration": 120 },
     "app/api/cron/daily-digest/route.ts":     { "maxDuration": 120 },
     "app/api/cron/weekly-digest/route.ts":    { "maxDuration": 120 },
     "app/api/cron/detect-conflicts/route.ts": { "maxDuration": 60  },
@@ -22,6 +24,7 @@
       "maxDuration": 30
     },
     "app/api/integrations/linear/sync/route.ts": { "maxDuration": 60 },
+    "app/api/integrations/linear/webhook/route.ts": { "maxDuration": 60 },
     "app/api/query/story/route.ts": { "maxDuration": 30 }
   }
 }

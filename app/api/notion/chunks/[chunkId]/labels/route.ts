@@ -13,10 +13,8 @@ const LabelSchema = z.object({
   visibility: z.enum(['personal', 'team']).optional(),
 })
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: { chunkId: string } },
-) {
+export async function PATCH(req: Request, props: { params: Promise<{ chunkId: string }> }) {
+  const params = await props.params;
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

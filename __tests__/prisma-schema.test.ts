@@ -85,6 +85,16 @@ describe('User → Workspace: one-to-one', () => {
 // ── 2. Workspace → KnowledgeItem: cascade delete ─────────────────────────────
 
 describe('Workspace → KnowledgeItem: cascade delete', () => {
+  it('stores source timestamps and source external IDs for incremental integrations', () => {
+    expect(blockContains('KnowledgeItem', 'sourceCreatedAt')).toBe(true)
+    expect(blockContains('KnowledgeItem', 'sourceExternalId')).toBe(true)
+  })
+
+  it('stores visibility fields for team and personal scoping', () => {
+    expect(blockContains('KnowledgeItem', 'visibility')).toBe(true)
+    expect(blockContains('KnowledgeItem', 'visibilitySetBy')).toBe(true)
+  })
+
   it('KnowledgeItem.workspace relation has onDelete: Cascade', () => {
     const lines = matchingLines('KnowledgeItem', '@relation')
     expect(

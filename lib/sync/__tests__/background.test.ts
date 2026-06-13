@@ -4,7 +4,7 @@
 import { runNotionBackgroundSync, processSlackMessage } from '../background'
 import { prisma } from '@/lib/db'
 import { generateEmbedding } from '@/lib/openai'
-import { upsertEmbedding } from '@/lib/pinecone'
+import { deleteEmbeddings, upsertEmbedding } from '@/lib/pinecone'
 import { extractKnowledge } from '@/lib/extraction/extractor'
 import { evaluateCapture } from '../capture-rules'
 
@@ -24,13 +24,14 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     syncStatus: { findUnique: jest.fn(), upsert: jest.fn() },
     notionPage: { upsert: jest.fn() },
-    notionChunk: { deleteMany: jest.fn(), createMany: jest.fn() },
+    notionChunk: { deleteMany: jest.fn(), createMany: jest.fn(), findMany: jest.fn() },
+    knowledgeItem: { findMany: jest.fn(), deleteMany: jest.fn() },
     captureLog: { create: jest.fn() },
   },
 }))
 
 jest.mock('@/lib/openai', () => ({ generateEmbedding: jest.fn() }))
-jest.mock('@/lib/pinecone', () => ({ upsertEmbedding: jest.fn() }))
+jest.mock('@/lib/pinecone', () => ({ upsertEmbedding: jest.fn(), deleteEmbeddings: jest.fn() }))
 jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledge: jest.fn() }))
 jest.mock('../capture-rules', () => ({ evaluateCapture: jest.fn() }))
 
@@ -41,9 +42,13 @@ const mockSyncStatusUpsert = jest.mocked(prisma.syncStatus.upsert)
 const mockPageUpsert = jest.mocked(prisma.notionPage.upsert)
 const mockChunkCreateMany = jest.mocked(prisma.notionChunk.createMany)
 const mockChunkDeleteMany = jest.mocked(prisma.notionChunk.deleteMany)
+const mockChunkFindMany = jest.mocked(prisma.notionChunk.findMany)
+const mockKnowledgeFindMany = jest.mocked(prisma.knowledgeItem.findMany)
+const mockKnowledgeDeleteMany = jest.mocked(prisma.knowledgeItem.deleteMany)
 const mockCaptureLogCreate = jest.mocked(prisma.captureLog.create)
 const mockEmbed = jest.mocked(generateEmbedding)
 const mockUpsertEmb = jest.mocked(upsertEmbedding)
+const mockDeleteEmbeddings = jest.mocked(deleteEmbeddings)
 const mockExtract = jest.mocked(extractKnowledge)
 const mockEvaluate = jest.mocked(evaluateCapture)
 
@@ -56,6 +61,7 @@ function makePage(id: string, lastEdited: string) {
     last_edited_time: lastEdited,
     parent: { type: 'workspace', workspace: true },
     properties: { title: { type: 'title', title: [{ plain_text: `Page ${id}` }] } },
+    url: `https://notion.so/${id}`,
   }
 }
 
@@ -67,9 +73,13 @@ beforeEach(() => {
   mockPageUpsert.mockResolvedValue({ id: 'db-page-1' } as never)
   mockChunkDeleteMany.mockResolvedValue({ count: 0 } as never)
   mockChunkCreateMany.mockResolvedValue({ count: 1 } as never)
+  mockChunkFindMany.mockResolvedValue([{ id: 'chunk-1' }] as never)
+  mockKnowledgeFindMany.mockResolvedValue([])
+  mockKnowledgeDeleteMany.mockResolvedValue({ count: 0 })
   mockCaptureLogCreate.mockResolvedValue({} as never)
   mockEmbed.mockResolvedValue(new Array(1536).fill(0.1))
   mockUpsertEmb.mockResolvedValue(undefined)
+  mockDeleteEmbeddings.mockResolvedValue(undefined)
   mockExtract.mockResolvedValue([])
   mockEvaluate.mockResolvedValue({ decision: 'capture', reason: 'no_rules_configured' })
   mockBlocksList.mockResolvedValue({ results: [{ type: 'paragraph', id: 'b1', paragraph: { rich_text: [{ plain_text: 'Hello world' }] } }], next_cursor: null })
@@ -134,6 +144,23 @@ describe('runNotionBackgroundSync', () => {
     await runNotionBackgroundSync(WS)
     expect(mockSyncStatusUpsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { workspaceId_integration: { workspaceId: WS, integration: 'notion' } } }),
+    )
+  })
+
+  it('extracts categorized knowledge with Notion page attribution', async () => {
+    const recent = new Date(Date.now() + 1000).toISOString()
+    mockSyncStatusFind.mockResolvedValue({ status: 'active', lastSyncAt: new Date(Date.now() - 10000), configuredBy: 'u1' } as never)
+    mockNotionSearch.mockResolvedValue({ results: [makePage('p1', recent)], next_cursor: null })
+
+    await runNotionBackgroundSync(WS)
+
+    expect(mockExtract).toHaveBeenCalledWith(
+      expect.any(Array),
+      WS,
+      'notion',
+      'https://notion.so/p1',
+      'p1',
+      { id: 'db-page-1', title: 'Page p1' },
     )
   })
 })

@@ -130,11 +130,11 @@ export default function StoryTimeline() {
                   className="relative flex gap-4"
                 >
                   {/* branded node */}
-                  <div className="relative z-10 shrink-0 w-[52px] h-[52px] rounded-xl bg-white border border-warm shadow-soft flex items-center justify-center">
+                  <div className="relative z-10 shrink-0 w-[52px] h-[52px] rounded-xl bg-white border border-warm shadow-soft flex items-center justify-center overflow-hidden">
                     {brand ? (
                       <BrandLogo brand={brand} className="w-6 h-6" />
                     ) : (
-                      <NeuronMark className="w-6 h-6" tone="navy" />
+                      <NeuronMark className="w-full h-full" />
                     )}
                   </div>
 

@@ -8,64 +8,66 @@ generator client {
 }
 
 model User {
-  id              String     @id @default(cuid())
-  clerkId         String     @unique
-  email           String     @unique
-  name            String?
-  workspaceType        String     @default("PERSONAL")
-  week1ReportSent      Boolean    @default(false)
-  week1SentAt          DateTime?
-  onboardingCompleted  Boolean    @default(false)
-  createdAt            DateTime   @default(now())
-  workspace       Workspace?
+  id                  String     @id @default(cuid())
+  clerkId             String     @unique
+  email               String     @unique
+  name                String?
+  workspaceType       String     @default("PERSONAL")
+  week1ReportSent     Boolean    @default(false)
+  week1SentAt         DateTime?
+  onboardingCompleted Boolean    @default(false)
+  createdAt           DateTime   @default(now())
+  workspace           Workspace?
 }
 
 model Workspace {
-  id             String             @id @default(cuid())
-  name           String?
-  type           String             @default("solo")
-  ownerId        String             @unique
-  owner          User               @relation(fields: [ownerId], references: [id])
-  iconUrl        String?
-  plan           String             @default("free")
-  knowledgeItems KnowledgeItem[]
-  decisions      Decision[]
-  ideas          Idea[]
-  clients        Client[]
-  integrations   Integration[]
-  notionPages    NotionPage[]
-  members        WorkspaceMember[]
-  invitations    Invitation[]
-  activityEvents ActivityEvent[]
-  queryLogs      QueryLog[]
-  captureRules   CaptureRule[]
-  captureLogs    CaptureLog[]
-  syncStatuses   SyncStatus[]
-  digests        Digest[]
-  alerts         Alert[]
+  id              String            @id @default(cuid())
+  name            String?
+  type            String            @default("solo")
+  ownerId         String            @unique
+  owner           User              @relation(fields: [ownerId], references: [id])
+  iconUrl         String?
+  plan            String            @default("free")
+  knowledgeItems  KnowledgeItem[]
+  decisions       Decision[]
+  ideas           Idea[]
+  clients         Client[]
+  integrations    Integration[]
+  notionPages     NotionPage[]
+  emailThreads    EmailThread[]
+  members         WorkspaceMember[]
+  invitations     Invitation[]
+  activityEvents  ActivityEvent[]
+  queryLogs       QueryLog[]
+  captureRules    CaptureRule[]
+  captureLogs     CaptureLog[]
+  syncStatuses    SyncStatus[]
+  digests         Digest[]
+  alerts          Alert[]
   userPreferences UserPreference[]
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @default(now()) @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @default(now()) @updatedAt
 }
 
 model KnowledgeItem {
-  id           String    @id @default(cuid())
-  workspaceId  String
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  content      String
-  category     String
-  source       String
-  sourceUrl    String?
-  owner        String?
-  verified     Boolean   @default(false)
-  verifiedAt   DateTime?
-  verifiedBy   String?
-  confidence   Float     @default(0.8)
-  embeddingId  String?
-  frozen       Boolean   @default(false)
-  conflictNote String?
-  reason       String?
-  alternatives String?
+  id               String      @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content          String
+  category         String
+  source           String
+  sourceUrl        String?
+  sourceExternalId String?
+  owner            String?
+  verified         Boolean     @default(false)
+  verifiedAt       DateTime?
+  verifiedBy       String?
+  confidence       Float       @default(0.8)
+  embeddingId      String?
+  frozen           Boolean     @default(false)
+  conflictNote     String?
+  reason           String?
+  alternatives     String?
   contentHash      String?
   clientId         String?
   client           Client?     @relation(fields: [clientId], references: [id])
@@ -73,6 +75,8 @@ model KnowledgeItem {
   notionPageId     String?
   notionPage       NotionPage? @relation(fields: [notionPageId], references: [id])
   notionPageTitle  String?
+  visibility       String      @default("team")
+  visibilitySetBy  String?
   sourceCreatedAt  DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
@@ -81,21 +85,22 @@ model KnowledgeItem {
   @@index([workspaceId, category])
   @@index([workspaceId, verified])
   @@index([workspaceId, notionPageId])
+  @@index([workspaceId, source, sourceExternalId])
 }
 
 model Decision {
-  id          String    @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  title       String
-  decision    String
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title        String
+  decision     String
   alternatives String?
-  reason      String?
-  source      String
-  sourceUrl   String?
-  madeBy      String?
-  madeAt      DateTime?
-  createdAt   DateTime  @default(now())
+  reason       String?
+  source       String
+  sourceUrl    String?
+  madeBy       String?
+  madeAt       DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([workspaceId])
 }
@@ -219,6 +224,47 @@ model NotionChunk {
   @@index([workspaceId, visibility])
 }
 
+model EmailThread {
+  id            String       @id @default(cuid())
+  gmailThreadId String
+  workspaceId   String
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  subject       String
+  labelNames    String[]
+  messageCount  Int          @default(0)
+  lastMessageAt DateTime
+  syncedBy      String // Clerk userId — attribution
+  syncedAt      DateTime
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  chunks        EmailChunk[]
+
+  @@unique([workspaceId, gmailThreadId])
+  @@index([workspaceId])
+}
+
+model EmailChunk {
+  id              String      @id @default(cuid())
+  emailThreadId   String
+  thread          EmailThread @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
+  workspaceId     String
+  content         String
+  blockType       String      @default("email_message")
+  position        Int
+  metadata        Json?
+  pineconeId      String?
+  labels          Json        @default("[]")
+  labeledBy       Json        @default("[]")
+  visibility      String      @default("personal") // email is private by default — opposite of NotionChunk
+  visibilitySetBy String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([emailThreadId])
+  @@index([workspaceId])
+  @@index([workspaceId, visibility])
+}
+
 model ActivityEvent {
   id          String    @id @default(cuid())
   workspaceId String
@@ -236,15 +282,15 @@ model ActivityEvent {
 }
 
 model QueryLog {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   workspaceId    String
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId         String
   displayName    String
   query          String
   answer         String
-  sourceChunkIds Json     @default("[]")
-  createdAt      DateTime @default(now())
+  sourceChunkIds Json      @default("[]")
+  createdAt      DateTime  @default(now())
 
   @@index([workspaceId])
   @@index([workspaceId, createdAt])
@@ -254,11 +300,11 @@ model CaptureRule {
   id          String       @id @default(cuid())
   workspaceId String
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  integration String       // "notion" | "slack"
-  ruleType    String       // "include" | "exclude"
-  target      String       // pageId, channelId, or keyword pattern
-  targetName  String       // human-readable label
-  createdBy   String       // Clerk userId — attribution
+  integration String // "notion" | "slack"
+  ruleType    String // "include" | "exclude"
+  target      String // pageId, channelId, or keyword pattern
+  targetName  String // human-readable label
+  createdBy   String // Clerk userId — attribution
   createdAt   DateTime     @default(now())
   captureLogs CaptureLog[]
 
@@ -271,10 +317,10 @@ model CaptureLog {
   workspaceId    String
   workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   timestamp      DateTime     @default(now())
-  source         String       // "notion" | "slack"
-  sourceId       String       // pageId or channelId
-  contentPreview String       // first 50 chars
-  status         String       // "captured" | "skipped" | "excluded"
+  source         String // "notion" | "slack"
+  sourceId       String // pageId or channelId
+  contentPreview String // first 50 chars
+  status         String // "captured" | "skipped" | "excluded"
   reason         String
   captureRuleId  String?
   captureRule    CaptureRule? @relation(fields: [captureRuleId], references: [id], onDelete: SetNull)
@@ -289,13 +335,13 @@ model SyncStatus {
   id           String    @id @default(cuid())
   workspaceId  String
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  integration  String    // "notion" | "slack"
-  mode         String    @default("manual")  // "manual" | "background"
+  integration  String // "notion" | "slack"
+  mode         String    @default("manual") // "manual" | "background"
   lastSyncAt   DateTime?
   nextSyncAt   DateTime?
-  status       String    @default("active")  // "active" | "paused" | "error"
+  status       String    @default("active") // "active" | "paused" | "error"
   errorMessage String?
-  configuredBy String    // Clerk userId — attribution
+  configuredBy String // Clerk userId — attribution
 
   @@unique([workspaceId, integration])
   @@index([workspaceId])
@@ -306,10 +352,10 @@ model UserPreference {
   id                 String    @id @default(cuid())
   workspaceId        String
   workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  userId             String    // Clerk userId
+  userId             String // Clerk userId
   focusAreas         Json      @default("[]")
   digestEnabled      Boolean   @default(true)
-  digestTime         Int       @default(8)  // UTC hour 0–23
+  digestTime         Int       @default(8) // UTC hour 0–23
   emailDigest        Boolean   @default(false)
   alertsEnabled      Boolean   @default(true)
   staleThresholdDays Int       @default(30)
@@ -324,10 +370,10 @@ model Digest {
   id          String    @id @default(cuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  userId      String    // Clerk userId
-  date        DateTime  // calendar date this digest covers
-  content     Json      // { summary, highlights, stats }
-  type        String    // "daily" | "weekly"
+  userId      String // Clerk userId
+  date        DateTime // calendar date this digest covers
+  content     Json // { summary, highlights, stats }
+  type        String // "daily" | "weekly"
   deliveredAt DateTime?
   readAt      DateTime?
   createdAt   DateTime  @default(now())
@@ -341,13 +387,13 @@ model Alert {
   id             String    @id @default(cuid())
   workspaceId    String
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  type           String    // "conflict" | "stale" | "important"
+  type           String // "conflict" | "stale" | "important"
   title          String
   description    String
   sourceChunkIds Json      @default("[]")
-  targetUserId   String?   // nullable — workspace-wide vs user-targeted
-  status         String    @default("unread")  // "unread" | "read" | "resolved"
-  resolvedBy     String?   // Clerk userId — ATTRIBUTION
+  targetUserId   String? // nullable — workspace-wide vs user-targeted
+  status         String    @default("unread") // "unread" | "read" | "resolved"
+  resolvedBy     String? // Clerk userId — ATTRIBUTION
   resolvedAt     DateTime?
   createdAt      DateTime  @default(now())
 

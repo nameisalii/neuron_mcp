@@ -13,7 +13,7 @@ jest.mock('@/lib/db', () => ({
     notionChunk: { findMany: jest.fn() },
   },
 }))
-jest.mock('@/lib/pinecone', () => ({ searchSimilar: jest.fn() }))
+jest.mock('@/lib/pinecone', () => ({ searchSimilar: jest.fn(), searchInNamespace: jest.fn() }))
 jest.mock('@/lib/openai', () => ({
   openai: {
     chat: { completions: { create: jest.fn() } },
@@ -22,7 +22,7 @@ jest.mock('@/lib/openai', () => ({
 }))
 
 import { prisma } from '@/lib/db'
-import { searchSimilar } from '@/lib/pinecone'
+import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { openai, generateEmbedding } from '@/lib/openai'
 import { auth } from '@clerk/nextjs/server'
 
@@ -63,6 +63,7 @@ describe('POST /api/query/story', () => {
     ;(prisma.knowledgeItem.findMany as jest.Mock).mockResolvedValue([])
     ;(prisma.notionChunk.findMany as jest.Mock).mockResolvedValue([])
     ;(searchSimilar as jest.Mock).mockResolvedValue([])
+    ;(searchInNamespace as jest.Mock).mockResolvedValue([])
     ;(generateEmbedding as jest.Mock).mockResolvedValue(new Array(1536).fill(0))
     ;(openai.chat.completions.create as jest.Mock).mockResolvedValue({
       choices: [{ message: { content: 'A story happened.' } }],
@@ -93,9 +94,16 @@ describe('POST /api/query/story', () => {
     expect(events.some((e) => e.type === 'done')).toBe(true)
   })
 
+  it('searches the personal namespace as well as the team namespace', async () => {
+    await POST(makeRequest({ question: 'timeline?' }))
+    expect(searchSimilar).toHaveBeenCalledWith(expect.any(Array), 'ws_1', expect.any(Number), expect.any(Number))
+    expect(searchInNamespace).toHaveBeenCalledWith(expect.any(Array), 'ws_1:clerk_1', expect.any(Number), expect.any(Number))
+  })
+
   it('caps events at MAX_STORY_EVENTS (30)', async () => {
     const manyMatches = Array.from({ length: 50 }, (_, i) => ({ id: `id_${i}`, score: 0.9 }))
     ;(searchSimilar as jest.Mock).mockResolvedValue(manyMatches)
+    ;(searchInNamespace as jest.Mock).mockResolvedValue([])
     ;(prisma.knowledgeItem.findMany as jest.Mock).mockResolvedValue(
       manyMatches.slice(0, 30).map((m) => ({
         id: m.id,
@@ -122,6 +130,7 @@ describe('POST /api/query/story', () => {
       { id: 'ki_1', score: 0.9 },
       { id: 'ki_2', score: 0.85 },
     ])
+    ;(searchInNamespace as jest.Mock).mockResolvedValue([])
     ;(prisma.knowledgeItem.findMany as jest.Mock).mockResolvedValue([
       { id: 'ki_1', content: 'later event', source: 'slack', sourceCreatedAt: new Date('2026-02-01'), sourceUrl: null, owner: null, category: 'fact' },
       { id: 'ki_2', content: 'earlier event', source: 'linear', sourceCreatedAt: new Date('2026-01-01'), sourceUrl: null, owner: null, category: 'decision' },

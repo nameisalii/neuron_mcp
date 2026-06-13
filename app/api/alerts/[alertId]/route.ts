@@ -6,7 +6,8 @@ import { prisma } from '@/lib/db'
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 const PatchSchema = z.object({ status: z.enum(['read', 'resolved']) })
 
-export async function PATCH(req: Request, { params }: { params: { alertId: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ alertId: string }> }) {
+  const params = await props.params;
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

@@ -18,7 +18,7 @@ const mockUserFind = jest.mocked(prisma.user.findUnique)
 const mockItemFind = jest.mocked(prisma.knowledgeItem.findFirst)
 const mockItemUpdate = jest.mocked(prisma.knowledgeItem.update)
 
-const ROUTE_PARAMS = { params: { id: 'decision-1' } }
+const ROUTE_PARAMS = { params: Promise.resolve({ id: 'decision-1' }) }
 
 function makeRequest(body: unknown) {
   return new Request('http://localhost/api/decisions/decision-1', {

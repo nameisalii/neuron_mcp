@@ -72,11 +72,46 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   const workspaceId = user?.workspace?.id
+  const visibleKnowledge = workspaceId && userId
+    ? {
+        workspaceId,
+        OR: [
+          { visibility: 'team' },
+          { visibility: 'personal', visibilitySetBy: userId },
+        ],
+      }
+    : null
+  let fallbackCountsPromise: Promise<[number, number, number]> | null = null
+  const fallbackCounts = async () => {
+    if (!workspaceId) return [0, 0, 0] as const
+    fallbackCountsPromise ??= Promise.all([
+      prisma.knowledgeItem.count({ where: { workspaceId } }),
+      prisma.knowledgeItem.count({ where: { workspaceId, category: 'decision' } }),
+      prisma.knowledgeItem.count({ where: { workspaceId, category: 'idea' } }),
+    ]) as Promise<[number, number, number]>
+    return fallbackCountsPromise
+  }
+
   const [knowledgeCount, decisionCount, ideaCount] = workspaceId
     ? await Promise.all([
-        prisma.knowledgeItem.count({ where: { workspaceId } }),
-        prisma.decision.count({ where: { workspaceId } }),
-        prisma.idea.count({ where: { workspaceId } }),
+        prisma.knowledgeItem.count({ where: visibleKnowledge! }).catch(async (err) => {
+          if (err instanceof Error && /Unknown argument `visibility`|Unknown argument `visibilitySetBy`/.test(err.message)) {
+            return (await fallbackCounts())[0]
+          }
+          throw err
+        }),
+        prisma.knowledgeItem.count({ where: { ...visibleKnowledge!, category: 'decision' } }).catch(async (err) => {
+          if (err instanceof Error && /Unknown argument `visibility`|Unknown argument `visibilitySetBy`/.test(err.message)) {
+            return (await fallbackCounts())[1]
+          }
+          throw err
+        }),
+        prisma.knowledgeItem.count({ where: { ...visibleKnowledge!, category: 'idea' } }).catch(async (err) => {
+          if (err instanceof Error && /Unknown argument `visibility`|Unknown argument `visibilitySetBy`/.test(err.message)) {
+            return (await fallbackCounts())[2]
+          }
+          throw err
+        }),
       ])
     : [0, 0, 0]
 

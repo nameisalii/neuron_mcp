@@ -7,6 +7,7 @@ import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding, deleteEmbeddings } from '@/lib/pinecone'
 import { prisma } from '@/lib/db'
 import { trackEvent } from '@/lib/activity'
+import { extractKnowledge } from '@/lib/extraction/extractor'
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 
@@ -24,12 +25,14 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     notionPage: { upsert: jest.fn(), findUnique: jest.fn() },
     notionChunk: { create: jest.fn(), deleteMany: jest.fn() },
+    knowledgeItem: { count: jest.fn(), findMany: jest.fn(), deleteMany: jest.fn() },
   },
 }))
 
 jest.mock('@/lib/openai', () => ({ generateEmbedding: jest.fn() }))
 jest.mock('@/lib/pinecone', () => ({ upsertEmbedding: jest.fn(), deleteEmbeddings: jest.fn() }))
 jest.mock('@/lib/activity', () => ({ trackEvent: jest.fn() }))
+jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledge: jest.fn() }))
 
 // ─── typed refs ───────────────────────────────────────────────────────────────
 
@@ -41,6 +44,10 @@ const mockPageFindUnique = jest.mocked(prisma.notionPage.findUnique)
 const mockChunkCreate = jest.mocked(prisma.notionChunk.create)
 const mockChunkDeleteMany = jest.mocked(prisma.notionChunk.deleteMany)
 const mockTrackEvent = jest.mocked(trackEvent)
+const mockExtractKnowledge = jest.mocked(extractKnowledge)
+const mockKnowledgeCount = jest.mocked(prisma.knowledgeItem.count)
+const mockKnowledgeFindMany = jest.mocked(prisma.knowledgeItem.findMany)
+const mockKnowledgeDeleteMany = jest.mocked(prisma.knowledgeItem.deleteMany)
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -83,7 +90,7 @@ function makeBlock(type: string, overrides: Record<string, unknown> = {}) {
 }
 
 function dbPage(notionPageId: string, lastEditedAt: string) {
-  return { id: `db-${notionPageId}`, notionPageId, lastEditedAt: new Date(lastEditedAt), pineconeId: null }
+  return { id: `db-${notionPageId}`, notionPageId, title: 'Page', content: 'Existing page content', lastEditedAt: new Date(lastEditedAt), pineconeId: null }
 }
 
 const WORKSPACE_ID = 'ws-1'
@@ -106,6 +113,10 @@ beforeEach(() => {
     Promise.resolve({ id: `chunk-${++chunkSeq}`, ...args.data }),
   )
   mockTrackEvent.mockResolvedValue(undefined)
+  mockExtractKnowledge.mockResolvedValue([])
+  mockKnowledgeCount.mockResolvedValue(1)
+  mockKnowledgeFindMany.mockResolvedValue([])
+  mockKnowledgeDeleteMany.mockResolvedValue({ count: 0 })
   // Default: page not in DB yet (no diff skip)
   mockPageFindUnique.mockResolvedValue(null)
   mockPageUpsert.mockImplementation(({ create }) => Promise.resolve({ id: `db-${create.notionPageId}`, ...create }) as never)
@@ -314,6 +325,27 @@ describe('diff sync — skip unchanged pages', () => {
     expect(mockChunkDeleteMany).toHaveBeenCalled()
     expect(mockChunkCreate).toHaveBeenCalled()
   })
+
+  it('backfills extraction when an unchanged page has no Notion knowledge items', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
+    mockPageFindUnique.mockResolvedValueOnce(dbPage('page-1', '2026-01-01T00:00:00.000Z') as never)
+    mockKnowledgeCount.mockResolvedValueOnce(0)
+    mockBlocksList.mockResolvedValueOnce({ results: [makeBlock('paragraph')], next_cursor: null, has_more: false })
+
+    const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    expect(result.pages).toBe(1)
+    expect(mockBlocksList).not.toHaveBeenCalled()
+    expect(mockGenerateEmbedding).not.toHaveBeenCalled()
+    expect(mockExtractKnowledge).toHaveBeenCalledWith(
+      expect.any(Array),
+      WORKSPACE_ID,
+      'notion',
+      'https://notion.so/page1',
+      'page-1',
+      expect.objectContaining({ title: 'Page' }),
+    )
+  })
 })
 
 // ─── upsert on re-sync — no duplicates ───────────────────────────────────────
@@ -351,6 +383,8 @@ describe('attribution', () => {
 
 describe('Pinecone embedding', () => {
   it('generates one embedding per chunk and upserts to workspaceId namespace', async () => {
+    mockSearch.mockReset()
+    mockBlocksList.mockReset()
     mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
     mockBlocksList.mockResolvedValueOnce({
       results: [makeBlock('paragraph'), makeBlock('heading_1')],
