@@ -48,35 +48,33 @@ export default function WorkspaceSwitcher({ currentWorkspaceId, onUpgradeClick }
 
   if (loading) {
     return (
-      <div className="px-3 py-2">
-        <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+      <div className="py-1">
+        <div className="h-12 bg-white/10 rounded-[10px] animate-pulse" />
       </div>
     )
   }
 
   return (
-    <div ref={dropdownRef} className="relative px-3 py-2">
+    <div ref={dropdownRef} className="relative">
       <button
         onClick={() => setIsOpen((o) => !o)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left"
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] bg-white/[0.06] hover:bg-white/10 transition-colors text-left"
       >
-        <div className="w-7 h-7 rounded-md bg-brand-100 flex items-center justify-center shrink-0">
+        <div className="w-7 h-7 rounded-md bg-white/10 flex items-center justify-center shrink-0">
           {isSolo ? (
-            <User className="w-3.5 h-3.5 text-brand-600" />
+            <User className="w-3.5 h-3.5 text-white/80" />
           ) : (
-            <Users className="w-3.5 h-3.5 text-brand-600" />
+            <Users className="w-3.5 h-3.5 text-white/80" />
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900 truncate">
+          <p className="text-sm font-medium text-white truncate">
             {current?.name ?? 'My Brain'}
           </p>
-          <p className="text-xs text-gray-400">
-            {isSolo ? 'Personal' : `${current?.memberCount ?? 1} members`}
-          </p>
+          <p className="text-xs text-white/50">{isSolo ? current?.role ?? 'owner' : `${current?.memberCount ?? 1} members`}</p>
         </div>
         <ChevronDown
-          className={clsx('w-4 h-4 text-gray-400 shrink-0 transition-transform', isOpen && 'rotate-180')}
+          className={clsx('w-4 h-4 text-white/50 shrink-0 transition-transform', isOpen && 'rotate-180')}
         />
       </button>
 
@@ -104,8 +102,7 @@ export default function WorkspaceSwitcher({ currentWorkspaceId, onUpgradeClick }
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{ws.name}</p>
                     <p className="text-xs text-gray-400">
-                      {ws.type === 'solo' ? 'Personal' : `${ws.memberCount} members`}
-                      {' · '}{ws.role}
+                      {ws.type === 'solo' ? ws.role : `${ws.memberCount} members · ${ws.role}`}
                     </p>
                   </div>
                   {ws.id === currentWorkspaceId && (

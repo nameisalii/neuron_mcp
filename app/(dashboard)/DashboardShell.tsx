@@ -3,11 +3,12 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
-import { Brain, Lightbulb, GitBranch, Search, Plug, Menu, X, FileText, Settings, Activity } from 'lucide-react'
+import { Brain, Search, Plug, Menu, X, Settings, Activity } from 'lucide-react'
 import { useState } from 'react'
 import { clsx } from 'clsx'
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher'
 import UpgradeModal from '@/components/UpgradeModal'
+import NeuronLogo from '@/components/NeuronLogo'
 
 interface NavCounts {
   brain: number
@@ -25,12 +26,13 @@ interface NavItem {
   countKey?: CountKey
 }
 
+function NotionIcon({ className }: { className?: string }) {
+  return <img src="/icons/notion.svg" alt="" className={clsx('opacity-90', className)} />
+}
+
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Overview', icon: Brain, exact: true },
-  { href: '/dashboard/brain', label: 'Brain', icon: Brain, countKey: 'brain' },
-  { href: '/dashboard/notion', label: 'Notion', icon: FileText },
-  { href: '/dashboard/decisions', label: 'Decisions', icon: GitBranch, countKey: 'decisions' },
-  { href: '/dashboard/ideas', label: 'Ideas', icon: Lightbulb, countKey: 'ideas' },
+  { href: '/dashboard/overview', label: 'Overview', icon: Brain },
+  { href: '/dashboard/notion', label: 'Notion', icon: NotionIcon },
   { href: '/dashboard/query', label: 'Query', icon: Search },
   { href: '/dashboard/activity', label: 'Activity', icon: Activity },
   { href: '/dashboard/integrations', label: 'Integrations', icon: Plug },
@@ -49,21 +51,24 @@ function NavLink({ href, label, icon: Icon, exact, count }: NavLinkProps) {
     <Link
       href={href}
       className={clsx(
-        'flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+        'group relative flex items-center justify-between gap-3 px-3 py-2.5 rounded-[10px] text-sm font-medium transition-colors',
         isActive
-          ? 'bg-brand-50 text-brand-700'
-          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+          ? 'bg-white/10 text-white'
+          : 'text-white/65 hover:bg-white/[0.07] hover:text-white'
       )}
     >
+      {isActive && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-accent" />
+      )}
       <span className="flex items-center gap-3">
-        <Icon className="w-4 h-4 shrink-0" />
+        <Icon className={clsx('w-[18px] h-[18px] shrink-0', isActive && 'text-accent')} />
         {label}
       </span>
       {count !== undefined && count > 0 && (
         <span
           className={clsx(
             'text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center',
-            isActive ? 'bg-brand-200 text-brand-800' : 'bg-gray-100 text-gray-500'
+            isActive ? 'bg-accent text-white' : 'bg-white/10 text-white/70'
           )}
         >
           {count > 999 ? '999+' : count}
@@ -86,31 +91,28 @@ export default function DashboardShell({
   const [showUpgrade, setShowUpgrade] = useState(false)
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-cream flex">
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/30 z-20 lg:hidden"
+          className="fixed inset-0 bg-navy-deep/40 backdrop-blur-sm z-20 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-30 w-60 bg-white border-r border-gray-200 flex flex-col',
+          'fixed inset-y-0 left-0 z-30 w-64 bg-navy flex flex-col',
           'transform transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex items-center gap-2 px-4 h-16 border-b border-gray-200 shrink-0">
-          <div className="w-7 h-7 rounded-md bg-brand-600 flex items-center justify-center">
-            <Brain className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-semibold text-gray-900">Neuron</span>
+        <div className="flex items-center px-5 h-16 shrink-0">
+          <NeuronLogo variant="bare" size="sm" />
         </div>
 
         {workspaceId && (
           <>
-            <div className="border-b border-gray-100">
+            <div className="px-3 pb-2">
               <WorkspaceSwitcher
                 currentWorkspaceId={workspaceId}
                 onUpgradeClick={() => setShowUpgrade(true)}
@@ -124,7 +126,7 @@ export default function DashboardShell({
           </>
         )}
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
           {navItems.map((item) => (
             <NavLink
               key={item.href}
@@ -133,12 +135,16 @@ export default function DashboardShell({
             />
           ))}
         </nav>
+
+        <div className="px-5 py-4 border-t border-white/10">
+          <p className="text-[11px] text-white/40">Your company brain</p>
+        </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6 shrink-0">
+        <header className="h-16 bg-cream/80 backdrop-blur-sm border-b border-warm flex items-center justify-between px-4 lg:px-8 shrink-0 sticky top-0 z-10">
           <button
-            className="lg:hidden p-2 rounded-md text-gray-500 hover:bg-gray-100"
+            className="lg:hidden p-2 rounded-[10px] text-muted hover:bg-gray-100"
             onClick={() => setSidebarOpen((o) => !o)}
             aria-label="Toggle menu"
           >

@@ -9,7 +9,8 @@ export function Card({ padding = 'md', className, children, ...props }: CardProp
   return (
     <div
       className={clsx(
-        'bg-white rounded-lg border border-gray-200 shadow-sm',
+        // White surface, soft warm shadow, rounded — shadow does the lifting, not a hard border
+        'bg-white rounded-2xl border border-warm/60 shadow-soft',
         padding === 'sm' && 'p-4',
         padding === 'md' && 'p-6',
         padding === 'lg' && 'p-8',
@@ -32,7 +33,7 @@ export function CardHeader({ className, children, ...props }: HTMLAttributes<HTM
 
 export function CardTitle({ className, children, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3 className={clsx('text-lg font-semibold text-gray-900', className)} {...props}>
+    <h3 className={clsx('text-lg font-display font-semibold text-ink', className)} {...props}>
       {children}
     </h3>
   )
