@@ -2,12 +2,13 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { Card } from '@/components/ui/card'
-import { CheckCircle, ExternalLink } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import SyncButton from './SyncButton'
-import NotionSyncButton from './NotionSyncButton'
 import GmailIntegrationCard, { type GmailMetadata } from './GmailIntegrationCard'
+import NotionIntegrationCard from './NotionIntegrationCard'
 import { BrandTile } from '@/components/BrandLogo'
+import { ConnectedBadge, IntegrationViewLink, NotConnectedBadge, integrationConnectClass } from './IntegrationCardUi'
 
 function timeAgo(date: Date): string {
   const s = Math.floor((Date.now() - date.getTime()) / 1000)
@@ -16,15 +17,6 @@ function timeAgo(date: Date): string {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`
   if (s < 604800) return `${Math.floor(s / 86400)}d ago`
   return date.toLocaleDateString()
-}
-
-function ConnectedPill() {
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#E6F2EC] text-positive">
-      <CheckCircle className="w-3 h-3" />
-      Connected
-    </span>
-  )
 }
 
 function SuccessBanner({ children }: { children: React.ReactNode }) {
@@ -36,10 +28,6 @@ function SuccessBanner({ children }: { children: React.ReactNode }) {
   )
 }
 
-const viewLinkClass =
-  'inline-flex items-center gap-1 px-3 py-2 rounded-[10px] border border-warm text-sm text-ink hover:bg-cream transition-colors'
-const connectLinkClass =
-  'px-4 py-2 rounded-[10px] bg-navy text-white text-sm font-medium hover:bg-navy-deep shadow-soft hover:shadow-lift hover:-translate-y-0.5 transition-all'
 const statTileClass = 'bg-cream rounded-xl px-3.5 py-2.5 border border-warm/60'
 
 export default async function IntegrationsPage(
@@ -120,7 +108,7 @@ export default async function IntegrationsPage(
 
       {/* Slack */}
       <Card padding="md">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3.5 min-w-0">
             <BrandTile brand="slack" className="w-12 h-12" />
             <div className="min-w-0">
@@ -130,18 +118,18 @@ export default async function IntegrationsPage(
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {slack ? (
               <>
-                <Link href="/dashboard/integrations/slack" className={viewLinkClass}>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  View
-                </Link>
+                <IntegrationViewLink href="/dashboard/integrations/slack" />
                 <SyncButton endpoint="/api/integrations/slack/sync" showReset resetType="slack" resultLabel="messages" />
-                <ConnectedPill />
+                <ConnectedBadge />
               </>
             ) : (
-              <a href="/api/integrations/slack/connect" className={connectLinkClass}>Connect</a>
+              <>
+                <a href="/api/integrations/slack/connect" className={integrationConnectClass}>Connect</a>
+                <NotConnectedBadge />
+              </>
             )}
           </div>
         </div>
@@ -181,7 +169,7 @@ export default async function IntegrationsPage(
 
       {/* Linear */}
       <Card padding="md">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3.5 min-w-0">
             <BrandTile brand="linear" className="w-12 h-12" />
             <div className="min-w-0">
@@ -191,18 +179,18 @@ export default async function IntegrationsPage(
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {linear ? (
               <>
-                <Link href="/dashboard/integrations/linear" className={viewLinkClass}>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  View
-                </Link>
+                <IntegrationViewLink href="/dashboard/integrations/linear" />
                 <SyncButton endpoint="/api/integrations/linear/sync" showReset resetType="linear" resultLabel="issues" />
-                <ConnectedPill />
+                <ConnectedBadge />
               </>
             ) : (
-              <a href="/api/integrations/linear/connect" className={connectLinkClass}>Connect</a>
+              <>
+                <a href="/api/integrations/linear/connect" className={integrationConnectClass}>Connect</a>
+                <NotConnectedBadge />
+              </>
             )}
           </div>
         </div>
@@ -234,78 +222,13 @@ export default async function IntegrationsPage(
         autoOpenSetup={searchParams.connected === 'gmail'}
       />
 
-      {/* Notion */}
-      <Card padding="md">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <BrandTile brand="notion" className="w-12 h-12" />
-            <div className="min-w-0">
-              <h3 className="text-lg font-display font-semibold text-ink">Notion</h3>
-              <p className="text-xs text-muted mt-0.5 truncate">
-                {notion ? 'Pages synced to knowledge base' : 'Sync pages from your Notion workspace'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {notion ? (
-              <>
-                <Link href="/dashboard/integrations/notion" className={viewLinkClass}>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  View
-                </Link>
-                <SyncButton
-                  endpoint="/api/integrations/notion/sync"
-                  requestBody={{ workspaceId }}
-                  showReset
-                  resetType="notion"
-                  resultLabel="pages"
-                />
-                <ConnectedPill />
-              </>
-            ) : (
-              <NotionSyncButton workspaceId={workspaceId} label="Connect" />
-            )}
-          </div>
-        </div>
-
-        {notion ? (
-          <div className="mt-5 space-y-3">
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div className={statTileClass}>
-                <p className="text-xs text-muted mb-0.5">Pages synced</p>
-                <p className="font-semibold text-ink text-base">{pageCount}</p>
-              </div>
-              <div className={statTileClass}>
-                <p className="text-xs text-muted mb-0.5">Last synced</p>
-                <p className="font-medium text-ink text-xs leading-tight">
-                  {lastSyncedAt ? timeAgo(lastSyncedAt) : 'Never'}
-                </p>
-              </div>
-              <div className={statTileClass}>
-                <p className="text-xs text-muted mb-0.5">Synced by</p>
-                <p className="font-medium text-ink text-xs leading-tight truncate">
-                  {syncedByName ?? '—'}
-                </p>
-              </div>
-            </div>
-            {lastSyncedAt && syncedByName && (
-              <p className="text-xs text-muted">
-                Last sync by <span className="font-medium text-ink">{syncedByName}</span>{' '}
-                {timeAgo(lastSyncedAt)}
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="mt-4 space-y-2">
-            <p className="text-sm text-muted">
-              Neuron reads your Notion pages and chunks them for semantic search and labeling.
-            </p>
-            <p className="text-xs text-muted/80">
-              Make sure your pages are shared with the Neuron connection (page ⋯ menu → Connections → Neuron).
-            </p>
-          </div>
-        )}
-      </Card>
+      <NotionIntegrationCard
+        connected={Boolean(notion)}
+        workspaceId={workspaceId}
+        pageCount={pageCount}
+        lastSyncedLabel={lastSyncedAt ? timeAgo(lastSyncedAt) : 'Never'}
+        syncedByName={syncedByName}
+      />
     </div>
   )
 }

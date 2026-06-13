@@ -6,8 +6,10 @@ jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: jest.fn() }) 
 describe('GmailIntegrationCard', () => {
   it('shows the connect state when Gmail is not configured', () => {
     render(<GmailIntegrationCard metadata={null} />)
-    expect(screen.getByText('Connect Gmail')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument()
     expect(screen.getByText('Not connected')).toBeInTheDocument()
+    expect(screen.queryByText('Sync Now')).not.toBeInTheDocument()
+    expect(screen.queryByText('Nuclear Reset')).not.toBeInTheDocument()
   })
 
   it('shows sync controls when Gmail is configured', () => {
@@ -31,6 +33,7 @@ describe('GmailIntegrationCard', () => {
     expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/gmail')
     expect(screen.getByText('Configure Gmail')).toBeInTheDocument()
     expect(screen.getByText('Sync Now')).toBeInTheDocument()
+    expect(screen.getByText('Nuclear Reset')).toBeInTheDocument()
     expect(screen.getByText('Connected')).toBeInTheDocument()
   })
 

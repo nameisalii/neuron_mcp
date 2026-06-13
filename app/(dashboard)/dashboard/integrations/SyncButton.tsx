@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { integrationActionClass, integrationResetClass } from './IntegrationCardUi'
 
 interface SyncResult {
   success?: boolean
@@ -117,22 +118,21 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
-        {syncEnabled && (
-          <button
-            onClick={handleSync}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? 'Syncing…' : 'Sync Now'}
-          </button>
-        )}
+        <button
+          onClick={syncEnabled ? handleSync : onNeedsReconfigure}
+          disabled={busy || (!syncEnabled && !onNeedsReconfigure)}
+          className={integrationActionClass}
+          title={!syncEnabled ? 'Finish setup before syncing' : undefined}
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? 'Syncing…' : 'Sync Now'}
+        </button>
         {showReset && resetType && (
           <button
             onClick={handleResetAndReindex}
             disabled={busy}
             title={`Remove only ${resetType.charAt(0).toUpperCase() + resetType.slice(1)} data and embeddings`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className={integrationResetClass}
           >
             <Trash2 className={`w-3.5 h-3.5 ${resetting ? 'animate-pulse' : ''}`} />
             {resetting ? 'Resetting…' : 'Nuclear Reset'}

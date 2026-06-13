@@ -2,8 +2,7 @@ import { clsx } from 'clsx'
 
 export type BrandKey = 'slack' | 'notion' | 'linear' | 'gmail' | 'discord'
 
-// simpleicons CDN renders clean single-color brand SVGs. Brand hex keeps each
-// connector recognizable; pass tone="navy" for a tasteful monochrome treatment.
+// simpleicons CDN is only a fallback for brands without a bundled asset.
 const BRAND_HEX: Record<BrandKey, string> = {
   slack: '4A154B',
   notion: '000000',
@@ -25,6 +24,8 @@ const BRAND_LABEL: Record<BrandKey, string> = {
 const LOCAL_BRAND_ASSET: Partial<Record<BrandKey, string>> = {
   gmail: '/icons/gmail.png',
   slack: '/icons/slack.png',
+  notion: '/icons/notion.svg',
+  linear: '/icons/linear.svg',
 }
 
 interface BrandLogoProps {

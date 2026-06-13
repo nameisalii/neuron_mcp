@@ -24,7 +24,8 @@ it('shows only the top three Notion pages by default', () => {
 
 it('offers scoped reset controls for Slack, Linear, and Notion', () => {
   const integrations = read('app/(dashboard)/dashboard/integrations/page.tsx')
+  const notionCard = read('app/(dashboard)/dashboard/integrations/NotionIntegrationCard.tsx')
   expect(integrations).toContain('resetType="slack"')
   expect(integrations).toContain('resetType="linear"')
-  expect(integrations).toContain('resetType="notion"')
+  expect(notionCard).toContain('resetType="notion"')
 })
