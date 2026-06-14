@@ -51,12 +51,15 @@ export async function GET(req: NextRequest) {
     bot_id?: string
   }
   try {
+    const credentials = Buffer.from(`${getNotionClientId()}:${getNotionClientSecret()}`).toString('base64')
     const response = await fetch('https://api.notion.com/v1/oauth/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${credentials}`,
+        'Content-Type': 'application/json',
+        'Notion-Version': '2026-03-11',
       },
-      body: new URLSearchParams({
+      body: JSON.stringify({
         client_id: getNotionClientId(),
         client_secret: getNotionClientSecret(),
         grant_type: 'authorization_code',

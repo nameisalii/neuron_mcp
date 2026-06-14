@@ -66,14 +66,18 @@ it('sends a form-encoded token exchange request with the OAuth client credential
     'https://api.notion.com/v1/oauth/token',
     expect.objectContaining({
       method: 'POST',
-      headers: expect.objectContaining({ 'Content-Type': 'application/x-www-form-urlencoded' }),
+      headers: expect.objectContaining({
+        Authorization: 'Basic Y2xpZW50OnNlY3JldA==',
+        'Content-Type': 'application/json',
+        'Notion-Version': '2026-03-11',
+      }),
     }),
   )
   const [, options] = (global.fetch as jest.Mock).mock.calls[0]
-  expect(String((options as RequestInit).body)).toContain('client_id=client')
-  expect(String((options as RequestInit).body)).toContain('client_secret=secret')
-  expect(String((options as RequestInit).body)).toContain('grant_type=authorization_code')
-  expect(String((options as RequestInit).body)).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fintegrations%2Fnotion%2Fcallback')
+  expect(String((options as RequestInit).body)).toContain('"client_id":"client"')
+  expect(String((options as RequestInit).body)).toContain('"client_secret":"secret"')
+  expect(String((options as RequestInit).body)).toContain('"grant_type":"authorization_code"')
+  expect(String((options as RequestInit).body)).toContain('"redirect_uri":"http://localhost:3000/api/integrations/notion/callback"')
 })
 
 it('rejects mismatched state without storing a token', async () => {
