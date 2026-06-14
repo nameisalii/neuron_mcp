@@ -11,7 +11,7 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     user: { findUnique: jest.fn() },
     workspaceMember: { findUnique: jest.fn() },
-    integration: { findUnique: jest.fn(), update: jest.fn() },
+    integration: { findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
     knowledgeItem: { findMany: jest.fn(), deleteMany: jest.fn() },
     notionChunk: { findMany: jest.fn() },
     notionPage: { deleteMany: jest.fn() },
@@ -39,11 +39,13 @@ it('resets only the requested integration data', async () => {
   expect(prisma.knowledgeItem.deleteMany).toHaveBeenCalledWith({ where: { workspaceId: 'ws-1', source: 'notion' } })
   expect(prisma.notionPage.deleteMany).toHaveBeenCalledWith({ where: { workspaceId: 'ws-1' } })
   expect(deleteEmbeddings).toHaveBeenCalledWith(expect.arrayContaining(['ki-1', 'notion-vector']))
-  expect(prisma.integration.update).toHaveBeenCalledWith({ where: { id: 'int-1' }, data: { lastSyncAt: null } })
+  expect(prisma.integration.delete).toHaveBeenCalledWith({ where: { id: 'int-1' } })
+  expect(prisma.integration.update).not.toHaveBeenCalled()
 })
 
 it('does not delete Notion pages when resetting Linear', async () => {
   await POST(request, { params: Promise.resolve({ type: 'linear' }) })
   expect(prisma.knowledgeItem.deleteMany).toHaveBeenCalledWith({ where: { workspaceId: 'ws-1', source: 'linear' } })
   expect(prisma.notionPage.deleteMany).not.toHaveBeenCalled()
+  expect(prisma.integration.delete).not.toHaveBeenCalled()
 })

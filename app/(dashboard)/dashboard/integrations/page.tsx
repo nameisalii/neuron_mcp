@@ -8,7 +8,9 @@ import SyncButton from './SyncButton'
 import GmailIntegrationCard, { type GmailMetadata } from './GmailIntegrationCard'
 import NotionIntegrationCard from './NotionIntegrationCard'
 import { BrandTile } from '@/components/BrandLogo'
-import { ConnectedBadge, IntegrationViewLink, NotConnectedBadge, integrationConnectClass } from './IntegrationCardUi'
+import { ConnectedBadge, IntegrationViewLink, integrationConnectClass } from './IntegrationCardUi'
+import { isIntegrationConnected } from '@/lib/integrations/connection'
+import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 
 function timeAgo(date: Date): string {
   const s = Math.floor((Date.now() - date.getTime()) / 1000)
@@ -41,7 +43,14 @@ export default async function IntegrationsPage(
 
   const user = await prisma.user.findUnique({
     where: { clerkId: userId },
-    include: { workspace: { include: { integrations: true } } },
+    include: {
+      workspace: {
+        include: {
+          integrations: true,
+          owner: { select: { clerkId: true } },
+        },
+      },
+    },
   })
 
   const workspaceId = user?.workspace?.id
@@ -49,12 +58,20 @@ export default async function IntegrationsPage(
   const notion = user?.workspace?.integrations.find((i) => i.type === 'notion') ?? null
   const linear = user?.workspace?.integrations.find((i) => i.type === 'linear') ?? null
   const gmail = user?.workspace?.integrations.find((i) => i.type === 'gmail') ?? null
+  const slackConnected = isIntegrationConnected(slack)
+  const notionConnected = Boolean(getConnectedIntegrationToken(notion, {
+    currentUserId: userId,
+    workspaceType: user?.workspace?.type,
+    workspaceOwnerClerkId: user?.workspace?.owner.clerkId,
+  }))
+  const linearConnected = isIntegrationConnected(linear)
+  const gmailConnected = isIntegrationConnected(gmail)
 
   let pageCount = 0
   let syncedByName: string | null = null
   let lastSyncedAt: Date | null = notion?.lastSyncAt ?? null
 
-  if (workspaceId && notion) {
+  if (workspaceId && notionConnected) {
     const [count, recentPage] = await Promise.all([
       prisma.notionPage.count({ where: { workspaceId } }),
       prisma.notionPage.findFirst({
@@ -86,12 +103,19 @@ export default async function IntegrationsPage(
         <SuccessBanner>Linear connected successfully.</SuccessBanner>
       )}
       {searchParams.connected === 'gmail' && <SuccessBanner>Gmail connected successfully.</SuccessBanner>}
+      {searchParams.connected === 'notion' && <SuccessBanner>Notion connected. Choose Sync Now when you are ready to import pages.</SuccessBanner>}
       {searchParams.error && (
         <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
           <p className="text-sm text-red-800">
             {searchParams.error === 'slack_failed' && 'Slack connection failed. Please try again.'}
             {searchParams.error === 'linear_failed' && 'Linear connection failed. Please try again.'}
             {searchParams.error === 'gmail_failed' && 'Gmail connection failed. Please try again.'}
+            {searchParams.error === 'notion_not_configured' && (
+              process.env.NODE_ENV === 'development'
+                ? 'Notion OAuth is not configured locally. Add NOTION_CLIENT_ID and NOTION_CLIENT_SECRET to .env.local, then restart the development server.'
+                : 'Notion is not configured yet. Please contact support.'
+            )}
+            {searchParams.error === 'notion_forbidden' && 'You do not have permission to connect Notion.'}
             {searchParams.error === 'no_workspace' && 'No workspace found. Please contact support.'}
           </p>
         </div>
@@ -108,32 +132,27 @@ export default async function IntegrationsPage(
 
       {/* Slack */}
       <Card padding="md">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <BrandTile brand="slack" className="w-12 h-12" />
-            <div className="min-w-0">
-              <h3 className="text-lg font-display font-semibold text-ink">Slack</h3>
-              <p className="text-xs text-muted mt-0.5 truncate">
-                {slack ? `Connected to ${slack.teamName ?? 'your workspace'}` : 'Connect your Slack workspace'}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {slack ? (
-              <>
-                <IntegrationViewLink href="/dashboard/integrations/slack" />
-                <SyncButton endpoint="/api/integrations/slack/sync" showReset resetType="slack" resultLabel="messages" />
-                <ConnectedBadge />
-              </>
-            ) : (
-              <>
-                <a href="/api/integrations/slack/connect" className={integrationConnectClass}>Connect</a>
-                <NotConnectedBadge />
-              </>
-            )}
+        <div className="flex items-center gap-3.5 min-w-0">
+          <BrandTile brand="slack" className="w-12 h-12" />
+          <div className="min-w-0">
+            <h3 className="text-lg font-display font-semibold text-ink">Slack</h3>
+            <p className="text-xs text-muted mt-0.5 truncate">
+              {slackConnected && slack ? `Connected to ${slack.teamName ?? 'your workspace'}` : 'Connect your Slack workspace'}
+            </p>
           </div>
         </div>
-        {slack ? (
+        <div className="mt-4 flex flex-wrap items-start justify-end gap-2 border-t border-warm/60 pt-4">
+          {slackConnected ? (
+            <>
+              <IntegrationViewLink href="/dashboard/integrations/slack" />
+              <SyncButton endpoint="/api/integrations/slack/sync" showReset resetType="slack" resultLabel="messages" />
+              <ConnectedBadge />
+            </>
+          ) : (
+            <a href="/api/integrations/slack/connect" className={integrationConnectClass}>Connect</a>
+          )}
+        </div>
+        {slackConnected && slack ? (
           <div className="mt-5 space-y-3 text-sm text-muted">
             <div className="grid grid-cols-2 gap-3">
               <div className={statTileClass}>
@@ -169,32 +188,27 @@ export default async function IntegrationsPage(
 
       {/* Linear */}
       <Card padding="md">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <BrandTile brand="linear" className="w-12 h-12" />
-            <div className="min-w-0">
-              <h3 className="text-lg font-display font-semibold text-ink">Linear</h3>
-              <p className="text-xs text-muted mt-0.5 truncate">
-                {linear ? 'Connected — issues synced to knowledge base' : 'Sync issues from your Linear workspace'}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {linear ? (
-              <>
-                <IntegrationViewLink href="/dashboard/integrations/linear" />
-                <SyncButton endpoint="/api/integrations/linear/sync" showReset resetType="linear" resultLabel="issues" />
-                <ConnectedBadge />
-              </>
-            ) : (
-              <>
-                <a href="/api/integrations/linear/connect" className={integrationConnectClass}>Connect</a>
-                <NotConnectedBadge />
-              </>
-            )}
+        <div className="flex items-center gap-3.5 min-w-0">
+          <BrandTile brand="linear" className="w-12 h-12" />
+          <div className="min-w-0">
+            <h3 className="text-lg font-display font-semibold text-ink">Linear</h3>
+            <p className="text-xs text-muted mt-0.5 truncate">
+              {linearConnected ? 'Connected — issues synced to knowledge base' : 'Sync issues from your Linear workspace'}
+            </p>
           </div>
         </div>
-        {linear && (
+        <div className="mt-4 flex flex-wrap items-start justify-end gap-2 border-t border-warm/60 pt-4">
+          {linearConnected ? (
+            <>
+              <IntegrationViewLink href="/dashboard/integrations/linear" />
+              <SyncButton endpoint="/api/integrations/linear/sync" showReset resetType="linear" resultLabel="issues" />
+              <ConnectedBadge />
+            </>
+          ) : (
+            <a href="/api/integrations/linear/connect" className={integrationConnectClass}>Connect</a>
+          )}
+        </div>
+        {linearConnected && linear && (
           <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
             <div className={statTileClass}>
               <p className="text-xs text-muted mb-0.5">Connected</p>
@@ -208,7 +222,7 @@ export default async function IntegrationsPage(
             </div>
           </div>
         )}
-        {!linear && (
+        {!linearConnected && (
           <p className="text-sm text-muted mt-4">
             Neuron reads Linear issues, comments, projects, and status changes and classifies them for semantic search.
           </p>
@@ -219,13 +233,15 @@ export default async function IntegrationsPage(
         createdAt={gmail?.createdAt.toISOString() ?? null}
         lastSyncAt={gmail?.lastSyncAt?.toISOString() ?? null}
         metadata={gmail?.metadata as GmailMetadata | null}
+        connected={gmailConnected}
         autoOpenSetup={searchParams.connected === 'gmail'}
       />
 
       <NotionIntegrationCard
-        connected={Boolean(notion)}
+        connected={notionConnected}
         workspaceId={workspaceId}
         pageCount={pageCount}
+        hasSynced={Boolean(notion?.lastSyncAt)}
         lastSyncedLabel={lastSyncedAt ? timeAgo(lastSyncedAt) : 'Never'}
         syncedByName={syncedByName}
       />

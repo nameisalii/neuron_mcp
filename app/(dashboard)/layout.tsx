@@ -1,6 +1,7 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
+import { provisionUser } from '@/lib/provision-user'
 import DashboardShell from './DashboardShell'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -15,35 +16,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!user) {
     const clerkUser = await currentUser()
-    if (clerkUser) {
-      const email = clerkUser.emailAddresses[0]?.emailAddress ?? ''
+    const email = clerkUser?.emailAddresses[0]?.emailAddress
+    if (clerkUser && email) {
       const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || null
-      user = await prisma.user.create({
-        data: {
-          clerkId: userId,
-          email,
-          name,
-          workspace: { create: { name: name ? `${name}'s Brain` : 'My Brain' } },
-        },
+      await provisionUser({
+        clerkId: userId,
+        email,
+        name,
+        imageUrl: clerkUser.imageUrl,
+      })
+      user = await prisma.user.findUnique({
+        where: { clerkId: userId },
         select: { id: true, email: true, onboardingCompleted: true, workspace: { select: { id: true } } },
       })
-      // Seed owner membership so permission checks work immediately
-      if (user.workspace) {
-        await prisma.workspaceMember.upsert({
-          where: { workspaceId_userId: { workspaceId: user.workspace.id, userId } },
-          update: {},
-          create: {
-            workspaceId: user.workspace.id,
-            userId,
-            role: 'owner',
-            displayName: name ?? email,
-            avatarUrl: clerkUser.imageUrl ?? null,
-            status: 'active',
-          },
-        })
-      }
     }
   }
+
+  if (!user?.workspace) redirect('/onboarding')
 
   // Safety net: owner existed but WorkspaceMember row was never created (e.g. webhook missed)
   if (user?.workspace) {
@@ -60,16 +49,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     })
   }
 
-  if (user && !user.onboardingCompleted) {
-    const workspaceHasItems = user.workspace
-      ? (await prisma.knowledgeItem.count({ where: { workspaceId: user.workspace.id } })) > 0
-      : false
-    if (workspaceHasItems) {
-      await prisma.user.update({ where: { id: user.id }, data: { onboardingCompleted: true } })
-    } else {
-      redirect('/onboarding')
-    }
-  }
+  if (!user.onboardingCompleted) redirect('/onboarding')
 
   const workspaceId = user?.workspace?.id
   const visibleKnowledge = workspaceId && userId

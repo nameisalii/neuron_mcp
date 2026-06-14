@@ -1,5 +1,6 @@
 import { loadIntegrationOverview, parseIntegrationFilter } from '../overview'
 import { prisma } from '@/lib/db'
+import { getConnectedIntegrationToken } from '../connection-server'
 
 jest.mock('@/lib/db', () => ({
   prisma: {
@@ -11,11 +12,16 @@ jest.mock('@/lib/db', () => ({
     emailChunk: { count: jest.fn() },
   },
 }))
+jest.mock('@/lib/integrations/connection-server', () => ({
+  getConnectedIntegrationToken: jest.fn(() => 'workspace-notion-token'),
+}))
 
 const mockPrisma = jest.mocked(prisma)
+const mockConnectedToken = jest.mocked(getConnectedIntegrationToken)
 
 beforeEach(() => {
   jest.resetAllMocks()
+  mockConnectedToken.mockReturnValue('workspace-notion-token')
 })
 
 describe('integration overview helper', () => {
@@ -84,6 +90,9 @@ describe('integration overview helper', () => {
       teamId: null,
       teamName: null,
       metadata: null,
+      type: 'notion',
+      accessToken: 'encrypted-token',
+      workspace: { type: 'solo', owner: { clerkId: 'user-1' } },
     } as never)
     const notionCountMock = mockPrisma.knowledgeItem.count as unknown as jest.Mock
     notionCountMock.mockImplementation(async (args) => {
@@ -106,5 +115,23 @@ describe('integration overview helper', () => {
     expect(data.notionProjects?.[0]).toEqual(expect.objectContaining({ id: 'page-1', title: 'Product Plan' }))
     expect(data.filters.find((filter) => filter.key === 'decisions')?.count).toBe(1)
     expect(mockPrisma.notionPage.findMany.mock.calls[0]?.[0]).not.toHaveProperty('take')
+  })
+
+  it('does not expose stale Notion data when the workspace credential is invalid', async () => {
+    mockConnectedToken.mockReturnValueOnce(null)
+    mockPrisma.integration.findUnique.mockResolvedValue({
+      type: 'notion',
+      accessToken: 'stale-token',
+      metadata: { status: 'connected' },
+      workspace: { type: 'solo', owner: { clerkId: 'user-1' } },
+    } as never)
+
+    const data = await loadIntegrationOverview('ws-1', 'user-1', 'notion', 'all')
+
+    expect(data.connected).toBe(false)
+    expect(data.notionProjects).toEqual([])
+    expect(data.items).toEqual([])
+    expect(mockPrisma.notionPage.findMany).not.toHaveBeenCalled()
+    expect(mockPrisma.knowledgeItem.findMany).not.toHaveBeenCalled()
   })
 })

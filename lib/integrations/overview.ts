@@ -2,6 +2,8 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { formatDate, type KnowledgePreviewInput } from '@/lib/knowledge/preview'
 import type { GmailSyncMetadata, KnowledgeCategory } from '@/types'
+import { isIntegrationConnected } from './connection'
+import { getConnectedIntegrationToken } from './connection-server'
 
 export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail'
 
@@ -166,12 +168,47 @@ export async function loadIntegrationOverview(
       teamId: true,
       teamName: true,
       metadata: true,
+      type: true,
+      accessToken: true,
+      workspace: {
+        select: {
+          type: true,
+          owner: { select: { clerkId: true } },
+        },
+      },
     },
   })
 
-  const connected = Boolean(integration)
+  const connected = source === 'notion'
+    ? Boolean(getConnectedIntegrationToken(integration, {
+      currentUserId: userId,
+      workspaceType: integration?.workspace.type,
+      workspaceOwnerClerkId: integration?.workspace.owner.clerkId,
+    }))
+    : isIntegrationConnected(integration)
   const where = visibleKnowledgeWhere(source, workspaceId, userId)
   const activeCategory = FILTER_LOOKUP.get(filter)?.category
+
+  if (source === 'notion' && !connected) {
+    const categoryCounts = Object.fromEntries(CATEGORIES.map((category) => [category, 0])) as Record<KnowledgeCategory, number>
+    return buildOverviewData({
+      source,
+      connected,
+      filter,
+      lastSyncAt: null,
+      summaryCards: [
+        { label: 'Knowledge items', value: '0' },
+        { label: 'Pages', value: '0' },
+        { label: 'Chunks', value: '0' },
+        { label: 'Last sync', value: 'Never' },
+      ],
+      details: [],
+      totalCount: 0,
+      categoryCounts,
+      items: [],
+      notionProjects: [],
+    })
+  }
 
   const [totalCount, categoryCounts, items] = await Promise.all([
     prisma.knowledgeItem.count({ where }),

@@ -11,15 +11,16 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     user: { findUnique: jest.fn() },
     workspaceMember: { findUnique: jest.fn() },
-    integration: { upsert: jest.fn(), update: jest.fn() },
+    integration: { findUnique: jest.fn(), update: jest.fn() },
   },
 }))
 jest.mock('@/lib/notion/sync', () => ({ syncNotionPages: jest.fn() }))
+jest.mock('@/lib/crypto', () => ({ decrypt: jest.fn(() => 'workspace-notion-token') }))
 
 const mockAuth = jest.mocked(auth)
 const mockUserFind = jest.mocked(prisma.user.findUnique)
 const mockMemberFind = jest.mocked(prisma.workspaceMember.findUnique)
-const mockIntegrationUpsert = jest.mocked(prisma.integration.upsert)
+const mockIntegrationFind = jest.mocked(prisma.integration.findUnique)
 const mockIntegrationUpdate = jest.mocked(prisma.integration.update)
 const mockSync = jest.mocked(syncNotionPages)
 
@@ -47,7 +48,12 @@ function makeRequest(body?: object) {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockIntegrationUpsert.mockResolvedValue({} as never)
+  mockIntegrationFind.mockResolvedValue({
+    type: 'notion',
+    accessToken: 'encrypted-workspace-token',
+    metadata: { status: 'connected', connectedBy: CLERK_ID },
+    workspace: { type: 'solo', owner: { clerkId: CLERK_ID } },
+  } as never)
   mockIntegrationUpdate.mockResolvedValue({} as never)
   mockSync.mockResolvedValue(DEFAULT_SYNC_RESULT)
   mockUserFind.mockResolvedValue({ workspace: { id: WORKSPACE_ID } } as never)
@@ -78,6 +84,13 @@ describe('POST /api/integrations/notion/sync', () => {
     expect(res.status).toBe(403)
   })
 
+  it('returns 403 when workspace membership is inactive', async () => {
+    authed()
+    mockMemberFind.mockResolvedValue({ role: 'owner', status: 'inactive', displayName: DISPLAY_NAME } as never)
+    const res = await POST(makeRequest({ workspaceId: WORKSPACE_ID }))
+    expect(res.status).toBe(403)
+  })
+
   it('returns 403 when user has viewer role', async () => {
     authed()
     withMember('viewer')
@@ -85,18 +98,18 @@ describe('POST /api/integrations/notion/sync', () => {
     expect(res.status).toBe(403)
   })
 
-  it('calls syncNotionPages with workspaceId, clerkId, and displayName', async () => {
+  it('calls syncNotionPages with the current workspace credential', async () => {
     authed()
     withMember('member')
     await POST(makeRequest({ workspaceId: WORKSPACE_ID }))
-    expect(mockSync).toHaveBeenCalledWith(WORKSPACE_ID, CLERK_ID, DISPLAY_NAME)
+    expect(mockSync).toHaveBeenCalledWith(WORKSPACE_ID, CLERK_ID, DISPLAY_NAME, 'workspace-notion-token')
   })
 
   it('resolves workspaceId from user record when not in body', async () => {
     authed()
     withMember('owner')
     await POST(makeRequest())
-    expect(mockSync).toHaveBeenCalledWith(WORKSPACE_ID, CLERK_ID, expect.any(String))
+    expect(mockSync).toHaveBeenCalledWith(WORKSPACE_ID, CLERK_ID, expect.any(String), 'workspace-notion-token')
   })
 
   it('returns success shape with pagesProcessed and chunksCreated', async () => {
@@ -123,15 +136,21 @@ describe('POST /api/integrations/notion/sync', () => {
     expect(body.failed).toEqual(['page-bad'])
   })
 
-  it('upserts notion integration record for the workspace', async () => {
+  it('requires a connected Notion integration record', async () => {
     authed()
     withMember('member')
-    await POST(makeRequest({ workspaceId: WORKSPACE_ID }))
-    expect(mockIntegrationUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { workspaceId_type: { workspaceId: WORKSPACE_ID, type: 'notion' } },
-      }),
-    )
+    mockIntegrationFind.mockResolvedValue({
+      type: 'notion',
+      accessToken: 'notion-static',
+      metadata: null,
+      workspace: { type: 'solo', owner: { clerkId: CLERK_ID } },
+    } as never)
+
+    const response = await POST(makeRequest({ workspaceId: WORKSPACE_ID }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Notion is not connected. Connect Notion first.' })
+    expect(mockSync).not.toHaveBeenCalled()
   })
 
   it('updates lastSyncAt on integration after successful sync', async () => {
@@ -150,7 +169,12 @@ describe('POST /api/integrations/notion/sync', () => {
     for (const role of ['owner', 'admin', 'member'] as const) {
       jest.clearAllMocks()
       authed()
-      mockIntegrationUpsert.mockResolvedValue({} as never)
+      mockIntegrationFind.mockResolvedValue({
+        type: 'notion',
+        accessToken: 'encrypted-workspace-token',
+        metadata: { status: 'connected', connectedBy: CLERK_ID },
+        workspace: { type: 'solo', owner: { clerkId: CLERK_ID } },
+      } as never)
       mockIntegrationUpdate.mockResolvedValue({} as never)
       mockSync.mockResolvedValue(DEFAULT_SYNC_RESULT)
       withMember(role)

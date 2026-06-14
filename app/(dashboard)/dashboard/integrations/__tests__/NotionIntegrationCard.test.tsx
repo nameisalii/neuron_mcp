@@ -1,8 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import NotionIntegrationCard from '../NotionIntegrationCard'
 
-const refresh = jest.fn()
-jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }))
+jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: jest.fn() }) }))
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -23,12 +22,15 @@ describe('NotionIntegrationCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
 
     expect(screen.getByRole('dialog', { name: 'Set up Notion' })).toBeInTheDocument()
-    expect(screen.getByText('Choose the pages Neuron can read')).toBeInTheDocument()
+    expect(screen.getByText('Choose pages')).toBeInTheDocument()
+    expect(screen.queryByText('Sync Now')).not.toBeInTheDocument()
+    expect(screen.queryByText('Nuclear Reset')).not.toBeInTheDocument()
+    expect(screen.queryByText('Connected')).not.toBeInTheDocument()
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  it('starts the existing Notion connection process only after Continue to Notion', async () => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }) as never
+  it('navigates to the connect route only after Continue to Notion', () => {
+    global.fetch = jest.fn()
     render(
       <NotionIntegrationCard
         connected={false}
@@ -39,14 +41,11 @@ describe('NotionIntegrationCard', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to Notion' }))
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/integrations/notion/connect', {
-        method: 'POST',
-      })
-      expect(refresh).toHaveBeenCalled()
-    })
+    expect(screen.getByRole('link', { name: 'Continue to Notion' })).toHaveAttribute(
+      'href',
+      '/api/integrations/notion/connect',
+    )
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 
   it('shows consistent controls and zero-page guidance when connected', () => {
@@ -55,6 +54,7 @@ describe('NotionIntegrationCard', () => {
         connected
         workspaceId="workspace-1"
         pageCount={0}
+        hasSynced
         lastSyncedLabel="Never"
       />,
     )
@@ -67,5 +67,19 @@ describe('NotionIntegrationCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'View setup guide' }))
     expect(screen.getByRole('dialog', { name: 'Set up Notion' })).toBeInTheDocument()
+  })
+
+  it('does not claim a zero-page sync result before the first sync', () => {
+    render(
+      <NotionIntegrationCard
+        connected
+        workspaceId="workspace-1"
+        pageCount={0}
+        lastSyncedLabel="Never"
+      />,
+    )
+
+    expect(screen.getByText('Notion is connected. Click Sync Now to import your selected pages.')).toBeInTheDocument()
+    expect(screen.queryByText('No Notion pages were found. Open Notion, share pages with the Neuron integration, then sync again.')).not.toBeInTheDocument()
   })
 })

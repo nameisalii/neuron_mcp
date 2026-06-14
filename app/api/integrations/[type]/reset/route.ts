@@ -63,13 +63,22 @@ export async function POST(
     pagesDeleted = deletedPages.count
   }
 
-  await prisma.integration.update({
-    where: { id: integration.id },
-    data: { lastSyncAt: null },
-  })
+  if (type === 'notion') {
+    await prisma.integration.delete({ where: { id: integration.id } })
+  } else {
+    await prisma.integration.update({
+      where: { id: integration.id },
+      data: { lastSyncAt: null },
+    })
+  }
   await prisma.syncStatus.updateMany({
     where: { workspaceId, integration: type },
-    data: { lastSyncAt: null, nextSyncAt: null, errorMessage: null },
+    data: {
+      lastSyncAt: null,
+      nextSyncAt: null,
+      errorMessage: null,
+      ...(type === 'notion' ? { status: 'paused' } : {}),
+    },
   })
 
   await trackEvent(workspaceId, userId, member.displayName, 'sync', `Reset ${type} data`, {

@@ -11,11 +11,15 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     user: { findUnique: jest.fn() },
     workspaceMember: { findUnique: jest.fn(), findMany: jest.fn() },
+    integration: { findUnique: jest.fn() },
     notionPage: { findMany: jest.fn(), count: jest.fn() },
     notionChunk: { findMany: jest.fn() },
   },
 }))
 jest.mock('@/lib/activity', () => ({ trackEvent: jest.fn() }))
+jest.mock('@/lib/integrations/connection-server', () => ({
+  getConnectedIntegrationToken: jest.fn(() => 'workspace-notion-token'),
+}))
 
 const mockAuth = jest.mocked(auth)
 const mockUserFind = jest.mocked(prisma.user.findUnique)
@@ -74,6 +78,12 @@ beforeEach(() => {
   mockChunkFindMany.mockResolvedValue(SAMPLE_CHUNKS as never)
   mockMemberFindMany.mockResolvedValue([{ userId: CLERK_ID, displayName: DISPLAY_NAME }] as never)
   mockTrackEvent.mockResolvedValue(undefined)
+  ;(prisma.integration.findUnique as jest.Mock).mockResolvedValue({
+    type: 'notion',
+    accessToken: 'encrypted-token',
+    metadata: { status: 'connected', connectedBy: CLERK_ID },
+    workspace: { type: 'solo', owner: { clerkId: CLERK_ID } },
+  })
 })
 
 describe('GET /api/notion/pages', () => {
@@ -113,6 +123,18 @@ describe('GET /api/notion/pages', () => {
     expect(body.success).toBe(true)
     expect(Array.isArray(body.data)).toBe(true)
     expect(body.meta).toMatchObject({ total: 1, page: 1, limit: 20 })
+  })
+
+  it('does not expose stale pages when Notion is disconnected', async () => {
+    const { getConnectedIntegrationToken } = jest.requireMock('@/lib/integrations/connection-server')
+    getConnectedIntegrationToken.mockReturnValueOnce(null)
+    authed()
+    withMember()
+
+    const res = await GET(makeRequest({ workspaceId: WORKSPACE_ID }))
+
+    expect(res.status).toBe(400)
+    expect(mockPagesFindMany).not.toHaveBeenCalled()
   })
 
   it('paginates with page param (1-based)', async () => {

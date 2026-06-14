@@ -10,6 +10,7 @@ import { detectConflicts } from '@/lib/alerts/conflict-detector'
 import type { SyncResult } from '@/lib/notion/sync'
 import { escapeXml } from '@/lib/utils'
 import type { BlockObjectResponse, RichTextItemResponse } from '@notionhq/client/build/src/api-endpoints'
+import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 
 export interface SlackMessageEvent {
   channel: string
@@ -93,8 +94,12 @@ export async function runNotionBackgroundSync(workspaceId: string): Promise<Sync
   const syncedBy = syncStatus?.configuredBy ?? 'system'
   const now = new Date()
 
-  const token = process.env.NOTION_TOKEN
-  if (!token) throw new Error('NOTION_TOKEN is not configured')
+  const integration = await prisma.integration.findUnique({
+    where: { workspaceId_type: { workspaceId, type: 'notion' } },
+    select: { type: true, accessToken: true, metadata: true },
+  })
+  const token = getConnectedIntegrationToken(integration)
+  if (!token) throw new Error('Notion is not connected')
   const notion = new Client({ auth: token })
 
   let totalPages = 0

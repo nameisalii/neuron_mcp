@@ -13,31 +13,27 @@ const steps = [
     text: 'Neuron will ask Notion for permission to read the pages you choose. You stay in control of what Neuron can access.',
   },
   {
-    title: 'Choose the pages Neuron can read',
-    text: 'When Notion opens, select the workspace and pages you want Neuron to sync. You can share a whole workspace section or only specific pages.',
+    title: 'Choose pages',
+    text: 'When Notion opens, select the workspace and pages you want Neuron to sync.',
   },
   {
-    title: 'Make sure pages are shared',
+    title: 'Share pages with Neuron',
     text: 'If a page does not appear later, open that page in Notion, click Share, and make sure the Neuron integration has access.',
   },
   {
     title: 'Sync and ask questions',
-    text: 'After connecting, return to Neuron and click Sync Now. Neuron will extract rules, decisions, ideas, processes, and facts from your selected pages.',
+    text: 'After connecting, return to Neuron and click Sync Now.',
   },
 ]
 
 interface NotionSetupModalProps {
   isOpen: boolean
   onClose: () => void
-  onContinue: () => void
-  continuing?: boolean
 }
 
 export default function NotionSetupModal({
   isOpen,
   onClose,
-  onContinue,
-  continuing = false,
 }: NotionSetupModalProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -99,12 +95,12 @@ export default function NotionSetupModal({
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-warm px-6 py-4">
-              <button type="button" onClick={onClose} disabled={continuing} className="h-9 px-3 text-sm font-medium text-muted hover:text-ink disabled:opacity-50">
+              <button type="button" onClick={onClose} className="h-9 px-3 text-sm font-medium text-muted hover:text-ink">
                 Cancel
               </button>
-              <button type="button" onClick={onContinue} disabled={continuing} className={integrationConnectClass}>
-                {continuing ? 'Connecting...' : 'Continue to Notion'}
-              </button>
+              <a href="/api/integrations/notion/connect" className={integrationConnectClass}>
+                Continue to Notion
+              </a>
             </div>
           </motion.div>
         </motion.div>

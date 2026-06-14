@@ -38,7 +38,8 @@ describe('validateEnv', () => {
       NEXT_PUBLIC_APP_URL: 'https://x.vercel.app',
       NEURON_API_KEY: 'napikey',
       NEURON_WORKSPACE_ID: 'ws-x',
-      NOTION_TOKEN: 'secret_x',
+      NOTION_CLIENT_ID: 'notion-cid',
+      NOTION_CLIENT_SECRET: 'notion-csec',
       CRON_SECRET: 'cron_x',
     }
     expect(() => validateEnv()).not.toThrow()

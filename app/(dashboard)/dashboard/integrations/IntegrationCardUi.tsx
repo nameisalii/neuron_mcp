@@ -1,4 +1,4 @@
-import { CheckCircle, ExternalLink, Plug } from 'lucide-react'
+import { CheckCircle, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
 export const integrationActionClass =
@@ -24,15 +24,6 @@ export function ConnectedBadge() {
     <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#E6F2EC] px-3 text-xs font-medium text-positive">
       <CheckCircle className="h-3.5 w-3.5" />
       Connected
-    </span>
-  )
-}
-
-export function NotConnectedBadge() {
-  return (
-    <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-gray-100 px-3 text-xs font-medium text-gray-600">
-      <Plug className="h-3.5 w-3.5" />
-      Not connected
     </span>
   )
 }

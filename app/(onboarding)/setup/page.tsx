@@ -97,8 +97,8 @@ export default function SetupPage() {
   }
 
   async function finish() {
-    await fetch('/api/user/onboarding-complete', { method: 'PATCH' })
-    router.push('/dashboard')
+    await fetch('/api/onboarding', { method: 'POST' })
+    router.push('/dashboard/overview')
   }
 
   return (

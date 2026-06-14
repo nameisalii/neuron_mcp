@@ -22,7 +22,12 @@ const isApiKeyRoute = createRouteMatcher([
 ])
 
 const isPublicIntegrationRoute = createRouteMatcher([
+  '/api/webhooks/clerk',
+  '/api/integrations/slack/callback',
   '/api/integrations/linear/webhook',
+  '/api/integrations/linear/callback',
+  '/api/integrations/notion/callback',
+  '/api/integrations/gmail/callback',
   '/api/integrations/slack/events',
 ])
 

@@ -23,6 +23,7 @@ jest.mock('@notionhq/client', () => ({
 jest.mock('@/lib/db', () => ({
   prisma: {
     syncStatus: { findUnique: jest.fn(), upsert: jest.fn() },
+    integration: { findUnique: jest.fn() },
     notionPage: { upsert: jest.fn() },
     notionChunk: { deleteMany: jest.fn(), createMany: jest.fn(), findMany: jest.fn() },
     knowledgeItem: { findMany: jest.fn(), deleteMany: jest.fn() },
@@ -34,11 +35,13 @@ jest.mock('@/lib/openai', () => ({ generateEmbedding: jest.fn() }))
 jest.mock('@/lib/pinecone', () => ({ upsertEmbedding: jest.fn(), deleteEmbeddings: jest.fn() }))
 jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledge: jest.fn() }))
 jest.mock('../capture-rules', () => ({ evaluateCapture: jest.fn() }))
+jest.mock('@/lib/crypto', () => ({ decrypt: jest.fn(() => 'workspace-notion-token') }))
 
 // ─── typed refs ───────────────────────────────────────────────────────────────
 
 const mockSyncStatusFind = jest.mocked(prisma.syncStatus.findUnique)
 const mockSyncStatusUpsert = jest.mocked(prisma.syncStatus.upsert)
+const mockIntegrationFind = jest.mocked(prisma.integration.findUnique)
 const mockPageUpsert = jest.mocked(prisma.notionPage.upsert)
 const mockChunkCreateMany = jest.mocked(prisma.notionChunk.createMany)
 const mockChunkDeleteMany = jest.mocked(prisma.notionChunk.deleteMany)
@@ -67,7 +70,11 @@ function makePage(id: string, lastEdited: string) {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  process.env.NOTION_TOKEN = 'test-token'
+  mockIntegrationFind.mockResolvedValue({
+    type: 'notion',
+    accessToken: 'encrypted-workspace-token',
+    metadata: { status: 'connected' },
+  } as never)
   mockSyncStatusFind.mockResolvedValue(null)
   mockSyncStatusUpsert.mockResolvedValue({} as never)
   mockPageUpsert.mockResolvedValue({ id: 'db-page-1' } as never)

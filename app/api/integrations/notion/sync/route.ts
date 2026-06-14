@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { syncNotionPages } from '@/lib/notion/sync'
+import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 
 export const maxDuration = 120
 
@@ -34,19 +35,38 @@ export async function POST(req: Request) {
       select: { role: true, status: true, displayName: true },
     })
 
-    if (!member || !ALLOWED_ROLES.has(member.role)) {
+    if (!member || member.status !== 'active' || !ALLOWED_ROLES.has(member.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { displayName } = member
-
-    await prisma.integration.upsert({
+    const integration = await prisma.integration.findUnique({
       where: { workspaceId_type: { workspaceId, type: 'notion' } },
-      create: { workspaceId, type: 'notion', accessToken: 'notion-static', channels: [] },
-      update: {},
+      select: {
+        type: true,
+        accessToken: true,
+        metadata: true,
+        workspace: {
+          select: {
+            type: true,
+            owner: { select: { clerkId: true } },
+          },
+        },
+      },
     })
+    const accessToken = getConnectedIntegrationToken(integration, {
+      currentUserId: userId,
+      workspaceType: integration?.workspace?.type,
+      workspaceOwnerClerkId: integration?.workspace?.owner.clerkId,
+    })
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'Notion is not connected. Connect Notion first.' },
+        { status: 400 },
+      )
+    }
 
-    const result = await syncNotionPages(workspaceId, userId, displayName)
+    const { displayName } = member
+    const result = await syncNotionPages(workspaceId, userId, displayName, accessToken)
 
     await prisma.integration.update({
       where: { workspaceId_type: { workspaceId, type: 'notion' } },

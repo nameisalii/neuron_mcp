@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { trackEvent } from '@/lib/activity'
+import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 const DEFAULT_LIMIT = 20
@@ -34,8 +35,25 @@ export async function GET(req: Request) {
       where: { workspaceId_userId: { workspaceId, userId } },
       select: { role: true, status: true, displayName: true },
     })
-    if (!member || !ALLOWED_ROLES.has(member.role)) {
+    if (!member || member.status !== 'active' || !ALLOWED_ROLES.has(member.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const integration = await prisma.integration.findUnique({
+      where: { workspaceId_type: { workspaceId, type: 'notion' } },
+      select: {
+        type: true,
+        accessToken: true,
+        metadata: true,
+        workspace: { select: { type: true, owner: { select: { clerkId: true } } } },
+      },
+    })
+    if (!getConnectedIntegrationToken(integration, {
+      currentUserId: userId,
+      workspaceType: integration?.workspace.type,
+      workspaceOwnerClerkId: integration?.workspace.owner.clerkId,
+    })) {
+      return NextResponse.json({ error: 'Notion is not connected. Connect Notion first.' }, { status: 400 })
     }
 
     const { displayName } = member

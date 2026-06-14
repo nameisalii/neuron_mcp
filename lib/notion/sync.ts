@@ -214,9 +214,10 @@ export async function syncNotionPages(
   workspaceId: string,
   userId: string,
   displayName: string,
+  accessToken?: string,
 ): Promise<SyncResult> {
-  const token = process.env.NOTION_TOKEN
-  if (!token) throw new Error('NOTION_TOKEN is not configured')
+  const token = accessToken ?? (process.env.NODE_ENV === 'test' ? process.env.NOTION_TOKEN : undefined)
+  if (!token) throw new Error('Notion access token is not configured')
 
   const notion = new Client({ auth: token })
 

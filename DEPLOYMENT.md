@@ -32,6 +32,8 @@ In Vercel → Project → Settings → Environment Variables, add every key from
 | `CLERK_SECRET_KEY` | Clerk Dashboard → API Keys |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk Dashboard → API Keys |
 | `CLERK_WEBHOOK_SECRET` | Clerk Dashboard → Webhooks |
+| `NOTION_CLIENT_ID` | Notion integration OAuth client ID |
+| `NOTION_CLIENT_SECRET` | Notion integration OAuth client secret |
 | `SLACK_CLIENT_ID` | api.slack.com → Your App → OAuth |
 | `SLACK_CLIENT_SECRET` | api.slack.com → Your App → OAuth |
 | `SLACK_SIGNING_SECRET` | api.slack.com → Your App → Basic Info |
@@ -51,6 +53,23 @@ In api.slack.com → Your App → OAuth & Permissions → Redirect URLs:
 In Clerk Dashboard → Webhooks:
 - Add endpoint: `https://your-vercel-url.vercel.app/api/webhooks/clerk`
 - Subscribe to: `user.created`
+
+Use Clerk production keys in production:
+
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `NEXT_PUBLIC_APP_URL=https://tryneuron.net`
+
+Configure these allowed Clerk redirect URLs:
+
+- `https://tryneuron.net/onboarding`
+- `https://tryneuron.net/dashboard/overview`
+- `https://tryneuron.net/sign-in/sign-up`
+
+Configure the Notion OAuth redirect URI as:
+
+- Local: `http://localhost:3000/api/integrations/notion/callback`
+- Production: `https://app.tryneuron.net/api/integrations/notion/callback`
 
 ### 6. Redeploy
 Vercel → Project → Deployments → Redeploy latest.
