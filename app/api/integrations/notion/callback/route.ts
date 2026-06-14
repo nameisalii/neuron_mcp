@@ -51,20 +51,23 @@ export async function GET(req: NextRequest) {
     bot_id?: string
   }
   try {
-    const credentials = Buffer.from(`${getNotionClientId()}:${getNotionClientSecret()}`).toString('base64')
     const response = await fetch('https://api.notion.com/v1/oauth/token', {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify({
+      body: new URLSearchParams({
+        client_id: getNotionClientId(),
+        client_secret: getNotionClientSecret(),
         grant_type: 'authorization_code',
         code,
         redirect_uri: getNotionRedirectUri(),
       }),
     })
-    if (!response.ok) throw new Error(`Notion token exchange failed: ${response.status}`)
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`Notion token exchange failed: ${response.status} ${errorText}`.trim())
+    }
     tokenData = await response.json()
     if (!tokenData.access_token) throw new Error('Notion token response missing access_token')
   } catch (err) {
