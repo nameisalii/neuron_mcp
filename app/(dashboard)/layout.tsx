@@ -61,39 +61,31 @@ export default async function DashboardLayout({ children }: { children: React.Re
         ],
       }
     : null
-  let fallbackCountsPromise: Promise<[number, number, number]> | null = null
-  const fallbackCounts = async () => {
-    if (!workspaceId) return [0, 0, 0] as const
-    fallbackCountsPromise ??= Promise.all([
-      prisma.knowledgeItem.count({ where: { workspaceId } }),
-      prisma.knowledgeItem.count({ where: { workspaceId, category: 'decision' } }),
-      prisma.knowledgeItem.count({ where: { workspaceId, category: 'idea' } }),
-    ]) as Promise<[number, number, number]>
-    return fallbackCountsPromise
+  let categoryCounts: Array<{ category: string; _count: { _all: number } }> = []
+  if (workspaceId) {
+    try {
+      const visibleCategoryCounts = await prisma.knowledgeItem.groupBy({
+        by: ['category'],
+        where: visibleKnowledge!,
+        _count: { _all: true },
+      })
+      categoryCounts = visibleCategoryCounts
+    } catch (err) {
+      if (!(err instanceof Error) || !/Unknown argument `visibility`|Unknown argument `visibilitySetBy`/.test(err.message)) {
+        throw err
+      }
+      const fallbackCategoryCounts = await prisma.knowledgeItem.groupBy({
+        by: ['category'],
+        where: { workspaceId },
+        _count: { _all: true },
+      })
+      categoryCounts = fallbackCategoryCounts
+    }
   }
 
-  const [knowledgeCount, decisionCount, ideaCount] = workspaceId
-    ? await Promise.all([
-        prisma.knowledgeItem.count({ where: visibleKnowledge! }).catch(async (err) => {
-          if (err instanceof Error && /Unknown argument `visibility`|Unknown argument `visibilitySetBy`/.test(err.message)) {
-            return (await fallbackCounts())[0]
-          }
-          throw err
-        }),
-        prisma.knowledgeItem.count({ where: { ...visibleKnowledge!, category: 'decision' } }).catch(async (err) => {
-          if (err instanceof Error && /Unknown argument `visibility`|Unknown argument `visibilitySetBy`/.test(err.message)) {
-            return (await fallbackCounts())[1]
-          }
-          throw err
-        }),
-        prisma.knowledgeItem.count({ where: { ...visibleKnowledge!, category: 'idea' } }).catch(async (err) => {
-          if (err instanceof Error && /Unknown argument `visibility`|Unknown argument `visibilitySetBy`/.test(err.message)) {
-            return (await fallbackCounts())[2]
-          }
-          throw err
-        }),
-      ])
-    : [0, 0, 0]
+  const knowledgeCount = categoryCounts.reduce((total, row) => total + row._count._all, 0)
+  const decisionCount = categoryCounts.find((row) => row.category === 'decision')?._count._all ?? 0
+  const ideaCount = categoryCounts.find((row) => row.category === 'idea')?._count._all ?? 0
 
   return (
     <DashboardShell

@@ -1,4 +1,5 @@
 import type { Week1ReportData } from './week1-report'
+import { getAppUrl } from '@/lib/app-url'
 
 function esc(str: string): string {
   return str
@@ -18,7 +19,7 @@ function statRow(label: string, value: string | number): string {
 }
 
 export function renderWeek1Email(data: Week1ReportData, userName: string): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  const appUrl = getAppUrl()
   const dashboardUrl = `${appUrl}/dashboard`
   const greeting = userName ? `Hey ${esc(userName)}` : 'Hey'
 

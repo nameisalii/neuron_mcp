@@ -17,7 +17,7 @@ export async function PATCH(req: Request) {
   const parsed = UpdateSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
 
-  const workspace = await prisma.workspace.findUnique({ where: { ownerId: userId } })
+  const workspace = await prisma.workspace.findFirst({ where: { owner: { clerkId: userId } } })
   if (!workspace) return NextResponse.json({ error: 'No workspace' }, { status: 404 })
 
   const updated = await prisma.workspace.update({
@@ -32,8 +32,8 @@ export async function GET(req: Request) {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const workspace = await prisma.workspace.findUnique({
-    where: { ownerId: userId },
+  const workspace = await prisma.workspace.findFirst({
+    where: { owner: { clerkId: userId } },
     include: { members: { where: { status: 'active' } } },
   })
   if (!workspace) return NextResponse.json({ error: 'No workspace' }, { status: 404 })

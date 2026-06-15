@@ -27,6 +27,7 @@ const isPublicIntegrationRoute = createRouteMatcher([
   '/api/integrations/linear/webhook',
   '/api/integrations/linear/callback',
   '/api/integrations/notion/callback',
+  '/api/inn/callback',
   '/api/integrations/gmail/callback',
   '/api/integrations/slack/events',
 ])

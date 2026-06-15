@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import crypto from 'node:crypto'
+import { getAppUrl } from '@/lib/app-url'
 
 const SLACK_SCOPES = [
   'channels:history',
@@ -16,9 +17,9 @@ export async function GET() {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  const appUrl = getAppUrl()
   const clientId = process.env.SLACK_CLIENT_ID
-  if (!appUrl || !clientId) throw new Error('Missing NEXT_PUBLIC_APP_URL or SLACK_CLIENT_ID')
+  if (!clientId) throw new Error('Missing SLACK_CLIENT_ID')
 
   const state = crypto.randomBytes(32).toString('hex')
 

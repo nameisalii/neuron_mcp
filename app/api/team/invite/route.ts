@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db'
 import { Resend } from 'resend'
 import { getWorkspaceForUser } from '@/lib/workspace'
 import { assertRole, canInvite } from '@/lib/team'
+import { getAppUrl } from '@/lib/app-url'
 
 const InviteSchema = z.object({
   emails: z.string().min(1),
@@ -13,7 +14,6 @@ const InviteSchema = z.object({
 })
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 export async function POST(req: Request) {
   const { userId } = await auth()
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         },
       })
 
-      const inviteUrl = `${APP_URL}/onboarding/invite/${token}`
+      const inviteUrl = `${getAppUrl()}/onboarding/invite/${token}`
       await resend.emails.send({
         from: 'Neuron <noreply@neuron.app>',
         to: email,

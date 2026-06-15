@@ -1,16 +1,10 @@
-const LOCAL_APP_URL = 'http://localhost:3000'
-const PRODUCTION_APP_URL = 'https://tryneuron.net'
+import { getAppUrl } from '@/lib/app-url'
 
 export const DEFAULT_GMAIL_LABELS = ['INBOX', 'SENT'] as const
 export const DEFAULT_GMAIL_LABEL_NAMES = ['Inbox', 'Sent'] as const
 
 export function getGmailAppUrl(): string {
-  if (process.env.NODE_ENV !== 'production') {
-    return LOCAL_APP_URL
-  }
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, '')
-  if (configured) return configured
-  return PRODUCTION_APP_URL
+  return getAppUrl()
 }
 
 function pickEnv(...keys: string[]): string | null {

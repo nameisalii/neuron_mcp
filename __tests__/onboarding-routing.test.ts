@@ -17,8 +17,10 @@ describe('onboarding routing', () => {
     const signIn = read('app/(auth)/sign-in/[[...sign-in]]/page.tsx')
     const signUp = read('app/(auth)/sign-up/[[...sign-up]]/page.tsx')
 
-    expect(signIn).toContain('fallbackRedirectUrl="/dashboard/overview"')
+    expect(signIn).toContain('fallbackRedirectUrl="/dashboard"')
+    expect(signIn).toContain('forceRedirectUrl="/dashboard"')
     expect(signUp).toContain('fallbackRedirectUrl="/onboarding"')
+    expect(signUp).toContain('forceRedirectUrl="/onboarding"')
     expect(`${signIn}${signUp}`).not.toMatch(/afterSignInUrl|afterSignUpUrl/)
   })
 

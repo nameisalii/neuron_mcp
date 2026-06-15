@@ -96,3 +96,17 @@ it('rejects a user who is not an active member of the state workspace', async ()
   expect(prisma.integration.upsert).not.toHaveBeenCalled()
   expect(global.fetch).not.toHaveBeenCalled()
 })
+
+it('surfaces an invalid Notion OAuth client configuration', async () => {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: false,
+    status: 401,
+    text: async () => JSON.stringify({ error: 'invalid_client' }),
+  }) as never
+
+  const response = await GET(makeRequest())
+
+  expect(response.headers.get('location')).toContain('error=notion_failed')
+  expect(response.headers.get('location')).toContain('reason=invalid_client')
+  expect(prisma.integration.upsert).not.toHaveBeenCalled()
+})

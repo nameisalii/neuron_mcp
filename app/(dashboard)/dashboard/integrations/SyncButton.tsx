@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { integrationActionClass, integrationResetClass } from './IntegrationCardUi'
+import { integrationPrimaryClass, integrationResetClass } from './IntegrationCardUi'
 
 interface SyncResult {
   success?: boolean
@@ -61,10 +61,11 @@ interface SyncButtonProps {
   resultLabel?: string
   requestBody?: Record<string, unknown>
   syncEnabled?: boolean
+  hideReset?: boolean
   onNeedsReconfigure?: () => void
 }
 
-export default function SyncButton({ endpoint, showReset = false, resetType, resultLabel = 'items', requestBody, syncEnabled = true, onNeedsReconfigure }: SyncButtonProps) {
+export default function SyncButton({ endpoint, showReset = false, resetType, resultLabel = 'items', requestBody, syncEnabled = true, hideReset = false, onNeedsReconfigure }: SyncButtonProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -116,18 +117,18 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
     && ((result.inboxMessagesAvailable ?? 0) > 0 || (result.sentMessagesAvailable ?? 0) > 0)
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col items-start gap-1">
+      <div className="flex items-center gap-3">
         <button
           onClick={syncEnabled ? handleSync : onNeedsReconfigure}
           disabled={busy || (!syncEnabled && !onNeedsReconfigure)}
-          className={integrationActionClass}
+          className={integrationPrimaryClass}
           title={!syncEnabled ? 'Finish setup before syncing' : undefined}
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           {loading ? 'Syncing…' : 'Sync Now'}
         </button>
-        {showReset && resetType && (
+        {showReset && resetType && !hideReset && (
           <button
             onClick={handleResetAndReindex}
             disabled={busy}
@@ -140,7 +141,7 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
         )}
       </div>
       {result && !result.error && (
-        <div className="max-w-sm text-right">
+        <div className="max-w-sm text-left">
           {(() => {
             const total = result.issuesFound ?? result.synced ?? result.importedThreads ?? result.imported ?? result.deleted ?? 0
             return (

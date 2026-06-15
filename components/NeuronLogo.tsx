@@ -1,13 +1,11 @@
 import { clsx } from 'clsx'
 
-/** Path to the Neuron brand mark (white connected-nodes glyph on a dark tile). */
+/** Exact Neuron brand asset from neuronn/2 (1).png. */
 const NEURON_LOGO_SRC = '/neuron-logo.png'
 
 /**
- * Neuron brand mark, rendered from the official logo asset. The image already
- * carries its dark tile + white glyph, so it reads as a self-contained badge on
- * both light and dark surfaces. `tone` is accepted for backwards compatibility
- * but no longer recolors the raster mark.
+ * Neuron brand mark, rendered without cropping or reshaping the source asset.
+ * `tone` is accepted for backwards compatibility but does not recolor it.
  */
 export function NeuronMark({
   className,
@@ -20,7 +18,7 @@ export function NeuronMark({
     <img
       src={NEURON_LOGO_SRC}
       alt="Neuron"
-      className={clsx('object-cover rounded-[24%]', className)}
+      className={clsx('object-contain', className)}
     />
   )
 }

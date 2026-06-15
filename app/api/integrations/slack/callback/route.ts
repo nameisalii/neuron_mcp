@@ -4,9 +4,10 @@ import { prisma } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
 import { redirect } from 'next/navigation'
 import type { SlackOAuthToken } from '@/types'
+import { getAppUrl } from '@/lib/app-url'
 
 export async function GET(req: Request) {
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL
+  const APP_URL = getAppUrl()
   const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID
   const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET
 
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
     redirect('/dashboard?error=slack_failed')
   }
 
-  if (!APP_URL || !SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET) {
+  if (!SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET) {
     redirect('/dashboard?error=slack_failed')
   }
 

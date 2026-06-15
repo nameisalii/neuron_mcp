@@ -26,7 +26,7 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     user: { findUnique: jest.fn() },
     workspaceMember: { upsert: jest.fn() },
-    knowledgeItem: { count: jest.fn() },
+    knowledgeItem: { groupBy: jest.fn() },
   },
 }))
 
@@ -66,6 +66,6 @@ describe('DashboardLayout onboarding guard', () => {
 
     expect(provisionUser).toHaveBeenCalled()
     expect(prisma.workspaceMember.upsert).toHaveBeenCalled()
-    expect(prisma.knowledgeItem.count).not.toHaveBeenCalled()
+    expect(prisma.knowledgeItem.groupBy).not.toHaveBeenCalled()
   })
 })

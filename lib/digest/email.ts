@@ -1,4 +1,5 @@
 import type { DigestContent } from './generate'
+import { getAppUrl } from '@/lib/app-url'
 
 function esc(str: string): string {
   return str
@@ -14,7 +15,7 @@ function statRow(label: string, value: string | number): string {
 }
 
 export function renderDigestEmail(content: DigestContent, userName: string, type: 'daily' | 'weekly' = 'daily'): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  const appUrl = getAppUrl()
   const greeting = userName ? `Hey ${esc(userName)}` : 'Hey'
   const title = type === 'weekly' ? 'Your weekly Neuron digest' : 'Your daily Neuron digest'
   const period = type === 'weekly' ? '7 days' : '24 hours'

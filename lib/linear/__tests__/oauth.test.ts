@@ -14,9 +14,9 @@ describe('Linear OAuth URLs', () => {
     const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL
     try {
       ;(process.env as NodeJS.ProcessEnv & { NODE_ENV?: string }).NODE_ENV = 'production'
-      process.env.NEXT_PUBLIC_APP_URL = 'https://tryneuron.net/'
-      expect(getAppUrl()).toBe('https://tryneuron.net')
-      expect(getLinearRedirectUri()).toBe('https://tryneuron.net/api/integrations/linear/callback')
+      process.env.NEXT_PUBLIC_APP_URL = 'https://app.tryneuron.net/'
+      expect(getAppUrl()).toBe('https://app.tryneuron.net')
+      expect(getLinearRedirectUri()).toBe('https://app.tryneuron.net/api/integrations/linear/callback')
     } finally {
       ;(process.env as NodeJS.ProcessEnv & { NODE_ENV?: string }).NODE_ENV = previousNodeEnv
       process.env.NEXT_PUBLIC_APP_URL = previousAppUrl

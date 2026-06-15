@@ -6,6 +6,19 @@ import { encrypt } from '@/lib/crypto'
 import { getNotionAppUrl, getNotionClientId, getNotionClientSecret, getNotionRedirectUri } from '@/lib/notion/oauth'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
+const NOTION_OAUTH_ERROR_CODES = new Set([
+  'invalid_client',
+  'invalid_grant',
+  'invalid_request',
+  'unauthorized_client',
+  'unsupported_grant_type',
+])
+
+class NotionTokenExchangeError extends Error {
+  constructor(readonly reason: string, message: string) {
+    super(message)
+  }
+}
 
 function redirectToIntegrations(params: Record<string, string>) {
   const url = new URL('/dashboard/integrations', getNotionAppUrl())
@@ -69,13 +82,31 @@ export async function GET(req: NextRequest) {
     })
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
-      throw new Error(`Notion token exchange failed: ${response.status} ${errorText}`.trim())
+      let providerError: string | undefined
+      try {
+        const parsed = JSON.parse(errorText) as { error?: unknown; code?: unknown }
+        providerError = typeof parsed.error === 'string'
+          ? parsed.error
+          : typeof parsed.code === 'string' ? parsed.code : undefined
+      } catch {
+        providerError = undefined
+      }
+      const reason = providerError && NOTION_OAUTH_ERROR_CODES.has(providerError)
+        ? providerError
+        : 'token_exchange'
+      throw new NotionTokenExchangeError(
+        reason,
+        `Notion token exchange failed: ${response.status} ${errorText}`.trim(),
+      )
     }
     tokenData = await response.json()
     if (!tokenData.access_token) throw new Error('Notion token response missing access_token')
   } catch (err) {
     console.error('[notion/callback] Token exchange failed', err)
-    return redirectToIntegrations({ error: 'notion_failed', reason: 'token_exchange' })
+    return redirectToIntegrations({
+      error: 'notion_failed',
+      reason: err instanceof NotionTokenExchangeError ? err.reason : 'token_exchange',
+    })
   }
 
   await prisma.integration.upsert({

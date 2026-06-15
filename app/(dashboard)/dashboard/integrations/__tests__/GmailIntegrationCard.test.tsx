@@ -31,7 +31,7 @@ describe('GmailIntegrationCard', () => {
     )
 
     expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/gmail')
-    expect(screen.getByText('Configure Gmail')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Configure' })).toBeInTheDocument()
     expect(screen.getByText('Sync Now')).toBeInTheDocument()
     expect(screen.getByText('Nuclear Reset')).toBeInTheDocument()
     expect(screen.getByText('Connected')).toBeInTheDocument()

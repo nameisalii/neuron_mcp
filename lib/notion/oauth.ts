@@ -1,9 +1,7 @@
-const LOCAL_APP_URL = 'http://localhost:3000'
-const PRODUCTION_APP_URL = 'https://app.tryneuron.net'
+import { getAppUrl } from '@/lib/app-url'
 
 export function getNotionAppUrl(): string {
-  if (process.env.NODE_ENV !== 'production') return LOCAL_APP_URL
-  return process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, '') || PRODUCTION_APP_URL
+  return getAppUrl()
 }
 
 export function getNotionRedirectUri(): string {

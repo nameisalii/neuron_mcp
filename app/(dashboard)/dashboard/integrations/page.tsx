@@ -8,7 +8,7 @@ import SyncButton from './SyncButton'
 import GmailIntegrationCard, { type GmailMetadata } from './GmailIntegrationCard'
 import NotionIntegrationCard from './NotionIntegrationCard'
 import { BrandTile } from '@/components/BrandLogo'
-import { ConnectedBadge, IntegrationViewLink, integrationConnectClass } from './IntegrationCardUi'
+import { StatusBadge, ResetLink, IntegrationViewLink, integrationConnectClass } from './IntegrationCardUi'
 import { isIntegrationConnected } from '@/lib/integrations/connection'
 import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 
@@ -34,7 +34,7 @@ const statTileClass = 'bg-cream rounded-xl px-3.5 py-2.5 border border-warm/60'
 
 export default async function IntegrationsPage(
   props: {
-    searchParams: Promise<{ success?: string; error?: string; connected?: string }>
+    searchParams: Promise<{ success?: string; error?: string; connected?: string; reason?: string }>
   }
 ) {
   const searchParams = await props.searchParams;
@@ -110,6 +110,13 @@ export default async function IntegrationsPage(
             {searchParams.error === 'slack_failed' && 'Slack connection failed. Please try again.'}
             {searchParams.error === 'linear_failed' && 'Linear connection failed. Please try again.'}
             {searchParams.error === 'gmail_failed' && 'Gmail connection failed. Please try again.'}
+            {searchParams.error === 'notion_failed' && (
+              searchParams.reason === 'invalid_client'
+                ? process.env.NODE_ENV === 'development'
+                  ? 'Notion rejected the configured OAuth client. Update NOTION_CLIENT_ID and NOTION_CLIENT_SECRET in .env.local, then restart the development server.'
+                  : 'Notion rejected the configured OAuth client. Please contact support.'
+                : 'Notion connection failed. Please try again.'
+            )}
             {searchParams.error === 'notion_not_configured' && (
               process.env.NODE_ENV === 'development'
                 ? 'Notion OAuth is not configured locally. Add NOTION_CLIENT_ID and NOTION_CLIENT_SECRET to .env.local, then restart the development server.'
@@ -130,121 +137,141 @@ export default async function IntegrationsPage(
         </Link>
       </div>
 
-      {/* Slack */}
-      <Card padding="md">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <BrandTile brand="slack" className="w-12 h-12" />
-          <div className="min-w-0">
-            <h3 className="text-lg font-display font-semibold text-ink">Slack</h3>
-            <p className="text-xs text-muted mt-0.5 truncate">
-              {slackConnected && slack ? `Connected to ${slack.teamName ?? 'your workspace'}` : 'Connect your Slack workspace'}
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-start justify-end gap-2 border-t border-warm/60 pt-4">
-          {slackConnected ? (
-            <>
-              <IntegrationViewLink href="/dashboard/integrations/slack" />
-              <SyncButton endpoint="/api/integrations/slack/sync" showReset resetType="slack" resultLabel="messages" />
-              <ConnectedBadge />
-            </>
-          ) : (
-            <a href="/api/integrations/slack/connect" className={integrationConnectClass}>Connect</a>
-          )}
-        </div>
-        {slackConnected && slack ? (
-          <div className="mt-5 space-y-3 text-sm text-muted">
-            <div className="grid grid-cols-2 gap-3">
-              <div className={statTileClass}>
-                <p className="text-xs text-muted mb-0.5">Connected</p>
-                <p className="font-medium text-ink">{slack.createdAt.toLocaleDateString()}</p>
-              </div>
-              <div className={statTileClass}>
-                <p className="text-xs text-muted mb-0.5">Last synced</p>
-                <p className="font-medium text-ink">
-                  {slack.lastSyncAt ? slack.lastSyncAt.toLocaleDateString() : 'Never'}
+      {/* One card per row, full width — Slack, Linear, Gmail, Notion stacked */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* Slack */}
+        <Card padding="md" className="flex h-full flex-col">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <BrandTile brand="slack" className="w-10 h-10" />
+              <div className="min-w-0">
+                <h3 className="text-lg font-display font-semibold text-ink">Slack</h3>
+                <p className="text-xs text-muted mt-0.5 truncate">
+                  {slackConnected && slack ? `Connected to ${slack.teamName ?? 'your workspace'}` : 'Connect your Slack workspace'}
                 </p>
               </div>
             </div>
-            {slack.channels.length > 0 && (
-              <div>
-                <p className="text-xs text-muted mb-1.5">Monitored channels ({slack.channels.length})</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {slack.channels.map((ch) => (
-                    <span key={ch} className="px-2 py-0.5 rounded-md text-xs bg-accent-soft text-navy font-mono">
-                      #{ch}
-                    </span>
-                  ))}
+            <StatusBadge connected={slackConnected} />
+          </div>
+
+          <div className="mt-5 flex-1 text-sm text-muted">
+            {slackConnected && slack ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={statTileClass}>
+                    <p className="text-xs text-muted mb-0.5">Connected</p>
+                    <p className="font-medium text-ink">{slack.createdAt.toLocaleDateString()}</p>
+                  </div>
+                  <div className={statTileClass}>
+                    <p className="text-xs text-muted mb-0.5">Last synced</p>
+                    <p className="font-medium text-ink">
+                      {slack.lastSyncAt ? slack.lastSyncAt.toLocaleDateString() : 'Never'}
+                    </p>
+                  </div>
                 </div>
+                {slack.channels.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted mb-1.5">Monitored channels ({slack.channels.length})</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {slack.channels.map((ch) => (
+                        <span key={ch} className="px-2 py-0.5 rounded-md text-xs bg-accent-soft text-navy font-mono">
+                          #{ch}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+            ) : (
+              <p>
+                Neuron reads your Slack messages and extracts rules, decisions, processes, and ideas automatically.
+              </p>
             )}
           </div>
-        ) : (
-          <p className="text-sm text-muted mt-4">
-            Neuron reads your Slack messages and extracts rules, decisions, processes, and ideas automatically.
-          </p>
-        )}
-      </Card>
 
-      {/* Linear */}
-      <Card padding="md">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <BrandTile brand="linear" className="w-12 h-12" />
-          <div className="min-w-0">
-            <h3 className="text-lg font-display font-semibold text-ink">Linear</h3>
-            <p className="text-xs text-muted mt-0.5 truncate">
-              {linearConnected ? 'Connected — issues synced to knowledge base' : 'Sync issues from your Linear workspace'}
-            </p>
+          <div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-warm/60 pt-4">
+            {slackConnected ? (
+              <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <IntegrationViewLink href="/dashboard/integrations/slack" />
+                  <SyncButton endpoint="/api/integrations/slack/sync" resultLabel="messages" hideReset />
+                </div>
+                <ResetLink resetType="slack" />
+              </>
+            ) : (
+              <a href="/api/integrations/slack/connect" className={integrationConnectClass}>Connect</a>
+            )}
           </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-start justify-end gap-2 border-t border-warm/60 pt-4">
-          {linearConnected ? (
-            <>
-              <IntegrationViewLink href="/dashboard/integrations/linear" />
-              <SyncButton endpoint="/api/integrations/linear/sync" showReset resetType="linear" resultLabel="issues" />
-              <ConnectedBadge />
-            </>
-          ) : (
-            <a href="/api/integrations/linear/connect" className={integrationConnectClass}>Connect</a>
-          )}
-        </div>
-        {linearConnected && linear && (
-          <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-            <div className={statTileClass}>
-              <p className="text-xs text-muted mb-0.5">Connected</p>
-              <p className="font-medium text-ink">{linear.createdAt.toLocaleDateString()}</p>
+        </Card>
+
+        {/* Linear */}
+        <Card padding="md" className="flex h-full flex-col">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <BrandTile brand="linear" className="w-10 h-10" />
+              <div className="min-w-0">
+                <h3 className="text-lg font-display font-semibold text-ink">Linear</h3>
+                <p className="text-xs text-muted mt-0.5 truncate">
+                  {linearConnected ? 'Connected — issues synced to knowledge base' : 'Sync issues from your Linear workspace'}
+                </p>
+              </div>
             </div>
-            <div className={statTileClass}>
-              <p className="text-xs text-muted mb-0.5">Last synced</p>
-              <p className="font-medium text-ink">
-                {linear.lastSyncAt ? timeAgo(linear.lastSyncAt) : 'Never'}
+            <StatusBadge connected={linearConnected} />
+          </div>
+
+          <div className="mt-5 flex-1 text-sm text-muted">
+            {linearConnected && linear ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className={statTileClass}>
+                  <p className="text-xs text-muted mb-0.5">Connected</p>
+                  <p className="font-medium text-ink">{linear.createdAt.toLocaleDateString()}</p>
+                </div>
+                <div className={statTileClass}>
+                  <p className="text-xs text-muted mb-0.5">Last synced</p>
+                  <p className="font-medium text-ink">
+                    {linear.lastSyncAt ? timeAgo(linear.lastSyncAt) : 'Never'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p>
+                Neuron reads Linear issues, comments, projects, and status changes and classifies them for semantic search.
               </p>
-            </div>
+            )}
           </div>
-        )}
-        {!linearConnected && (
-          <p className="text-sm text-muted mt-4">
-            Neuron reads Linear issues, comments, projects, and status changes and classifies them for semantic search.
-          </p>
-        )}
-      </Card>
 
-      <GmailIntegrationCard
-        createdAt={gmail?.createdAt.toISOString() ?? null}
-        lastSyncAt={gmail?.lastSyncAt?.toISOString() ?? null}
-        metadata={gmail?.metadata as GmailMetadata | null}
-        connected={gmailConnected}
-        autoOpenSetup={searchParams.connected === 'gmail'}
-      />
+          <div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-warm/60 pt-4">
+            {linearConnected ? (
+              <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <IntegrationViewLink href="/dashboard/integrations/linear" />
+                  <SyncButton endpoint="/api/integrations/linear/sync" resultLabel="issues" hideReset />
+                </div>
+                <ResetLink resetType="linear" />
+              </>
+            ) : (
+              <a href="/api/integrations/linear/connect" className={integrationConnectClass}>Connect</a>
+            )}
+          </div>
+        </Card>
 
-      <NotionIntegrationCard
-        connected={notionConnected}
-        workspaceId={workspaceId}
-        pageCount={pageCount}
-        hasSynced={Boolean(notion?.lastSyncAt)}
-        lastSyncedLabel={lastSyncedAt ? timeAgo(lastSyncedAt) : 'Never'}
-        syncedByName={syncedByName}
-      />
+        <GmailIntegrationCard
+          createdAt={gmail?.createdAt.toISOString() ?? null}
+          lastSyncAt={gmail?.lastSyncAt?.toISOString() ?? null}
+          metadata={gmail?.metadata as GmailMetadata | null}
+          connected={gmailConnected}
+          autoOpenSetup={searchParams.connected === 'gmail'}
+        />
+
+        <NotionIntegrationCard
+          connected={notionConnected}
+          workspaceId={workspaceId}
+          pageCount={pageCount}
+          hasSynced={Boolean(notion?.lastSyncAt)}
+          lastSyncedLabel={lastSyncedAt ? timeAgo(lastSyncedAt) : 'Never'}
+          syncedByName={syncedByName}
+        />
+      </div>
     </div>
   )
 }
