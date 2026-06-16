@@ -67,6 +67,9 @@ export async function POST(req: Request) {
 
     const { displayName } = member
     const result = await syncNotionPages(workspaceId, userId, displayName, accessToken)
+    const knowledgeCreated = result.knowledgeCreated ?? 0
+    const knowledgeUpdated = result.knowledgeUpdated ?? 0
+    const fetched = result.fetched ?? result.pages
 
     await prisma.integration.update({
       where: { workspaceId_type: { workspaceId, type: 'notion' } },
@@ -75,14 +78,36 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
+      fetched,
+      processed: result.processed ?? result.pages,
+      knowledgeCreated,
+      knowledgeUpdated,
+      skipped: result.skipped,
+      extracted: knowledgeCreated + knowledgeUpdated,
+      chunksExtracted: result.chunksExtracted ?? result.chunks,
+      extractionEmbeddingErrors: result.extractionEmbeddingErrors ?? 0,
+      skippedReasons: result.skippedReasons ?? {},
       pagesProcessed: result.pages,
       chunksCreated: result.chunks,
-      skipped: result.skipped,
       failed: result.failed,
       syncedBy: displayName,
+      message: fetched === 0
+        ? 'Synced 0 items — no accessible data found'
+        : knowledgeCreated + knowledgeUpdated === 0
+          ? 'Synced 0 items — no extractable knowledge found'
+          : undefined,
     })
   } catch (err) {
     console.error('[notion/sync]', err)
-    return NextResponse.json({ error: 'Sync failed' }, { status: 500 })
+    return NextResponse.json({
+      success: false,
+      fetched: 0,
+      processed: 0,
+      knowledgeCreated: 0,
+      knowledgeUpdated: 0,
+      skipped: 0,
+      extracted: 0,
+      error: err instanceof Error ? err.message : 'Sync failed',
+    }, { status: 500 })
   }
 }

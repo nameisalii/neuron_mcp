@@ -166,6 +166,8 @@ beforeEach(() => {
       extractorParseFailed: 0,
       validationFailed: 0,
       knowledgeItemCreateFailed: 0,
+        embeddingUpsertFailed: 0,
+        itemProcessingFailed: 0,
     },
   })
   ;(trackEvent as jest.Mock).mockResolvedValue(undefined)
@@ -511,6 +513,8 @@ describe('syncGmail thread grouping and chunks', () => {
         extractorParseFailed: 0,
         validationFailed: 0,
         knowledgeItemCreateFailed: 0,
+        embeddingUpsertFailed: 0,
+        itemProcessingFailed: 0,
       },
     })
     setupGmailApi([{ id: 'msg_1', threadId: 'thread_a', body: 'We decided to delay Product Hunt launch until integrations are stable.' }])
@@ -532,6 +536,8 @@ describe('syncGmail thread grouping and chunks', () => {
         extractorParseFailed: 1,
         validationFailed: 0,
         knowledgeItemCreateFailed: 0,
+        embeddingUpsertFailed: 0,
+        itemProcessingFailed: 0,
       },
     })
     setupGmailApi([{

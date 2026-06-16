@@ -48,6 +48,8 @@ export interface ExtractionDiagnostics {
   extractorParseFailed: number
   validationFailed: number
   knowledgeItemCreateFailed: number
+  embeddingUpsertFailed: number
+  itemProcessingFailed: number
 }
 
 export interface ExtractionResult {
@@ -62,6 +64,8 @@ function emptyDiagnostics(): ExtractionDiagnostics {
     extractorParseFailed: 0,
     validationFailed: 0,
     knowledgeItemCreateFailed: 0,
+    embeddingUpsertFailed: 0,
+    itemProcessingFailed: 0,
   }
 }
 
@@ -254,6 +258,7 @@ export async function extractKnowledgeDetailed(
           })
         } catch (pineconeErr) {
           console.error('[extractKnowledge] Pinecone upsert failed, rolling back DB item', pineconeErr)
+          diagnostics.embeddingUpsertFailed++
           await prisma.knowledgeItem.delete({ where: { id: dbItem.id } }).catch(() => null)
           continue
         }
@@ -261,6 +266,7 @@ export async function extractKnowledgeDetailed(
         saved.push(item)
       } catch (err) {
         console.error('[extractKnowledge] Item processing failed, skipping', err)
+        diagnostics.itemProcessingFailed++
         continue
       }
     }

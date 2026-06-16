@@ -7,7 +7,7 @@ import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding, deleteEmbeddings } from '@/lib/pinecone'
 import { prisma } from '@/lib/db'
 import { trackEvent } from '@/lib/activity'
-import { extractKnowledge } from '@/lib/extraction/extractor'
+import { extractKnowledgeDetailed } from '@/lib/extraction/extractor'
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ jest.mock('@/lib/db', () => ({
 jest.mock('@/lib/openai', () => ({ generateEmbedding: jest.fn() }))
 jest.mock('@/lib/pinecone', () => ({ upsertEmbedding: jest.fn(), deleteEmbeddings: jest.fn() }))
 jest.mock('@/lib/activity', () => ({ trackEvent: jest.fn() }))
-jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledge: jest.fn() }))
+jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledgeDetailed: jest.fn() }))
 
 // ─── typed refs ───────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ const mockPageFindUnique = jest.mocked(prisma.notionPage.findUnique)
 const mockChunkCreate = jest.mocked(prisma.notionChunk.create)
 const mockChunkDeleteMany = jest.mocked(prisma.notionChunk.deleteMany)
 const mockTrackEvent = jest.mocked(trackEvent)
-const mockExtractKnowledge = jest.mocked(extractKnowledge)
+const mockExtractKnowledgeDetailed = jest.mocked(extractKnowledgeDetailed)
 const mockKnowledgeCount = jest.mocked(prisma.knowledgeItem.count)
 const mockKnowledgeFindMany = jest.mocked(prisma.knowledgeItem.findMany)
 const mockKnowledgeDeleteMany = jest.mocked(prisma.knowledgeItem.deleteMany)
@@ -113,7 +113,18 @@ beforeEach(() => {
     Promise.resolve({ id: `chunk-${++chunkSeq}`, ...args.data }),
   )
   mockTrackEvent.mockResolvedValue(undefined)
-  mockExtractKnowledge.mockResolvedValue([])
+  mockExtractKnowledgeDetailed.mockResolvedValue({
+    items: [],
+    diagnostics: {
+      extractorCalled: 1,
+      extractorReturnedEmpty: 1,
+      extractorParseFailed: 0,
+      validationFailed: 0,
+      knowledgeItemCreateFailed: 0,
+      embeddingUpsertFailed: 0,
+      itemProcessingFailed: 0,
+    },
+  })
   mockKnowledgeCount.mockResolvedValue(1)
   mockKnowledgeFindMany.mockResolvedValue([])
   mockKnowledgeDeleteMany.mockResolvedValue({ count: 0 })
@@ -337,7 +348,7 @@ describe('diff sync — skip unchanged pages', () => {
     expect(result.pages).toBe(1)
     expect(mockBlocksList).not.toHaveBeenCalled()
     expect(mockGenerateEmbedding).not.toHaveBeenCalled()
-    expect(mockExtractKnowledge).toHaveBeenCalledWith(
+    expect(mockExtractKnowledgeDetailed).toHaveBeenCalledWith(
       expect.any(Array),
       WORKSPACE_ID,
       'notion',
@@ -798,6 +809,7 @@ describe('return value', () => {
     mockBlocksList.mockResolvedValueOnce({ results: [makeBlock('paragraph'), makeBlock('heading_1')], next_cursor: null, has_more: false })
     const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    expect(result).toMatchObject({ pages: 1, chunks: 2, skipped: 0, failed: [] })
+    expect(result).toMatchObject({ pages: 1, chunks: 2, skipped: 1, failed: [] })
+    expect(result.skippedReasons).toEqual({ no_extractable_knowledge: 1 })
   })
 })

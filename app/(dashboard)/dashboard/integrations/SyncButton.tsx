@@ -7,6 +7,12 @@ import { integrationPrimaryClass, integrationResetClass } from './IntegrationCar
 
 interface SyncResult {
   success?: boolean
+  fetched?: number
+  processed?: number
+  knowledgeCreated?: number
+  knowledgeUpdated?: number
+  chunksExtracted?: number
+  extractionEmbeddingErrors?: number
   synced?: number
   extracted?: number
   imported?: number
@@ -115,6 +121,16 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
   const gmailNeedsReconfigure = result?.importedThreads === 0
     && result.canReadMailbox === true
     && ((result.inboxMessagesAvailable ?? 0) > 0 || (result.sentMessagesAvailable ?? 0) > 0)
+  const knowledgeCreated = result?.knowledgeCreated ?? result?.extractedKnowledgeItems
+  const syncSummary = result && !result.error
+    ? knowledgeCreated != null && knowledgeCreated > 0
+      ? `Created ${knowledgeCreated} knowledge item${knowledgeCreated === 1 ? '' : 's'}`
+      : (result.knowledgeUpdated ?? 0) > 0
+        ? `Updated ${result.knowledgeUpdated} knowledge item${result.knowledgeUpdated === 1 ? '' : 's'}`
+      : (result.fetched ?? result.synced ?? result.importedThreads ?? result.issuesFound ?? result.pagesDeleted ?? 0) === 0
+        ? 'Synced 0 items — no accessible data found'
+        : result.message ?? 'Synced 0 items — no extractable knowledge found'
+    : null
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -142,10 +158,16 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
       </div>
       {result && !result.error && (
         <div className="max-w-sm text-left">
+          {syncSummary && <p className="text-xs font-medium text-gray-700">{syncSummary}</p>}
           {(() => {
             const total = result.issuesFound ?? result.synced ?? result.importedThreads ?? result.imported ?? result.deleted ?? 0
             return (
               <p className="text-xs text-gray-500">
+                {result.fetched != null && `${result.fetched} fetched · `}
+                {result.processed != null && `${result.processed} processed · `}
+                {result.knowledgeCreated != null && `${result.knowledgeCreated} created · `}
+                {result.knowledgeUpdated != null && `${result.knowledgeUpdated} updated · `}
+                {result.chunksExtracted != null && `${result.chunksExtracted} chunks extracted · `}
                 {result.importedThreads != null && `${result.importedThreads} threads · `}
                 {result.importedChunks != null && `${result.importedChunks} chunks · `}
                 {result.chunksEmbedded != null && `${result.chunksEmbedded} chunks embedded · `}
@@ -159,6 +181,7 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
                 {total} {resultLabel} · {result.extracted ?? 0} extracted
                 {result.teamsScanned != null && ` · ${result.teamsScanned} teams`}
                 {result.labelsScanned != null && ` · ${result.labelsScanned} labels`}
+                {result.extractionEmbeddingErrors != null && result.extractionEmbeddingErrors > 0 && ` · ${result.extractionEmbeddingErrors} extraction errors`}
                 {result.namespaceUsed && ` · ${result.namespaceUsed}`}
                 {result.conflicts != null && result.conflicts > 0 && ` · ${result.conflicts} conflicts`}
               </p>

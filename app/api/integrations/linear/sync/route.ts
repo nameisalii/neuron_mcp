@@ -101,6 +101,10 @@ export async function POST() {
         .catch(() => null)
       return NextResponse.json({
         success: false,
+        fetched: 0,
+        processed: 0,
+        knowledgeCreated: 0,
+        knowledgeUpdated: 0,
         imported: 0,
         updated: 0,
         skipped: 0,
@@ -113,6 +117,10 @@ export async function POST() {
     }
     return NextResponse.json({
       success: false,
+      fetched: 0,
+      processed: 0,
+      knowledgeCreated: 0,
+      knowledgeUpdated: 0,
       imported: 0,
       updated: 0,
       skipped: 0,

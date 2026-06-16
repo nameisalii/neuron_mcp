@@ -6,8 +6,12 @@ import { useRouter } from 'next/navigation'
 
 interface SyncResult {
   success?: boolean
+  fetched?: number
+  knowledgeCreated?: number
+  knowledgeUpdated?: number
   pagesProcessed?: number
   chunksCreated?: number
+  message?: string
   syncedBy?: string
   error?: string
 }
@@ -47,9 +51,19 @@ export default function NotionSyncButton({ workspaceId, label = 'Sync Now' }: { 
         {loading ? 'Syncing…' : label}
       </button>
       {result?.success && (
-        <p className="text-xs text-gray-500">
-          {result.pagesProcessed} pages · {result.chunksCreated} chunks
-        </p>
+        <div className="text-right">
+          <p className="text-xs font-medium text-gray-700">
+            {(result.knowledgeCreated ?? 0) > 0
+              ? `Created ${result.knowledgeCreated} knowledge item${result.knowledgeCreated === 1 ? '' : 's'}`
+              : (result.fetched ?? 0) === 0
+                ? 'Synced 0 items — no accessible data found'
+                : result.message ?? 'Synced 0 items — no extractable knowledge found'}
+          </p>
+          <p className="text-xs text-gray-500">
+            {result.pagesProcessed} pages · {result.chunksCreated} chunks
+            {result.knowledgeUpdated ? ` · ${result.knowledgeUpdated} updated` : ''}
+          </p>
+        </div>
       )}
       {result?.error && (
         <p className="text-xs text-red-600">{result.error}</p>

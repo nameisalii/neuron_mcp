@@ -120,6 +120,11 @@ export interface SyncInput {
 
 export interface LinearSyncResult {
   success: boolean
+  fetched?: number
+  processed?: number
+  knowledgeCreated?: number
+  knowledgeUpdated?: number
+  extractionEmbeddingErrors?: number
   synced: number
   extracted: number
   imported: number
@@ -299,6 +304,11 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
   const updatedAfter = existingLinearItems > 0 ? integration.lastSyncAt?.toISOString() ?? null : null
   const result: LinearSyncResult = {
     success: true,
+    fetched: 0,
+    processed: 0,
+    knowledgeCreated: 0,
+    knowledgeUpdated: 0,
+    extractionEmbeddingErrors: 0,
     synced: 0,
     extracted: 0,
     imported: 0,
@@ -323,6 +333,7 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
       pages++
       teamIssuesFound += page.nodes.length
       result.issuesFound += page.nodes.length
+      result.fetched! += page.nodes.length
 
       for (const issueRef of page.nodes) {
         try {
@@ -334,9 +345,12 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
           }
           const itemResult = await syncLinearIssue(integration.workspaceId, issue)
           result.synced++
+          result.processed!++
           result.extracted += itemResult.extracted
           result.imported += itemResult.imported
+          result.knowledgeCreated! += itemResult.imported
           result.updated += itemResult.updated
+          result.knowledgeUpdated! += itemResult.updated
           result.skipped += itemResult.skipped
           result.deleted += itemResult.deleted
           if (itemResult.skipped > 0) {
@@ -346,6 +360,7 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
         } catch (err) {
           const reason = err instanceof Error ? err.message : 'Unknown issue processing error'
           console.error(`[linear/sync] issue ${issueRef.id} skipped:`, err)
+          result.extractionEmbeddingErrors!++
           result.skipped++
           result.skippedReasons[reason] = (result.skippedReasons[reason] ?? 0) + 1
         }
@@ -359,6 +374,23 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
 
   if (result.issuesFound === 0) {
     result.message = 'Connected to Linear, but no issues were returned. Check team access/scopes.'
+  }
+
+  console.info('[linear/sync] summary', {
+    workspaceId: integration.workspaceId,
+    integration: 'linear',
+    rawItemsFetched: result.fetched,
+    chunksExtracted: result.processed,
+    knowledgeItemsCreated: result.knowledgeCreated,
+    knowledgeItemsUpdated: result.knowledgeUpdated,
+    skipped: result.skipped,
+    skippedReasons: result.skippedReasons,
+    extractionEmbeddingErrors: result.extractionEmbeddingErrors,
+    teamsScanned: result.teamsScanned,
+  })
+
+  if (result.issuesFound > 0 && result.synced === 0 && result.extractionEmbeddingErrors! > 0) {
+    throw new Error('Linear sync fetched issues, but ingestion failed for every item.')
   }
 
   await prisma.integration.update({

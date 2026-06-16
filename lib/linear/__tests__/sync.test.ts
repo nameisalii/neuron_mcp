@@ -127,12 +127,12 @@ describe('syncLinearIssues', () => {
     }))
   })
 
-  it('continues after an issue failure and returns the skip reason', async () => {
+  it('fails when every fetched issue fails ingestion', async () => {
     ;(generateEmbedding as jest.Mock).mockRejectedValue(new Error('Embedding failed'))
     mockAccessAndTeamIssues([ISSUE])
-    const result = await syncLinearIssues(BASE_INTEGRATION)
-    expect(result.skipped).toBe(1)
-    expect(result.skippedReasons).toEqual({ 'Embedding failed': 1 })
+    await expect(syncLinearIssues(BASE_INTEGRATION)).rejects.toThrow(
+      'Linear sync fetched issues, but ingestion failed for every item.',
+    )
   })
 
   it('deletes archived issues and vectors', async () => {

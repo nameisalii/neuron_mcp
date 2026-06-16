@@ -55,6 +55,8 @@ beforeEach(() => {
       extractorParseFailed: 0,
       validationFailed: 0,
       knowledgeItemCreateFailed: 0,
+        embeddingUpsertFailed: 0,
+        itemProcessingFailed: 0,
       contentTooShort: 0,
       skippedPromotional: 0,
       skippedNoUsefulSignal: 0,
