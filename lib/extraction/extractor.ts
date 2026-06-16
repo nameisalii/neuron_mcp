@@ -252,6 +252,7 @@ export async function extractKnowledgeDetailed(
               content: item.content,
               contentHash,
               category: item.category,
+              aiSuggestedCategory: item.category,
               source,
               sourceUrl,
               sourceExternalId,

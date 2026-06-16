@@ -305,6 +305,7 @@ async function createFallbackKnowledgeItem(
         content,
         contentHash,
         category: 'reference',
+        aiSuggestedCategory: 'reference',
         source: 'gmail',
         sourceUrl: gmailThreadUrl(threadId),
         sourceExternalId: threadId,

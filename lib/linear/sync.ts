@@ -266,6 +266,21 @@ export async function syncLinearIssue(
   const existingCount = await prisma.knowledgeItem.count({
     where: { workspaceId, source: 'linear', OR: [{ sourceExternalId: issue.id }, { sourceUrl: issue.url }] },
   })
+  const existingOverride = await prisma.knowledgeItem.findFirst({
+    where: {
+      workspaceId,
+      source: 'linear',
+      OR: [{ sourceExternalId: issue.id }, { sourceUrl: issue.url }],
+      typeOverriddenByUser: true,
+    },
+    select: {
+      category: true,
+      aiSuggestedCategory: true,
+      typeOverriddenByUser: true,
+      typeOverriddenAt: true,
+      typeOverriddenByUserId: true,
+    },
+  })
 
   if (issue.archivedAt) {
     const deleted = await deleteLinearIssue(workspaceId, issue.id, issue.url)
@@ -274,18 +289,23 @@ export async function syncLinearIssue(
 
   await deleteLinearIssue(workspaceId, issue.id, issue.url)
   const document = buildContent(issue)
-  const category = issue.completedAt || issue.canceledAt ? 'status_update' : 'fact'
+  const aiCategory = issue.completedAt || issue.canceledAt ? 'status_update' : 'fact'
+  const category = existingOverride?.category ?? aiCategory
   const dbItem = await prisma.knowledgeItem.create({
     data: {
       workspaceId,
       content: document,
       contentHash: contentHash(document),
       category,
+      aiSuggestedCategory: existingOverride?.aiSuggestedCategory ?? aiCategory,
       source: 'linear',
       sourceUrl: issue.url,
       sourceExternalId: issue.id,
       owner: issue.assignee?.name ?? null,
       confidence: 0.9,
+      typeOverriddenByUser: existingOverride?.typeOverriddenByUser ?? false,
+      typeOverriddenAt: existingOverride?.typeOverriddenAt ?? null,
+      typeOverriddenByUserId: existingOverride?.typeOverriddenByUserId ?? null,
       sourceCreatedAt: new Date(issue.createdAt),
     },
     select: { id: true },

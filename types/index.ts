@@ -8,6 +8,7 @@ export type KnowledgeCategory =
   | 'status_update'
   | 'reference'
   | 'fact'
+  | 'note'
 
 export type WorkspaceType = 'solo' | 'team'
 export type WorkspacePlan = 'free' | 'starter' | 'team' | 'business'

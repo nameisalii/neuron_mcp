@@ -11,6 +11,8 @@ export interface KnowledgeItemRow {
   id: string
   content: string
   category: string
+  aiSuggestedCategory?: string | null
+  typeOverriddenByUser?: boolean | null
   source: string
   confidence: number
   verified: boolean
@@ -38,9 +40,11 @@ const FILTERS = [
 interface BrainGridProps {
   items: KnowledgeItemRow[]
   activeFilter?: string
+  onCategoryChange?: (id: string, nextCategory: string) => void
 }
 
-export default function BrainGrid({ items, activeFilter = 'all' }: BrainGridProps) {
+export default function BrainGrid({ items, activeFilter = 'all', onCategoryChange }: BrainGridProps) {
+  const [localItems, setLocalItems] = useState(items)
   const [search, setSearch] = useState('')
   const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set())
   const [verifyingIds, setVerifyingIds] = useState<Set<string>>(new Set())
@@ -48,7 +52,7 @@ export default function BrainGrid({ items, activeFilter = 'all' }: BrainGridProp
 
   const router = useRouter()
   const activeCategory = FILTERS.find((filter) => filter.value === activeFilter)?.category
-  const displayItems = dedupeLinearItems(items)
+  const displayItems = dedupeLinearItems(localItems)
   const filtered = displayItems.filter((item) => {
     const matchesFilter = !activeCategory || item.category === activeCategory
     const matchesSearch =
@@ -79,6 +83,15 @@ export default function BrainGrid({ items, activeFilter = 'all' }: BrainGridProp
         return next
       })
     }
+  }
+
+  function handleCategoryChange(id: string, nextCategory: string) {
+    setLocalItems((prev) => prev.map((item) => (
+      item.id === id
+        ? { ...item, category: nextCategory, typeOverriddenByUser: true }
+        : item
+    )))
+    onCategoryChange?.(id, nextCategory)
   }
 
   return (
@@ -114,7 +127,7 @@ export default function BrainGrid({ items, activeFilter = 'all' }: BrainGridProp
 
       {filtered.length === 0 ? (
         <Card padding="lg" className="text-center text-gray-500 text-sm">
-          {items.length === 0
+          {localItems.length === 0
             ? 'No knowledge items yet. Connect Slack and run a sync.'
             : 'No items match your filter.'}
         </Card>
@@ -158,6 +171,7 @@ export default function BrainGrid({ items, activeFilter = 'all' }: BrainGridProp
                     )}
                   </div>
                 }
+                onCategoryChange={handleCategoryChange}
               />
             )
           })}

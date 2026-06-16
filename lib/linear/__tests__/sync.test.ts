@@ -11,7 +11,7 @@ jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledgeDetailed: jest.
 jest.mock('@/lib/db', () => ({
   prisma: {
     knowledgeItem: {
-      create: jest.fn(), update: jest.fn(), count: jest.fn(), findMany: jest.fn(), deleteMany: jest.fn(), delete: jest.fn(),
+      create: jest.fn(), update: jest.fn(), count: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), deleteMany: jest.fn(), delete: jest.fn(),
     },
     integration: { update: jest.fn() },
   },
@@ -72,6 +72,7 @@ beforeEach(() => {
   })
   ;(prisma.knowledgeItem.count as jest.Mock).mockResolvedValue(0)
   ;(prisma.knowledgeItem.findMany as jest.Mock).mockResolvedValue([])
+  ;(prisma.knowledgeItem.findFirst as jest.Mock).mockResolvedValue(null)
   ;(prisma.knowledgeItem.deleteMany as jest.Mock).mockResolvedValue({ count: 0 })
   ;(prisma.knowledgeItem.create as jest.Mock).mockResolvedValue({ id: 'ki_1' })
   ;(prisma.knowledgeItem.update as jest.Mock).mockResolvedValue({})
@@ -147,6 +148,29 @@ describe('syncLinearIssues', () => {
     expect(result.imported).toBe(1)
     expect(result.embeddingErrors).toBeGreaterThan(0)
     expect(prisma.knowledgeItem.delete).not.toHaveBeenCalled()
+  })
+
+  it('does not overwrite a manually changed issue category on resync', async () => {
+    ;(prisma.knowledgeItem.count as jest.Mock).mockResolvedValue(1)
+    ;(prisma.knowledgeItem.findFirst as jest.Mock).mockResolvedValue({
+      category: 'process',
+      aiSuggestedCategory: 'fact',
+      typeOverriddenByUser: true,
+      typeOverriddenAt: new Date('2026-06-16T00:00:00.000Z'),
+      typeOverriddenByUserId: 'clerk-1',
+    })
+    mockAccessAndTeamIssues([ISSUE])
+
+    await syncLinearIssues(BASE_INTEGRATION)
+
+    expect(prisma.knowledgeItem.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        category: 'process',
+        aiSuggestedCategory: 'fact',
+        typeOverriddenByUser: true,
+        typeOverriddenByUserId: 'clerk-1',
+      }),
+    }))
   })
 
   it('deletes archived issues and vectors', async () => {

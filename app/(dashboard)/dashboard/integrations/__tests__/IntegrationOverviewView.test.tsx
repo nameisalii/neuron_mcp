@@ -23,6 +23,19 @@ function makeData(overrides: Partial<IntegrationOverviewData> = {}): Integration
       { label: 'Selected labels', value: 'Inbox · Sent' },
       { label: 'Privacy', value: 'Personal' },
     ],
+    totalCount: 1,
+    categoryCounts: {
+      decision: 1,
+      rule: 0,
+      process: 0,
+      idea: 0,
+      fact: 0,
+      status_update: 0,
+      plan: 0,
+      follow_up: 0,
+      reference: 0,
+      note: 0,
+    },
     filters: [
       { key: 'all', label: 'All', count: 1 },
       { key: 'decisions', label: 'Decisions', count: 0 },
@@ -66,7 +79,7 @@ describe('IntegrationOverviewView', () => {
     expect(screen.getByText('Gmail Overview')).toBeInTheDocument()
     expect(screen.getByText('Gmail memory is personal. Your emails are not shared with your team.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to Integrations' })).toHaveAttribute('href', '/dashboard/integrations')
-    expect(screen.getByRole('link', { name: 'Decisions 0' })).toHaveAttribute('href', '/dashboard/integrations/gmail?filter=decisions')
+    expect(screen.getByRole('link', { name: 'Decisions 1' })).toHaveAttribute('href', '/dashboard/integrations/gmail?filter=decisions')
     expect(screen.getByText('Launch update')).toBeInTheDocument()
   })
 

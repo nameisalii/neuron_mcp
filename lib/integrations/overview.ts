@@ -31,7 +31,7 @@ export const INTEGRATION_FILTERS: Array<{ key: IntegrationFilter; label: string;
 ]
 
 const FILTER_LOOKUP = new Map(INTEGRATION_FILTERS.map((item) => [item.key, item]))
-const CATEGORIES: KnowledgeCategory[] = ['decision', 'rule', 'process', 'idea', 'fact', 'status_update', 'plan', 'follow_up', 'reference']
+const CATEGORIES: KnowledgeCategory[] = ['decision', 'rule', 'process', 'idea', 'fact', 'status_update', 'plan', 'follow_up', 'reference', 'note']
 
 export interface IntegrationSummaryCard {
   label: string
@@ -72,6 +72,8 @@ export interface IntegrationOverviewData {
   lastSyncAt: string | null
   summaryCards: IntegrationSummaryCard[]
   details: IntegrationDetail[]
+  totalCount: number
+  categoryCounts: Record<KnowledgeCategory, number>
   filters: Array<{ key: IntegrationFilter; label: string; count: number }>
   items: IntegrationOverviewItem[]
   notionProjects?: NotionProject[]
@@ -224,6 +226,8 @@ export async function loadIntegrationOverview(
         id: true,
         content: true,
         category: true,
+        aiSuggestedCategory: true,
+        typeOverriddenByUser: true,
         source: true,
         sourceUrl: true,
         sourceExternalId: true,
@@ -380,6 +384,8 @@ function buildOverviewData({
     sourceCreatedAt: Date | null
     updatedAt: Date
     notionPageTitle: string | null
+    aiSuggestedCategory: string | null
+    typeOverriddenByUser: boolean
   }>
   notionProjects?: NotionProject[]
 }): IntegrationOverviewData {
@@ -391,8 +397,10 @@ function buildOverviewData({
     connected,
     filter,
     lastSyncAt,
-      summaryCards,
+    summaryCards,
     details,
+    totalCount,
+    categoryCounts,
     filters: INTEGRATION_FILTERS.map((item) => ({
       key: item.key,
       label: item.label,

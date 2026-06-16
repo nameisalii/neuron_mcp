@@ -55,6 +55,7 @@ model KnowledgeItem {
   workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   content          String
   category         String
+  aiSuggestedCategory String?
   source           String
   sourceUrl        String?
   sourceExternalId String?
@@ -77,6 +78,9 @@ model KnowledgeItem {
   notionPageTitle  String?
   visibility       String      @default("team")
   visibilitySetBy  String?
+  typeOverriddenByUser Boolean @default(false)
+  typeOverriddenAt DateTime?
+  typeOverriddenByUserId String?
   sourceCreatedAt  DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt

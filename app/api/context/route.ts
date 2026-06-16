@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { validateApiKey } from '@/lib/api-auth'
 
-const VALID_CATEGORIES = ['rule', 'decision', 'process', 'idea'] as const
+const VALID_CATEGORIES = ['rule', 'decision', 'process', 'idea', 'fact', 'reference', 'status_update', 'note'] as const
 const SECTION_LABELS: Record<string, string> = {
   rule: 'Rules & Policies',
   decision: 'Key Decisions',

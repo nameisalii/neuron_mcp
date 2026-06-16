@@ -395,6 +395,7 @@ async function createPropertyFallbackKnowledgeItem(input: {
       content,
       contentHash: hash,
       category: 'reference',
+      aiSuggestedCategory: 'reference',
       source: 'notion',
       sourceUrl: input.url,
       sourceExternalId: input.pageId,
@@ -576,11 +577,12 @@ export async function syncNotionPages(
 
           const priorKnowledge = await prisma.knowledgeItem.findMany({
             where: { workspaceId, source: 'notion', sourceExternalId: page.id },
-            select: { id: true, embeddingId: true },
+            select: { id: true, embeddingId: true, typeOverriddenByUser: true },
           })
-          await deleteEmbeddings(priorKnowledge.map((item) => item.embeddingId ?? item.id))
+          const replaceableKnowledge = priorKnowledge.filter((item) => !item.typeOverriddenByUser)
+          await deleteEmbeddings(replaceableKnowledge.map((item) => item.embeddingId ?? item.id))
           await prisma.knowledgeItem.deleteMany({
-            where: { id: { in: priorKnowledge.map((item) => item.id) }, workspaceId },
+            where: { id: { in: replaceableKnowledge.map((item) => item.id) }, workspaceId },
           })
           const extraction = await extractKnowledgeDetailed(
             notionExtractionMessages(content, title, page.last_edited_time, page.url),

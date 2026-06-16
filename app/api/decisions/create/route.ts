@@ -44,6 +44,7 @@ export async function POST(req: Request) {
         workspaceId,
         content: decision,
         category: 'decision',
+        aiSuggestedCategory: 'decision',
         source: 'mcp',
         reason: reason ?? null,
         alternatives: alternatives ?? null,

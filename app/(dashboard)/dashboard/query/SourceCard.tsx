@@ -16,6 +16,7 @@ export default function SourceCard({ source, i, variants }: Props) {
       <KnowledgeCard
         compact
         item={{
+          id: source.pageId ? undefined : source.chunkId,
           content: source.content,
           category: source.labels[0] ?? 'fact',
           source: source.source,

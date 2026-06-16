@@ -1,10 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
-import { Brain, GitBranch, Lightbulb, Clock } from 'lucide-react'
-import { Card } from '@/components/ui/card'
-import { clsx } from 'clsx'
-import BrainGrid from '../brain/BrainGrid'
+import OverviewClient from './OverviewClient'
 
 const FILTER_MAP = {
   all: null,
@@ -68,19 +65,13 @@ export default async function OverviewPage({
       take: 100,
       select: {
         id: true, content: true, category: true, source: true, confidence: true,
+        aiSuggestedCategory: true, typeOverriddenByUser: true,
         verified: true, verifiedAt: true, frozen: true, conflictNote: true, createdAt: true,
         sourceUrl: true, sourceExternalId: true, owner: true, sourceCreatedAt: true,
         updatedAt: true, notionPageTitle: true,
       },
     }),
   ])
-
-  const stats = [
-    { label: 'Knowledge Items', value: knowledgeCount, icon: Brain, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Decisions', value: decisionCount, icon: GitBranch, color: 'text-purple-600', bg: 'bg-purple-50' },
-    { label: 'Ideas', value: ideaCount, icon: Lightbulb, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Last Sync', value: timeAgo(latestIntegration?.lastSyncAt ?? null), icon: Clock, color: 'text-gray-600', bg: 'bg-gray-50', isText: true },
-  ]
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -89,23 +80,11 @@ export default async function OverviewPage({
         <p className="text-gray-500 text-sm mt-1">Your company&apos;s collective intelligence.</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} padding="sm">
-            <div className={clsx('w-8 h-8 rounded-md flex items-center justify-center mb-3', stat.bg)}>
-              <stat.icon className={clsx('w-4 h-4', stat.color)} />
-            </div>
-            <p className={clsx('font-bold', stat.isText ? 'text-lg text-gray-700' : 'text-2xl text-gray-900')}>
-              {stat.value}
-            </p>
-            <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
-          </Card>
-        ))}
-      </div>
-
-      <BrainGrid
+      <OverviewClient
         activeFilter={filter}
-        items={items.map((item) => ({
+        initialCounts={{ all: knowledgeCount, decision: decisionCount, idea: ideaCount }}
+        lastSyncLabel={timeAgo(latestIntegration?.lastSyncAt ?? null)}
+        initialItems={items.map((item) => ({
           ...item,
           createdAt: item.createdAt.toISOString(),
           verifiedAt: item.verifiedAt?.toISOString() ?? null,

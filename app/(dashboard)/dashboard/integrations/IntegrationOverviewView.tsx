@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import { useMemo, useState } from 'react'
 import { ArrowLeft, CheckCircle, ChevronRight, ExternalLink, FileText } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import SourceIcon from '@/components/SourceIcon'
@@ -21,10 +24,47 @@ function timeAgo(iso: string | null): string {
 }
 
 export default function IntegrationOverviewView({ data }: Props) {
+  const [items, setItems] = useState(data.items)
+  const [overrides, setOverrides] = useState<Record<string, { from: string; to: string }>>({})
+  const categoryCounts = useMemo(() => {
+    const next = { ...data.categoryCounts }
+    for (const change of Object.values(overrides)) {
+      if (change.from === change.to) continue
+      if (change.from in next) next[change.from as keyof typeof next]--
+      if (change.to in next) next[change.to as keyof typeof next]++
+    }
+    return next
+  }, [data.categoryCounts, overrides])
   const filterOptions = INTEGRATION_FILTERS.map((filter) => ({
     ...filter,
     active: filter.key === data.filter,
   }))
+  const activeCategory = filterOptions.find((filter) => filter.active)?.category
+  const visibleItems = activeCategory ? items.filter((item) => item.category === activeCategory) : items
+  const summaryCards = data.summaryCards.map((card) => {
+    const normalized = card.label.toLowerCase()
+    if (normalized === 'decisions') return { ...card, value: String(categoryCounts.decision ?? 0) }
+    if (normalized === 'rules') return { ...card, value: String(categoryCounts.rule ?? 0) }
+    if (normalized === 'ideas') return { ...card, value: String(categoryCounts.idea ?? 0) }
+    if (normalized === 'processes') return { ...card, value: String(categoryCounts.process ?? 0) }
+    if (normalized === 'facts') return { ...card, value: String(categoryCounts.fact ?? 0) }
+    if (normalized === 'status updates') return { ...card, value: String(categoryCounts.status_update ?? 0) }
+    return card
+  })
+
+  function handleCategoryChange(id: string, nextCategory: string) {
+    setItems((prev) => prev.map((item) => {
+      if (item.id !== id) return item
+      setOverrides((current) => {
+        const original = current[id]?.from ?? item.category
+        const updated = { ...current }
+        if (original === nextCategory) delete updated[id]
+        else updated[id] = { from: original, to: nextCategory }
+        return updated
+      })
+      return { ...item, category: nextCategory, typeOverriddenByUser: true }
+    }))
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -60,7 +100,7 @@ export default function IntegrationOverviewView({ data }: Props) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {data.summaryCards.map((card) => (
+        {summaryCards.map((card) => (
           <Card key={card.label} padding="sm">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{card.label}</p>
             <p className="mt-2 text-lg font-semibold text-gray-900 break-words">{card.value}</p>
@@ -142,18 +182,19 @@ export default function IntegrationOverviewView({ data }: Props) {
             )}
           >
             {filter.label}
-            <span className="text-xs text-gray-400">{data.filters.find((item) => item.key === filter.key)?.count ?? 0}</span>
+            <span className="text-xs text-gray-400">{filter.key === 'all' || !filter.category ? data.totalCount : categoryCounts[filter.category] ?? 0}</span>
           </Link>
         ))}
       </div>
 
-      {data.items.length > 0 ? (
+      {visibleItems.length > 0 ? (
         <div className="space-y-3">
-          {data.items.map((item) => (
+          {visibleItems.map((item) => (
             <KnowledgeCard
               key={item.id}
               compact
               item={item}
+              onCategoryChange={handleCategoryChange}
               footer={item.sourceUrl ? (
                 <a
                   href={item.sourceUrl}

@@ -1,6 +1,9 @@
 export interface KnowledgePreviewInput {
+  id?: string
   content: string
   category: string
+  aiSuggestedCategory?: string | null
+  typeOverriddenByUser?: boolean | null
   source: string
   sourceUrl?: string | null
   sourceExternalId?: string | null
@@ -45,7 +48,7 @@ export function formatKnowledgeItemPreview(item: KnowledgePreviewInput): Knowled
   const cleaned = cleanMarkdown(item.content)
   const firstLine = cleaned.split('\n').find(Boolean) ?? `${sourceLabel} knowledge`
   const suppliedTitle = item.title?.trim()
-  const hasMeaningfulTitle = Boolean(suppliedTitle && !['rule', 'decision', 'process', 'idea', 'plan', 'status_update', 'reference', 'fact'].includes(suppliedTitle.toLowerCase()))
+  const hasMeaningfulTitle = Boolean(suppliedTitle && !['rule', 'decision', 'process', 'idea', 'plan', 'status_update', 'reference', 'fact', 'note'].includes(suppliedTitle.toLowerCase()))
   const displayTitle = hasMeaningfulTitle ? suppliedTitle! : firstLine.slice(0, 100)
   const remainder = cleaned.replace(firstLine, '').trim()
 
@@ -206,7 +209,7 @@ function splitLabels(value?: string): string[] {
 }
 
 function isGenericCategory(label: string): boolean {
-  return ['rule', 'decision', 'process', 'idea', 'plan', 'status_update', 'reference', 'fact'].includes(label.toLowerCase())
+  return ['rule', 'decision', 'process', 'idea', 'plan', 'status_update', 'reference', 'fact', 'note'].includes(label.toLowerCase())
 }
 
 function chip(label: string, value: string | null, kind: KnowledgeMetadataChip['kind']): KnowledgeMetadataChip | null {

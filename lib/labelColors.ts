@@ -15,6 +15,7 @@ export const LABEL_META: Record<string, LabelMeta> = {
   status:       { bg: 'bg-orange-100',  text: 'text-orange-700',  border: 'border-orange-300',  activeBg: 'bg-orange-50',  displayName: 'Status' },
   reference:    { bg: 'bg-cyan-100',    text: 'text-cyan-700',    border: 'border-cyan-300',    activeBg: 'bg-cyan-50',    displayName: 'Reference' },
   fact:         { bg: 'bg-slate-100',   text: 'text-slate-700',   border: 'border-slate-300',   activeBg: 'bg-slate-50',   displayName: 'Fact' },
+  note:         { bg: 'bg-gray-100',    text: 'text-gray-700',    border: 'border-gray-300',    activeBg: 'bg-gray-50',    displayName: 'Note' },
   context:      { bg: 'bg-gray-100',    text: 'text-gray-600',    border: 'border-gray-300',    activeBg: 'bg-gray-50',    displayName: 'Context' },
   meeting_note: { bg: 'bg-pink-100',    text: 'text-pink-700',    border: 'border-pink-300',    activeBg: 'bg-pink-50',    displayName: 'Meeting Note' },
   plan:         { bg: 'bg-cyan-100',    text: 'text-cyan-700',    border: 'border-cyan-300',    activeBg: 'bg-cyan-50',    displayName: 'Plan' },
