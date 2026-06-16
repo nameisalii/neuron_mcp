@@ -12,13 +12,8 @@
 
 import { POST } from '@/app/api/webhooks/clerk/route'
 
-// ── Prisma mock ───────────────────────────────────────────────────────────────
-jest.mock('@/lib/db', () => ({
-  prisma: {
-    user: { create: jest.fn(), upsert: jest.fn() },
-    workspace: { upsert: jest.fn() },
-    workspaceMember: { upsert: jest.fn() },
-  },
+jest.mock('@/lib/provision-user', () => ({
+  provisionUser: jest.fn(),
 }))
 
 // ── next/headers mock ─────────────────────────────────────────────────────────
@@ -35,7 +30,7 @@ jest.mock('svix', () => ({
 }))
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-import { prisma } from '@/lib/db'
+import { provisionUser } from '@/lib/provision-user'
 
 const VALID_SVIX_HEADERS = {
   'svix-id': 'msg_test_id',
@@ -78,6 +73,10 @@ beforeEach(() => {
   // Default: valid verify returns the event
   mockVerify.mockReturnValue(USER_CREATED_EVENT)
   setMockHeaders()
+  ;(provisionUser as jest.Mock).mockResolvedValue({
+    user: { id: 'db_user_1' },
+    workspace: { id: 'ws_1' },
+  })
 })
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -133,19 +132,15 @@ describe('POST /api/webhooks/clerk', () => {
   })
 
   describe('user.created — happy path', () => {
-    it('calls prisma.user.upsert with correct data and returns 200', async () => {
-      const mockUserUpsert = prisma.user.upsert as jest.Mock
-      const mockWorkspaceUpsert = (prisma.workspace as jest.Mocked<typeof prisma.workspace>).upsert as jest.Mock
-      mockUserUpsert.mockResolvedValue({ id: 'db_user_1' })
-      mockWorkspaceUpsert.mockResolvedValue({ id: 'ws_1' })
-
+    it('provisions the user safely and returns 200', async () => {
       const res = await POST(buildRequest(USER_CREATED_EVENT))
 
       expect(res.status).toBe(200)
-      expect(mockUserUpsert).toHaveBeenCalledWith({
-        where: { clerkId: 'user_clerk_123' },
-        update: {},
-        create: { clerkId: 'user_clerk_123', email: 'alice@example.com', name: 'Alice Smith' },
+      expect(provisionUser).toHaveBeenCalledWith({
+        clerkId: 'user_clerk_123',
+        email: 'alice@example.com',
+        name: 'Alice Smith',
+        imageUrl: undefined,
       })
     })
 
@@ -160,30 +155,32 @@ describe('POST /api/webhooks/clerk', () => {
         },
       }
       mockVerify.mockReturnValue(eventNoName)
-      const mockUserUpsert = prisma.user.upsert as jest.Mock
-      const mockWorkspaceUpsert = (prisma.workspace as jest.Mocked<typeof prisma.workspace>).upsert as jest.Mock
-      mockUserUpsert.mockResolvedValue({ id: 'db_user_2' })
-      mockWorkspaceUpsert.mockResolvedValue({ id: 'ws_2' })
 
       const res = await POST(buildRequest(eventNoName))
 
       expect(res.status).toBe(200)
-      expect(mockUserUpsert).toHaveBeenCalledWith(
-        expect.objectContaining({ create: expect.objectContaining({ name: null }) }),
-      )
+      expect(provisionUser).toHaveBeenCalledWith(expect.objectContaining({ name: null }))
     })
 
-    it('upserts a Workspace row linked to the user', async () => {
-      const mockUserUpsert = prisma.user.upsert as jest.Mock
-      const mockWorkspaceUpsert = (prisma.workspace as jest.Mocked<typeof prisma.workspace>).upsert as jest.Mock
-      mockUserUpsert.mockResolvedValue({ id: 'db_user_3' })
-      mockWorkspaceUpsert.mockResolvedValue({ id: 'ws_3' })
+    it('passes the Clerk image URL through to provisioning', async () => {
+      const eventWithImage = {
+        type: 'user.created',
+        data: {
+          id: 'user_clerk_123',
+          email_addresses: [{ email_address: 'alice@example.com' }],
+          first_name: 'Alice',
+          last_name: 'Smith',
+          image_url: 'https://example.com/alice.png',
+        },
+      }
+      mockVerify.mockReturnValue(eventWithImage)
 
-      await POST(buildRequest(USER_CREATED_EVENT))
+      const res = await POST(buildRequest(eventWithImage))
 
-      expect(mockWorkspaceUpsert).toHaveBeenCalledWith(
-        expect.objectContaining({ create: expect.objectContaining({ ownerId: 'db_user_3' }) }),
-      )
+      expect(res.status).toBe(200)
+      expect(provisionUser).toHaveBeenCalledWith(expect.objectContaining({
+        imageUrl: 'https://example.com/alice.png',
+      }))
     })
   })
 
@@ -204,7 +201,7 @@ describe('POST /api/webhooks/clerk', () => {
 
       expect(res.status).toBe(400)
       expect(await res.text()).toMatch(/no email address/i)
-      expect(prisma.user.upsert).not.toHaveBeenCalled()
+      expect(provisionUser).not.toHaveBeenCalled()
     })
 
     it('returns 400 when email_address field is an empty string', async () => {
@@ -222,7 +219,7 @@ describe('POST /api/webhooks/clerk', () => {
       const res = await POST(buildRequest(eventEmptyEmail))
 
       expect(res.status).toBe(400)
-      expect(prisma.user.upsert).not.toHaveBeenCalled()
+      expect(provisionUser).not.toHaveBeenCalled()
     })
   })
 
@@ -234,7 +231,7 @@ describe('POST /api/webhooks/clerk', () => {
       const res = await POST(buildRequest(otherEvent))
 
       expect(res.status).toBe(200)
-      expect(prisma.user.upsert).not.toHaveBeenCalled()
+      expect(provisionUser).not.toHaveBeenCalled()
     })
   })
 })

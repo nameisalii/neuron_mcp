@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import type { WebhookEvent } from '@clerk/nextjs/server'
 import { Webhook } from 'svix'
-import { prisma } from '@/lib/db'
+import { provisionUser } from '@/lib/provision-user'
 
 export async function POST(req: Request) {
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET
@@ -37,32 +37,11 @@ export async function POST(req: Request) {
 
     if (!email) return new Response('No email address', { status: 400 })
 
-    // 1. Upsert user (idempotent for webhook retries)
-    const user = await prisma.user.upsert({
-      where: { clerkId },
-      update: {},
-      create: { clerkId, email, name },
-    })
-
-    // 2. Upsert solo workspace owned by this user's DB id
-    const workspace = await prisma.workspace.upsert({
-      where: { ownerId: user.id },
-      update: {},
-      create: { ownerId: user.id, type: 'solo', plan: 'free' },
-    })
-
-    // 3. Seed owner membership so permission system works immediately
-    await prisma.workspaceMember.upsert({
-      where: { workspaceId_userId: { workspaceId: workspace.id, userId: clerkId } },
-      update: {},
-      create: {
-        workspaceId: workspace.id,
-        userId: clerkId,
-        role: 'owner',
-        displayName: name ?? email,
-        avatarUrl: image_url ?? null,
-        status: 'active',
-      },
+    await provisionUser({
+      clerkId,
+      email,
+      name,
+      imageUrl: image_url,
     })
   }
 
