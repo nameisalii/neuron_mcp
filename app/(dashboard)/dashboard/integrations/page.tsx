@@ -31,6 +31,15 @@ function SuccessBanner({ children }: { children: React.ReactNode }) {
 }
 
 const statTileClass = 'bg-cream rounded-xl px-3.5 py-2.5 border border-warm/60'
+const notionOAuthAdminMessage =
+  'Notion OAuth client mismatch. Check NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, and redirect URI in Vercel/Notion.'
+const notionOAuthMismatchReasons = new Set([
+  'invalid_client',
+  'invalid_request',
+  'unauthorized_client',
+  'invalid_grant',
+  'token_exchange',
+])
 
 export default async function IntegrationsPage(
   props: {
@@ -111,10 +120,10 @@ export default async function IntegrationsPage(
             {searchParams.error === 'linear_failed' && 'Linear connection failed. Please try again.'}
             {searchParams.error === 'gmail_failed' && 'Gmail connection failed. Please try again.'}
             {searchParams.error === 'notion_failed' && (
-              searchParams.reason === 'invalid_client'
+              searchParams.reason && notionOAuthMismatchReasons.has(searchParams.reason)
                 ? process.env.NODE_ENV === 'development'
-                  ? 'Notion rejected the configured OAuth client. Update NOTION_CLIENT_ID and NOTION_CLIENT_SECRET in .env.local, then restart the development server.'
-                  : 'Notion rejected the configured OAuth client. Please contact support.'
+                  ? `${notionOAuthAdminMessage} For local development, update .env.local and restart the development server.`
+                  : notionOAuthAdminMessage
                 : 'Notion connection failed. Please try again.'
             )}
             {searchParams.error === 'notion_not_configured' && (

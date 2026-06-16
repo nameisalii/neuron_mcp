@@ -3,7 +3,12 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { cookies } from 'next/headers'
 import { randomBytes } from 'crypto'
-import { getNotionClientId, getNotionRedirectUri, isNotionOAuthConfigured } from '@/lib/notion/oauth'
+import {
+  getNotionClientId,
+  getNotionClientIdPrefix,
+  getNotionRedirectUri,
+  isNotionOAuthConfigured,
+} from '@/lib/notion/oauth'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 
@@ -49,6 +54,10 @@ export async function GET(req: Request) {
     owner: 'user',
     redirect_uri: getNotionRedirectUri(),
     state: stateToken,
+  })
+  console.info('[notion/connect] OAuth authorize URL generated', {
+    redirectUri: params.get('redirect_uri'),
+    clientIdPrefix: getNotionClientIdPrefix(),
   })
   return NextResponse.redirect(`https://api.notion.com/v1/oauth/authorize?${params}`)
 }

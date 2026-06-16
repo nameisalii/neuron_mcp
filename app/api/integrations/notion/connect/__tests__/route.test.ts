@@ -15,14 +15,23 @@ jest.mock('@/lib/db', () => ({
 }))
 
 const request = new Request('http://localhost/api/integrations/notion/connect')
+let infoSpy: jest.SpyInstance
+let warnSpy: jest.SpyInstance
 
 beforeEach(() => {
   jest.clearAllMocks()
+  infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
+  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
   process.env.NOTION_CLIENT_ID = 'notion-client'
   process.env.NOTION_CLIENT_SECRET = 'notion-secret'
   ;(auth as unknown as jest.Mock).mockResolvedValue({ userId: 'user-1' })
   ;(prisma.user.findUnique as jest.Mock).mockResolvedValue({ workspace: { id: 'workspace-1' } })
   ;(prisma.workspaceMember.findUnique as jest.Mock).mockResolvedValue({ role: 'owner', status: 'active' })
+})
+
+afterEach(() => {
+  infoSpy.mockRestore()
+  warnSpy.mockRestore()
 })
 
 describe('GET /api/integrations/notion/connect', () => {
@@ -40,6 +49,14 @@ describe('GET /api/integrations/notion/connect', () => {
       expect.objectContaining({ httpOnly: true, sameSite: 'lax' }),
     )
     expect(setCookie.mock.calls[0][1]).toContain('"workspaceId":"workspace-1"')
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[notion/connect] OAuth authorize URL generated',
+      {
+        redirectUri: 'http://localhost:3000/api/integrations/notion/callback',
+        clientIdPrefix: 'notion',
+      },
+    )
+    expect(warnSpy).not.toHaveBeenCalled()
   })
 
   it('does not create an Integration before the OAuth callback', async () => {

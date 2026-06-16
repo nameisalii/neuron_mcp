@@ -3,7 +3,13 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
-import { getNotionAppUrl, getNotionClientId, getNotionClientSecret, getNotionRedirectUri } from '@/lib/notion/oauth'
+import {
+  getNotionAppUrl,
+  getNotionClientId,
+  getNotionClientIdPrefix,
+  getNotionClientSecret,
+  getNotionRedirectUri,
+} from '@/lib/notion/oauth'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 const NOTION_OAUTH_ERROR_CODES = new Set([
@@ -64,7 +70,14 @@ export async function GET(req: NextRequest) {
     bot_id?: string
   }
   try {
-    const credentials = Buffer.from(`${getNotionClientId()}:${getNotionClientSecret()}`).toString('base64')
+    const clientId = getNotionClientId()
+    const clientSecret = getNotionClientSecret()
+    const redirectUri = getNotionRedirectUri()
+    console.info('[notion/callback] Exchanging OAuth code', {
+      redirectUri,
+      clientIdPrefix: getNotionClientIdPrefix(),
+    })
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
     const response = await fetch('https://api.notion.com/v1/oauth/token', {
       method: 'POST',
       headers: {
@@ -73,11 +86,11 @@ export async function GET(req: NextRequest) {
         'Notion-Version': '2026-03-11',
       },
       body: JSON.stringify({
-        client_id: getNotionClientId(),
-        client_secret: getNotionClientSecret(),
+        client_id: clientId,
+        client_secret: clientSecret,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: getNotionRedirectUri(),
+        redirect_uri: redirectUri,
       }),
     })
     if (!response.ok) {
@@ -94,6 +107,13 @@ export async function GET(req: NextRequest) {
       const reason = providerError && NOTION_OAUTH_ERROR_CODES.has(providerError)
         ? providerError
         : 'token_exchange'
+      console.warn('[notion/callback] Token exchange rejected', {
+        status: response.status,
+        reason,
+        providerError,
+        redirectUri,
+        clientIdPrefix: getNotionClientIdPrefix(),
+      })
       throw new NotionTokenExchangeError(
         reason,
         `Notion token exchange failed: ${response.status} ${errorText}`.trim(),

@@ -19,9 +19,15 @@ jest.mock('@/lib/db', () => ({
 const makeRequest = (state = 'state-1') => ({
   nextUrl: new URL(`http://localhost/api/integrations/notion/callback?code=code-1&state=${state}`),
 }) as never
+let infoSpy: jest.SpyInstance
+let warnSpy: jest.SpyInstance
+let errorSpy: jest.SpyInstance
 
 beforeEach(() => {
   jest.clearAllMocks()
+  infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
+  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+  errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
   process.env.NOTION_CLIENT_ID = 'client'
   process.env.NOTION_CLIENT_SECRET = 'secret'
   ;(auth as unknown as jest.Mock).mockResolvedValue({ userId: 'user-a' })
@@ -39,6 +45,12 @@ beforeEach(() => {
       bot_id: 'bot-a',
     }),
   }) as never
+})
+
+afterEach(() => {
+  infoSpy.mockRestore()
+  warnSpy.mockRestore()
+  errorSpy.mockRestore()
 })
 
 it('stores the encrypted token on the state workspace with connectedBy attribution', async () => {
@@ -78,6 +90,13 @@ it('sends a form-encoded token exchange request with the OAuth client credential
   expect(String((options as RequestInit).body)).toContain('"client_secret":"secret"')
   expect(String((options as RequestInit).body)).toContain('"grant_type":"authorization_code"')
   expect(String((options as RequestInit).body)).toContain('"redirect_uri":"http://localhost:3000/api/integrations/notion/callback"')
+  expect(infoSpy).toHaveBeenCalledWith(
+    '[notion/callback] Exchanging OAuth code',
+    {
+      redirectUri: 'http://localhost:3000/api/integrations/notion/callback',
+      clientIdPrefix: 'client',
+    },
+  )
 })
 
 it('rejects mismatched state without storing a token', async () => {
@@ -109,4 +128,14 @@ it('surfaces an invalid Notion OAuth client configuration', async () => {
   expect(response.headers.get('location')).toContain('error=notion_failed')
   expect(response.headers.get('location')).toContain('reason=invalid_client')
   expect(prisma.integration.upsert).not.toHaveBeenCalled()
+  expect(warnSpy).toHaveBeenCalledWith(
+    '[notion/callback] Token exchange rejected',
+    expect.objectContaining({
+      status: 401,
+      reason: 'invalid_client',
+      providerError: 'invalid_client',
+      redirectUri: 'http://localhost:3000/api/integrations/notion/callback',
+      clientIdPrefix: 'client',
+    }),
+  )
 })

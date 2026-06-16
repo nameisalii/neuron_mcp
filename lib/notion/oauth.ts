@@ -26,3 +26,7 @@ export function getNotionClientSecret(): string {
   if (!value) throw new Error('NOTION_CLIENT_SECRET is not configured')
   return value
 }
+
+export function getNotionClientIdPrefix(): string {
+  return process.env.NOTION_CLIENT_ID?.trim().slice(0, 6) || 'unset'
+}
