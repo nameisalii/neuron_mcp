@@ -314,6 +314,25 @@ body::after {
 /* reveal helper baseline (engine sets inline opacity/transform) */
 [data-reveal] { opacity: 0; }
 
+/* ---- Notion tutorial: page, menus, dialog, sync, query ---- */
+.npage { height: 100%; background: #fff; position: relative; padding: 24px 30px; }
+.npage .ph { font: 800 21px Georgia, serif; color: #1a1a1a; display: flex; align-items: center; gap: 9px; }
+.npage .pl { height: 9px; background: #f1ede6; border-radius: 5px; margin-top: 10px; }
+.ndots { position: absolute; top: 16px; right: 18px; display: flex; gap: 3px; align-items: center; padding: 7px 9px; border-radius: 7px; background: #f3efe9; }
+.ndots i { width: 4px; height: 4px; border-radius: 99px; background: #5a5e6b; display: block; }
+.nmenu { position: absolute; background: #fff; border: 1px solid #e9e4db; border-radius: 11px; box-shadow: 0 18px 50px rgba(0,0,0,.2); padding: 6px; }
+.nmenu .mi { display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: 7px; font-size: 13px; color: #37352f; }
+.nmenu .mi.hot { background: #eceffc; color: var(--navy); font-weight: 600; }
+.nmenu .mi .mic { width: 16px; height: 16px; opacity: .65; display: grid; place-items: center; }
+.nmenu .mi .mr { margin-left: auto; color: #b9b2a4; }
+.ndlg { position: absolute; background: #fff; border: 1px solid #e9e4db; border-radius: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.22); padding: 16px; }
+.searchbox { height: 32px; border: 1px solid #e7e2d9; border-radius: 8px; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 13px; color: #111; background: #fff; }
+.caret { width: 1.5px; height: 15px; background: #111; display: inline-block; }
+.bar { height: 8px; border-radius: 99px; background: #ece7df; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.qbox { border: 1px solid var(--warm); border-radius: 12px; padding: 12px 14px; background: #fff; display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink); }
+.ansrc { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--navy); background: var(--accent-soft); padding: 3px 8px; border-radius: 7px; font-weight: 600; }
+
 /* footer caption */
 .caption {
   margin-top: 22px;
