@@ -26,6 +26,17 @@ export interface SyncResult {
   chunks: number
   skipped: number
   failed: string[]
+  diagnostics?: NotionSyncDiagnostics
+}
+
+export interface NotionSyncDiagnostics {
+  pagesFetched: number
+  pagesWithTitle: number
+  blocksFetched: number
+  blocksWithRichText: number
+  textCharactersExtracted: number
+  chunksCreated: number
+  skippedReasons: Record<string, number>
 }
 
 interface ChunkData {
@@ -33,6 +44,12 @@ interface ChunkData {
   blockType: string
   position: number
   metadata: Record<string, unknown>
+}
+
+interface PageTextData {
+  title: string
+  propertyText: string[]
+  hasTitle: boolean
 }
 
 interface AnnotatedBlock {
@@ -54,6 +71,56 @@ function getPageTitle(page: PageObjectResponse): string {
   return 'Untitled'
 }
 
+function contentHash(content: string): string {
+  return content.slice(0, 100).toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pageTextFromProperties(page: PageObjectResponse): PageTextData {
+  const propertyText: string[] = []
+  let title = 'Untitled'
+  let hasTitle = false
+
+  for (const [name, prop] of Object.entries(page.properties)) {
+    switch (prop.type) {
+      case 'title': {
+        const value = richTextToPlain(prop.title).trim()
+        if (value) {
+          title = value
+          hasTitle = true
+          propertyText.unshift(value)
+        }
+        break
+      }
+      case 'rich_text': {
+        const value = richTextToPlain(prop.rich_text).trim()
+        if (value) propertyText.push(`${name}: ${value}`)
+        break
+      }
+      case 'select':
+        if (prop.select?.name) propertyText.push(`${name}: ${prop.select.name}`)
+        break
+      case 'multi_select': {
+        const value = prop.multi_select.map((item) => item.name).filter(Boolean).join(', ')
+        if (value) propertyText.push(`${name}: ${value}`)
+        break
+      }
+      case 'status':
+        if (prop.status?.name) propertyText.push(`${name}: ${prop.status.name}`)
+        break
+    }
+  }
+
+  return { title, propertyText, hasTitle }
+}
+
+function blockRichText(block: BlockObjectResponse): RichTextItemResponse[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const b = block as any
+  const value = b[block.type]?.rich_text
+  return Array.isArray(value) ? value : []
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function blockToRawChunk(block: BlockObjectResponse): { content: string; metadata: Record<string, unknown> } | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,6 +139,8 @@ function blockToRawChunk(block: BlockObjectResponse): { content: string; metadat
       return { content: richTextToPlain(b.bulleted_list_item.rich_text), metadata: {} }
     case 'numbered_list_item':
       return { content: richTextToPlain(b.numbered_list_item.rich_text), metadata: {} }
+    case 'to_do':
+      return { content: richTextToPlain(b.to_do.rich_text), metadata: { checked: Boolean(b.to_do.checked) } }
     case 'callout':
       return { content: richTextToPlain(b.callout.rich_text), metadata: {} }
     case 'code':
@@ -95,13 +164,16 @@ function blockToRawChunk(block: BlockObjectResponse): { content: string; metadat
       const cells = b.table_row.cells as RichTextItemResponse[][]
       return { content: cells.map((cell) => richTextToPlain(cell)).join(' | '), metadata: {} }
     }
+    case 'child_page':
+      return { content: b.child_page.title as string, metadata: {} }
     default:
       return null
   }
 }
 
-function extractChunks(annotatedBlocks: AnnotatedBlock[]): ChunkData[] {
+function extractChunks(annotatedBlocks: AnnotatedBlock[], pageText: PageTextData): ChunkData[] {
   const chunks: ChunkData[] = []
+
   for (const { block, depth, parentNotionBlockId, parentBlockType, parentTitle } of annotatedBlocks) {
     const raw = blockToRawChunk(block)
     if (!raw || !raw.content.trim()) continue
@@ -121,7 +193,50 @@ function extractChunks(annotatedBlocks: AnnotatedBlock[]): ChunkData[] {
       metadata,
     })
   }
+
+  const propertyContent = pageText.propertyText.join('\n').trim()
+  const hasDatabaseProperties = pageText.propertyText.length > 1
+  if (propertyContent && (chunks.length === 0 || hasDatabaseProperties)) {
+    return [
+      {
+        content: escapeXml(propertyContent),
+        blockType: 'page_properties',
+        position: 0,
+        metadata: { source: 'page_properties' },
+      },
+      ...chunks.map((chunk, index) => ({ ...chunk, position: index + 1 })),
+    ]
+  }
+
   return chunks
+}
+
+function emptyNotionDiagnostics(): NotionSyncDiagnostics {
+  return {
+    pagesFetched: 0,
+    pagesWithTitle: 0,
+    blocksFetched: 0,
+    blocksWithRichText: 0,
+    textCharactersExtracted: 0,
+    chunksCreated: 0,
+    skippedReasons: {},
+  }
+}
+
+function incrementReason(target: Record<string, number>, reason: string, count = 1) {
+  target[reason] = (target[reason] ?? 0) + count
+}
+
+function addNotionDiagnostics(target: NotionSyncDiagnostics, source: NotionSyncDiagnostics) {
+  target.pagesFetched += source.pagesFetched
+  target.pagesWithTitle += source.pagesWithTitle
+  target.blocksFetched += source.blocksFetched
+  target.blocksWithRichText += source.blocksWithRichText
+  target.textCharactersExtracted += source.textCharactersExtracted
+  target.chunksCreated += source.chunksCreated
+  for (const [reason, count] of Object.entries(source.skippedReasons)) {
+    incrementReason(target.skippedReasons, reason, count)
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -244,6 +359,60 @@ function notionExtractionMessages(content: string, title: string, lastEditedAt: 
   }))
 }
 
+async function createPropertyFallbackKnowledgeItem(input: {
+  workspaceId: string
+  content: string
+  url: string
+  pageId: string
+  dbPageId: string
+  title: string
+  lastEditedAt: string
+}): Promise<number> {
+  const content = input.content.trim()
+  if (!content) return 0
+
+  const hash = contentHash(content)
+  const existing = await prisma.knowledgeItem.findUnique({
+    where: { workspaceId_contentHash: { workspaceId: input.workspaceId, contentHash: hash } },
+    select: { id: true },
+  })
+  if (existing) return 0
+
+  const embedding = await generateEmbedding(content)
+  const dbItem = await prisma.knowledgeItem.create({
+    data: {
+      workspaceId: input.workspaceId,
+      content,
+      contentHash: hash,
+      category: 'reference',
+      source: 'notion',
+      sourceUrl: input.url,
+      sourceExternalId: input.pageId,
+      notionPageId: input.dbPageId,
+      notionPageTitle: input.title,
+      confidence: 0.7,
+      sourceCreatedAt: new Date(input.lastEditedAt),
+    },
+    select: { id: true },
+  })
+
+  try {
+    await upsertEmbedding(dbItem.id, embedding, {
+      workspaceId: input.workspaceId,
+      category: 'reference',
+      source: 'notion',
+    })
+    await prisma.knowledgeItem.update({
+      where: { id: dbItem.id },
+      data: { embeddingId: dbItem.id },
+    })
+    return 1
+  } catch (err) {
+    await prisma.knowledgeItem.delete({ where: { id: dbItem.id } }).catch(() => null)
+    throw err
+  }
+}
+
 export async function syncNotionPages(
   workspaceId: string,
   userId: string,
@@ -263,6 +432,7 @@ export async function syncNotionPages(
   let knowledgeUpdated = 0
   const skippedReasons: Record<string, number> = {}
   const extractionDiagnostics = emptyExtractionDiagnostics()
+  const notionDiagnostics = emptyNotionDiagnostics()
   const failed: string[] = []
   let cursor: string | undefined
 
@@ -277,6 +447,10 @@ export async function syncNotionPages(
       if (result.object !== 'page') continue
       const page = result as PageObjectResponse
       pagesFound++
+      const pageText = pageTextFromProperties(page)
+      const pageDiagnostics = emptyNotionDiagnostics()
+      pageDiagnostics.pagesFetched = 1
+      pageDiagnostics.pagesWithTitle = pageText.hasTitle ? 1 : 0
 
       const existing = await prisma.notionPage.findUnique({
         where: { workspaceId_notionPageId: { workspaceId, notionPageId: page.id } },
@@ -287,7 +461,9 @@ export async function syncNotionPages(
       if (existing && new Date(page.last_edited_time).getTime() === existing.lastEditedAt.getTime()) {
         if (existingKnowledgeCount > 0) {
           skipped++
-          skippedReasons.unchanged_with_existing_knowledge = (skippedReasons.unchanged_with_existing_knowledge ?? 0) + 1
+          incrementReason(skippedReasons, 'unchanged_with_existing_knowledge')
+          incrementReason(pageDiagnostics.skippedReasons, 'unchanged_with_existing_knowledge')
+          addNotionDiagnostics(notionDiagnostics, pageDiagnostics)
           continue
         }
         const extraction = await extractKnowledgeDetailed(
@@ -302,18 +478,25 @@ export async function syncNotionPages(
         knowledgeCreated += extraction.items.length
         if (extraction.items.length === 0) {
           skipped++
-          skippedReasons.unchanged_no_extractable_knowledge = (skippedReasons.unchanged_no_extractable_knowledge ?? 0) + 1
+          incrementReason(skippedReasons, 'unchanged_no_extractable_knowledge')
+          incrementReason(pageDiagnostics.skippedReasons, 'unchanged_no_extractable_knowledge')
         }
+        pageDiagnostics.textCharactersExtracted += existing.content.length
+        addNotionDiagnostics(notionDiagnostics, pageDiagnostics)
         totalPages++
         continue
       }
 
       try {
         const annotatedBlocks = await fetchAllAnnotatedBlocks(notion, page.id)
+        pageDiagnostics.blocksFetched += annotatedBlocks.length
+        pageDiagnostics.blocksWithRichText += annotatedBlocks.filter(({ block }) => blockRichText(block).some((text) => text.plain_text.trim())).length
         const blocks = annotatedBlocks.map((a) => a.block)
-        const chunks = extractChunks(annotatedBlocks)
-        const title = getPageTitle(page)
+        const chunks = extractChunks(annotatedBlocks, pageText)
+        const title = pageText.title
         const content = chunks.map((c) => c.content).join('\n')
+        pageDiagnostics.textCharactersExtracted += chunks.reduce((total, chunk) => total + chunk.content.length, 0)
+        pageDiagnostics.chunksCreated += chunks.length
         const parentPageId = getParentPageId(page)
 
         const dbPage = await prisma.notionPage.upsert({
@@ -397,25 +580,43 @@ export async function syncNotionPages(
             { id: dbPage.id, title },
           )
           addExtractionDiagnostics(extractionDiagnostics, extraction.diagnostics)
-          if (priorKnowledge.length > 0) {
-            knowledgeUpdated += extraction.items.length
-          } else {
-            knowledgeCreated += extraction.items.length
+          let fallbackCreated = 0
+          const hasOnlyPropertyText = chunks.length > 0 && chunks.every((chunk) => chunk.blockType === 'page_properties')
+          if (extraction.items.length === 0 && hasOnlyPropertyText) {
+            fallbackCreated = await createPropertyFallbackKnowledgeItem({
+              workspaceId,
+              content,
+              url: page.url,
+              pageId: page.id,
+              dbPageId: dbPage.id,
+              title,
+              lastEditedAt: page.last_edited_time,
+            })
           }
-          if (extraction.items.length === 0) {
+          if (priorKnowledge.length > 0) {
+            knowledgeUpdated += extraction.items.length + fallbackCreated
+          } else {
+            knowledgeCreated += extraction.items.length + fallbackCreated
+          }
+          if (extraction.items.length === 0 && fallbackCreated === 0) {
             skipped++
-            skippedReasons.no_extractable_knowledge = (skippedReasons.no_extractable_knowledge ?? 0) + 1
+            incrementReason(skippedReasons, 'no_extractable_knowledge')
+            incrementReason(pageDiagnostics.skippedReasons, 'no_extractable_knowledge')
           }
         } else {
           skipped++
-          skippedReasons.no_supported_blocks = (skippedReasons.no_supported_blocks ?? 0) + 1
+          incrementReason(skippedReasons, 'no_supported_blocks')
+          incrementReason(pageDiagnostics.skippedReasons, 'no_supported_blocks')
         }
 
+        addNotionDiagnostics(notionDiagnostics, pageDiagnostics)
         totalPages++
       } catch (err) {
         console.error(`[notion/sync] page ${page.id} failed:`, err)
         failed.push(page.id)
-        skippedReasons.page_failed = (skippedReasons.page_failed ?? 0) + 1
+        incrementReason(skippedReasons, 'page_failed')
+        incrementReason(pageDiagnostics.skippedReasons, 'page_failed')
+        addNotionDiagnostics(notionDiagnostics, pageDiagnostics)
       }
     }
 
@@ -431,6 +632,10 @@ export async function syncNotionPages(
     workspaceId,
     integration: 'notion',
     rawItemsFetched: pagesFound,
+    pagesWithTitle: notionDiagnostics.pagesWithTitle,
+    blocksFetched: notionDiagnostics.blocksFetched,
+    blocksWithRichText: notionDiagnostics.blocksWithRichText,
+    textCharactersExtracted: notionDiagnostics.textCharactersExtracted,
     chunksExtracted: totalChunks,
     knowledgeItemsCreated: knowledgeCreated,
     knowledgeItemsUpdated: knowledgeUpdated,
@@ -456,5 +661,6 @@ export async function syncNotionPages(
     chunks: totalChunks,
     skipped,
     failed,
+    diagnostics: { ...notionDiagnostics, skippedReasons },
   }
 }

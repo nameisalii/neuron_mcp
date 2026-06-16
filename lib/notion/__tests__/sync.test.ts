@@ -25,7 +25,15 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     notionPage: { upsert: jest.fn(), findUnique: jest.fn() },
     notionChunk: { create: jest.fn(), deleteMany: jest.fn() },
-    knowledgeItem: { count: jest.fn(), findMany: jest.fn(), deleteMany: jest.fn() },
+    knowledgeItem: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      deleteMany: jest.fn(),
+    },
   },
 }))
 
@@ -47,6 +55,10 @@ const mockTrackEvent = jest.mocked(trackEvent)
 const mockExtractKnowledgeDetailed = jest.mocked(extractKnowledgeDetailed)
 const mockKnowledgeCount = jest.mocked(prisma.knowledgeItem.count)
 const mockKnowledgeFindMany = jest.mocked(prisma.knowledgeItem.findMany)
+const mockKnowledgeFindUnique = jest.mocked(prisma.knowledgeItem.findUnique)
+const mockKnowledgeCreate = jest.mocked(prisma.knowledgeItem.create)
+const mockKnowledgeUpdate = jest.mocked(prisma.knowledgeItem.update)
+const mockKnowledgeDelete = jest.mocked(prisma.knowledgeItem.delete)
 const mockKnowledgeDeleteMany = jest.mocked(prisma.knowledgeItem.deleteMany)
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -68,6 +80,26 @@ function makePage(id: string, title: string, lastEditedAt = '2026-01-01T00:00:00
   }
 }
 
+function makeDatabasePage() {
+  return {
+    ...makePage('db-page-1', 'Customer Launch'),
+    properties: {
+      Name: { type: 'title', title: richText('Customer Launch') },
+      Summary: { type: 'rich_text', rich_text: richText('Launch checklist for the customer rollout') },
+      Priority: { type: 'select', select: { name: 'High' } },
+      Tags: { type: 'multi_select', multi_select: [{ name: 'Customer' }, { name: 'Launch' }] },
+      Status: { type: 'status', status: { name: 'In progress' } },
+    },
+  }
+}
+
+function makeUntitledEmptyPage() {
+  return {
+    ...makePage('empty-page', ''),
+    properties: { title: { type: 'title', title: [] } },
+  }
+}
+
 function makeBlock(type: string, overrides: Record<string, unknown> = {}) {
   const defaults: Record<string, Record<string, unknown>> = {
     paragraph: { paragraph: { rich_text: richText('paragraph text') } },
@@ -76,6 +108,7 @@ function makeBlock(type: string, overrides: Record<string, unknown> = {}) {
     heading_3: { heading_3: { rich_text: richText('heading 3 text') } },
     bulleted_list_item: { bulleted_list_item: { rich_text: richText('bullet text') } },
     numbered_list_item: { numbered_list_item: { rich_text: richText('numbered text') } },
+    to_do: { to_do: { rich_text: richText('todo text'), checked: false } },
     callout: { callout: { rich_text: richText('callout text') } },
     code: { code: { rich_text: richText('const x = 1'), language: 'typescript' } },
     toggle: { toggle: { rich_text: richText('toggle title') } },
@@ -127,6 +160,10 @@ beforeEach(() => {
   })
   mockKnowledgeCount.mockResolvedValue(1)
   mockKnowledgeFindMany.mockResolvedValue([])
+  mockKnowledgeFindUnique.mockResolvedValue(null)
+  mockKnowledgeCreate.mockResolvedValue({ id: 'ki-fallback' } as never)
+  mockKnowledgeUpdate.mockResolvedValue({} as never)
+  mockKnowledgeDelete.mockResolvedValue({} as never)
   mockKnowledgeDeleteMany.mockResolvedValue({ count: 0 })
   // Default: page not in DB yet (no diff skip)
   mockPageFindUnique.mockResolvedValue(null)
@@ -176,10 +213,12 @@ describe('block extraction — all supported types', () => {
   singleBlockTest('heading_3', 'heading 3 text')
   singleBlockTest('bulleted_list_item', 'bullet text')
   singleBlockTest('numbered_list_item', 'numbered text')
+  singleBlockTest('to_do', 'todo text')
   singleBlockTest('callout', 'callout text')
   singleBlockTest('code', 'const x = 1')
   singleBlockTest('toggle', 'toggle title')
   singleBlockTest('quote', 'quote text')
+  singleBlockTest('child_page', 'Child Page Title')
 
   it('extracts image caption as chunk content', async () => {
     mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
@@ -217,13 +256,19 @@ describe('block extraction — all supported types', () => {
     expect(chunks.some((c) => c.content.includes('https://embed.test/video'))).toBe(true)
   })
 
-  it('skips divider blocks', async () => {
+  it('falls back to page title when only unsupported divider blocks exist', async () => {
     mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })
     mockBlocksList.mockResolvedValueOnce({ results: [makeBlock('divider')], next_cursor: null, has_more: false })
 
     await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
 
-    expect(mockChunkCreate).not.toHaveBeenCalled()
+    expect(mockChunkCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        blockType: 'page_properties',
+        content: 'Page',
+      }),
+    }))
+    expect(mockKnowledgeCreate).toHaveBeenCalled()
   })
 
   it('extracts table_row cells joined with separator', async () => {
@@ -236,6 +281,41 @@ describe('block extraction — all supported types', () => {
     const row = chunks.find((c) => c.blockType === 'table_row')
     expect(row?.content).toContain('col A')
     expect(row?.content).toContain('col B')
+  })
+
+  it('creates chunks for a simple paragraph page', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Plain Text')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [makeBlock('paragraph', { id: 'plain-1', paragraph: { rich_text: richText('Small note') } })],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    expect(mockChunkCreate).toHaveBeenCalledTimes(1)
+    expect(mockChunkCreate.mock.calls[0][0].data).toMatchObject({
+      blockType: 'paragraph',
+      content: 'Small note',
+    })
+    expect(result.chunks).toBe(1)
+  })
+
+  it('creates chunks for heading plus bullet list pages', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Plan')], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({
+      results: [makeBlock('heading_2'), makeBlock('bulleted_list_item')],
+      next_cursor: null,
+      has_more: false,
+    })
+
+    await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    const chunks = mockChunkCreate.mock.calls.map((c) => c[0].data as { blockType: string; content: string })
+    expect(chunks).toEqual([
+      expect.objectContaining({ blockType: 'heading_2', content: 'heading 2 text' }),
+      expect.objectContaining({ blockType: 'bulleted_list_item', content: 'bullet text' }),
+    ])
   })
 
   it('stores code language in chunk metadata', async () => {
@@ -505,7 +585,7 @@ describe('page hierarchy', () => {
 
 describe('edge cases', () => {
   it('handles empty page — no chunks created, no Pinecone call', async () => {
-    mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Empty')], next_cursor: null, has_more: false })
+    mockSearch.mockResolvedValueOnce({ results: [makeUntitledEmptyPage()], next_cursor: null, has_more: false })
     mockBlocksList.mockResolvedValueOnce({ results: [], next_cursor: null, has_more: false })
 
     const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
@@ -513,6 +593,31 @@ describe('edge cases', () => {
     expect(mockChunkCreate).not.toHaveBeenCalled()
     expect(mockUpsertEmbedding).not.toHaveBeenCalled()
     expect(result.pages).toBe(1)
+    expect(result.skippedReasons).toEqual({ no_supported_blocks: 1 })
+  })
+
+  it('extracts database page title and useful property text', async () => {
+    mockSearch.mockResolvedValueOnce({ results: [makeDatabasePage()], next_cursor: null, has_more: false })
+    mockBlocksList.mockResolvedValueOnce({ results: [], next_cursor: null, has_more: false })
+
+    const result = await syncNotionPages(WORKSPACE_ID, USER_ID, DISPLAY_NAME)
+
+    expect(mockChunkCreate).toHaveBeenCalledTimes(1)
+    const chunk = mockChunkCreate.mock.calls[0][0].data as { blockType: string; content: string }
+    expect(chunk.blockType).toBe('page_properties')
+    expect(chunk.content).toContain('Customer Launch')
+    expect(chunk.content).toContain('Summary: Launch checklist')
+    expect(chunk.content).toContain('Priority: High')
+    expect(chunk.content).toContain('Tags: Customer, Launch')
+    expect(chunk.content).toContain('Status: In progress')
+    expect(mockKnowledgeCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        source: 'notion',
+        sourceExternalId: 'db-page-1',
+        content: expect.stringContaining('Customer Launch'),
+      }),
+    }))
+    expect(result.knowledgeCreated).toBe(1)
   })
 
   it('handles image-only page — creates image chunk even without caption, skips unsupported blocks', async () => {
