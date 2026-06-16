@@ -3,11 +3,11 @@ import { syncLinearIssues } from '../sync'
 import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding, deleteEmbeddings } from '@/lib/pinecone'
 import { prisma } from '@/lib/db'
-import { extractKnowledge } from '@/lib/extraction/extractor'
+import { extractKnowledgeDetailed } from '@/lib/extraction/extractor'
 
 jest.mock('@/lib/openai', () => ({ generateEmbedding: jest.fn() }))
 jest.mock('@/lib/pinecone', () => ({ upsertEmbedding: jest.fn(), deleteEmbeddings: jest.fn() }))
-jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledge: jest.fn() }))
+jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledgeDetailed: jest.fn() }))
 jest.mock('@/lib/db', () => ({
   prisma: {
     knowledgeItem: {
@@ -57,7 +57,19 @@ beforeEach(() => {
   jest.clearAllMocks()
   ;(generateEmbedding as jest.Mock).mockResolvedValue(new Array(1536).fill(0))
   ;(upsertEmbedding as jest.Mock).mockResolvedValue(undefined)
-  ;(extractKnowledge as jest.Mock).mockResolvedValue([])
+  ;(extractKnowledgeDetailed as jest.Mock).mockResolvedValue({
+    items: [],
+    diagnostics: {
+      extractorCalled: 1,
+      extractorReturnedEmpty: 1,
+      extractorParseFailed: 0,
+      validationFailed: 0,
+      fallbackItemsCreated: 0,
+      knowledgeItemCreateFailed: 0,
+      embeddingUpsertFailed: 0,
+      itemProcessingFailed: 0,
+    },
+  })
   ;(prisma.knowledgeItem.count as jest.Mock).mockResolvedValue(0)
   ;(prisma.knowledgeItem.findMany as jest.Mock).mockResolvedValue([])
   ;(prisma.knowledgeItem.deleteMany as jest.Mock).mockResolvedValue({ count: 0 })
@@ -127,12 +139,14 @@ describe('syncLinearIssues', () => {
     }))
   })
 
-  it('fails when every fetched issue fails ingestion', async () => {
+  it('keeps imported issue rows when embedding fails', async () => {
     ;(generateEmbedding as jest.Mock).mockRejectedValue(new Error('Embedding failed'))
     mockAccessAndTeamIssues([ISSUE])
-    await expect(syncLinearIssues(BASE_INTEGRATION)).rejects.toThrow(
-      'Linear sync fetched issues, but ingestion failed for every item.',
-    )
+    const result = await syncLinearIssues(BASE_INTEGRATION)
+
+    expect(result.imported).toBe(1)
+    expect(result.embeddingErrors).toBeGreaterThan(0)
+    expect(prisma.knowledgeItem.delete).not.toHaveBeenCalled()
   })
 
   it('deletes archived issues and vectors', async () => {

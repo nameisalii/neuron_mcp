@@ -108,6 +108,14 @@ function pageTextFromProperties(page: PageObjectResponse): PageTextData {
       case 'status':
         if (prop.status?.name) propertyText.push(`${name}: ${prop.status.name}`)
         break
+      case 'checkbox':
+        propertyText.push(`${name}: ${prop.checkbox ? 'Yes' : 'No'}`)
+        break
+      case 'date':
+        if (prop.date?.start) {
+          propertyText.push(`${name}: ${prop.date.start}${prop.date.end ? ` to ${prop.date.end}` : ''}`)
+        }
+        break
     }
   }
 
@@ -166,6 +174,8 @@ function blockToRawChunk(block: BlockObjectResponse): { content: string; metadat
     }
     case 'child_page':
       return { content: b.child_page.title as string, metadata: {} }
+    case 'child_database':
+      return { content: b.child_database.title as string, metadata: {} }
     default:
       return null
   }
@@ -249,6 +259,7 @@ function emptyExtractionDiagnostics(): ExtractionDiagnostics {
     extractorReturnedEmpty: 0,
     extractorParseFailed: 0,
     validationFailed: 0,
+    fallbackItemsCreated: 0,
     knowledgeItemCreateFailed: 0,
     embeddingUpsertFailed: 0,
     itemProcessingFailed: 0,
@@ -378,7 +389,6 @@ async function createPropertyFallbackKnowledgeItem(input: {
   })
   if (existing) return 0
 
-  const embedding = await generateEmbedding(content)
   const dbItem = await prisma.knowledgeItem.create({
     data: {
       workspaceId: input.workspaceId,
@@ -397,6 +407,7 @@ async function createPropertyFallbackKnowledgeItem(input: {
   })
 
   try {
+    const embedding = await generateEmbedding(content)
     await upsertEmbedding(dbItem.id, embedding, {
       workspaceId: input.workspaceId,
       category: 'reference',
@@ -408,8 +419,8 @@ async function createPropertyFallbackKnowledgeItem(input: {
     })
     return 1
   } catch (err) {
-    await prisma.knowledgeItem.delete({ where: { id: dbItem.id } }).catch(() => null)
-    throw err
+    console.error('[notion/sync] property fallback embedding failed; keeping DB item without vector', err)
+    return 1
   }
 }
 

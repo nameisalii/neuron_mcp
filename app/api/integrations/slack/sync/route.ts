@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { syncSlackMessages } from '@/lib/slack/sync'
+import { syncSlackMessagesDetailed } from '@/lib/slack/sync'
 import { extractKnowledgeDetailed, type ExtractionDiagnostics } from '@/lib/extraction/extractor'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
@@ -52,24 +52,32 @@ export async function POST() {
     const secondsSinceSync = integration.lastSyncAt
       ? Math.floor((Date.now() - integration.lastSyncAt.getTime()) / 1000)
       : null
-    const messages = await syncSlackMessages(workspaceId)
+    const fetchResult = await syncSlackMessagesDetailed(workspaceId)
+    const messages = fetchResult.messages
     const extraction = await extractKnowledgeDetailed(messages, workspaceId, 'slack')
     const extractionErrors = extractionErrorCount(extraction.diagnostics)
 
     const summary = {
       workspaceId,
+      integrationId: integration.id,
       integration: 'slack',
-      rawItemsFetched: messages.length,
-      chunksExtracted: extraction.diagnostics.extractorCalled,
+      fetched: messages.length,
+      processed: extraction.diagnostics.extractorCalled,
+      textItems: messages.length,
+      chunks: extraction.diagnostics.extractorCalled,
       knowledgeItemsCreated: extraction.items.length,
       knowledgeItemsUpdated: 0,
       skipped: messages.length > 0 && extraction.items.length === 0 ? messages.length : 0,
       skippedReasons: messages.length === 0
-        ? { no_accessible_messages: 1 }
+        ? { ...fetchResult.skippedReasons, no_accessible_messages: 1 }
         : extraction.items.length === 0
-          ? { no_extractable_knowledge: messages.length }
-          : {},
-      extractionEmbeddingErrors: extractionErrors,
+          ? { ...fetchResult.skippedReasons, no_extractable_knowledge: messages.length }
+          : fetchResult.skippedReasons,
+      extractionErrors,
+      embeddingErrors: extraction.diagnostics.embeddingUpsertFailed,
+      databaseErrors: extraction.diagnostics.knowledgeItemCreateFailed,
+      channelsDiscovered: fetchResult.channelsDiscovered,
+      channelsScanned: fetchResult.channelsScanned,
       secondsSinceSync,
     }
     console.info('[slack/sync] summary', summary)
@@ -84,6 +92,7 @@ export async function POST() {
         skipped: messages.length,
         extracted: 0,
         extractionDiagnostics: extraction.diagnostics,
+        skippedReasons: summary.skippedReasons,
         error: 'Slack sync fetched messages, but extraction failed for every item.',
       }, { status: 502 })
     }
@@ -106,12 +115,15 @@ export async function POST() {
       knowledgeCreated: extraction.items.length,
       knowledgeUpdated: 0,
       skipped: summary.skipped,
+      skippedReasons: summary.skippedReasons,
       synced: messages.length,
       extracted: extraction.items.length,
+      chunksExtracted: extraction.diagnostics.extractorCalled,
+      extractionEmbeddingErrors: extractionErrors,
       extractionDiagnostics: extraction.diagnostics,
       conflicts,
       message: messages.length === 0
-        ? 'Synced 0 items — no accessible data found'
+        ? 'Slack sync found 0 messages. Invite the Neuron bot to channels or check Slack scopes.'
         : extraction.items.length === 0
           ? 'Synced 0 items — no extractable knowledge found'
           : undefined,
@@ -126,7 +138,7 @@ export async function POST() {
       knowledgeUpdated: 0,
       skipped: 0,
       extracted: 0,
-      error: 'Sync failed',
+      error: err instanceof Error ? `Sync failed — ${err.message}` : 'Sync failed',
     }, { status: 500 })
   }
 }

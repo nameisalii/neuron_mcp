@@ -105,6 +105,7 @@ function emptyGmailExtractionDiagnostics(): GmailExtractionDiagnostics {
     extractorReturnedEmpty: 0,
     extractorParseFailed: 0,
     validationFailed: 0,
+    fallbackItemsCreated: 0,
     knowledgeItemCreateFailed: 0,
     embeddingUpsertFailed: 0,
     itemProcessingFailed: 0,

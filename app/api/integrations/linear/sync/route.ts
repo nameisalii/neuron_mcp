@@ -7,6 +7,24 @@ import { trackEvent } from '@/lib/activity'
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 const SYNC_COOLDOWN_SECONDS = 60
 
+function safeLinearError(err: unknown): { message: string; status: number } {
+  const raw = err instanceof Error ? err.message : 'Sync failed'
+  const lower = raw.toLowerCase()
+  if (lower.includes('decrypt') || lower.includes('token') || lower.includes('unauthorized')) {
+    return { message: 'Linear token expired', status: 422 }
+  }
+  if (lower.includes('graphql') || lower.includes('linear api') || lower.includes('insufficient scope')) {
+    return { message: `Linear API query failed — ${raw}`, status: 502 }
+  }
+  if (lower.includes('extraction')) {
+    return { message: 'Knowledge extraction failed', status: 502 }
+  }
+  if (lower.includes('prisma') || lower.includes('database')) {
+    return { message: 'Database write failed', status: 500 }
+  }
+  return { message: `Sync failed — ${raw}`, status: 500 }
+}
+
 export async function POST() {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -112,9 +130,10 @@ export async function POST() {
         extracted: 0,
         teamsScanned: 0,
         issuesFound: 0,
-        error: 'Token invalid — reconnect Linear',
+        error: 'Linear token expired',
       }, { status: 422 })
     }
+    const safeError = safeLinearError(err)
     return NextResponse.json({
       success: false,
       fetched: 0,
@@ -128,7 +147,7 @@ export async function POST() {
       extracted: 0,
       teamsScanned: 0,
       issuesFound: 0,
-      error: err instanceof Error ? err.message : 'Sync failed',
-    }, { status: 500 })
+      error: safeError.message,
+    }, { status: safeError.status })
   }
 }

@@ -28,6 +28,15 @@ function formatMessages(messages: SlackMessage[]): string {
     .join('\n')
 }
 
+function fallbackContent(messages: SlackMessage[]): string {
+  return messages
+    .map((message) => message.text.trim())
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 12_000)
+    .trim()
+}
+
 async function checkConflict(a: string, b: string): Promise<boolean> {
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
@@ -47,6 +56,7 @@ export interface ExtractionDiagnostics {
   extractorReturnedEmpty: number
   extractorParseFailed: number
   validationFailed: number
+  fallbackItemsCreated: number
   knowledgeItemCreateFailed: number
   embeddingUpsertFailed: number
   itemProcessingFailed: number
@@ -63,6 +73,7 @@ function emptyDiagnostics(): ExtractionDiagnostics {
     extractorReturnedEmpty: 0,
     extractorParseFailed: 0,
     validationFailed: 0,
+    fallbackItemsCreated: 0,
     knowledgeItemCreateFailed: 0,
     embeddingUpsertFailed: 0,
     itemProcessingFailed: 0,
@@ -161,7 +172,19 @@ export async function extractKnowledgeDetailed(
       items = extraction.items
       if (extraction.parseFailed) diagnostics.extractorParseFailed++
       if (extraction.validationFailed) diagnostics.validationFailed++
-      if (items.length === 0 && !extraction.parseFailed && !extraction.validationFailed) diagnostics.extractorReturnedEmpty++
+      if (items.length === 0 && !extraction.parseFailed && !extraction.validationFailed) {
+        diagnostics.extractorReturnedEmpty++
+        const content = fallbackContent(chunk)
+        if (content) {
+          diagnostics.fallbackItemsCreated++
+          items = [{
+            content,
+            category: source === 'notion' || source === 'gmail' ? 'reference' : 'fact',
+            owner: null,
+            confidence: 0.55,
+          }]
+        }
+      }
     } catch (err) {
       console.error('[extractKnowledge] Chunk extraction failed, skipping', err)
       diagnostics.extractorParseFailed++
@@ -179,11 +202,17 @@ export async function extractKnowledgeDetailed(
           continue
         }
 
-        const embedding = await generateEmbedding(item.content)
-
-        const similar = privacy?.namespace
-          ? await searchInNamespace(embedding, privacy.namespace, CONFLICT_TOP_K, 0.75)
-          : await searchSimilar(embedding, workspaceId, CONFLICT_TOP_K, 0.75)
+        let embedding: number[] | null = null
+        let similar: Array<{ id: string; score: number }> = []
+        try {
+          embedding = await generateEmbedding(item.content)
+          similar = privacy?.namespace
+            ? await searchInNamespace(embedding, privacy.namespace, CONFLICT_TOP_K, 0.75)
+            : await searchSimilar(embedding, workspaceId, CONFLICT_TOP_K, 0.75)
+        } catch (embeddingErr) {
+          console.error('[extractKnowledge] Embedding/search failed; saving DB item without vector', embeddingErr)
+          diagnostics.embeddingUpsertFailed++
+        }
 
         const isDuplicate = similar.some((m) => m.score >= DUPLICATE_THRESHOLD)
         if (isDuplicate) {
@@ -244,23 +273,22 @@ export async function extractKnowledgeDetailed(
           continue
         }
 
-        // Upsert to Pinecone using the DB cuid so IDs are guaranteed to match
-        try {
-          const vectorMetadata = { workspaceId, category: item.category, source }
-          if (privacy?.namespace) {
-            await upsertEmbeddingInNamespace(dbItem.id, embedding, vectorMetadata, privacy.namespace)
-          } else {
-            await upsertEmbedding(dbItem.id, embedding, vectorMetadata)
+        if (embedding) {
+          try {
+            const vectorMetadata = { workspaceId, category: item.category, source }
+            if (privacy?.namespace) {
+              await upsertEmbeddingInNamespace(dbItem.id, embedding, vectorMetadata, privacy.namespace)
+            } else {
+              await upsertEmbedding(dbItem.id, embedding, vectorMetadata)
+            }
+            await prisma.knowledgeItem.update({
+              where: { id: dbItem.id },
+              data: { embeddingId: dbItem.id },
+            })
+          } catch (pineconeErr) {
+            console.error('[extractKnowledge] Pinecone upsert failed; keeping DB item without vector', pineconeErr)
+            diagnostics.embeddingUpsertFailed++
           }
-          await prisma.knowledgeItem.update({
-            where: { id: dbItem.id },
-            data: { embeddingId: dbItem.id },
-          })
-        } catch (pineconeErr) {
-          console.error('[extractKnowledge] Pinecone upsert failed, rolling back DB item', pineconeErr)
-          diagnostics.embeddingUpsertFailed++
-          await prisma.knowledgeItem.delete({ where: { id: dbItem.id } }).catch(() => null)
-          continue
         }
 
         saved.push(item)

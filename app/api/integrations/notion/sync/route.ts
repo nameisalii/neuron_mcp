@@ -42,6 +42,7 @@ export async function POST(req: Request) {
     const integration = await prisma.integration.findUnique({
       where: { workspaceId_type: { workspaceId, type: 'notion' } },
       select: {
+        id: true,
         type: true,
         accessToken: true,
         metadata: true,
@@ -53,10 +54,16 @@ export async function POST(req: Request) {
         },
       },
     })
+    if (!integration) {
+      return NextResponse.json(
+        { error: 'Notion is not connected. Connect Notion first.' },
+        { status: 400 },
+      )
+    }
     const accessToken = getConnectedIntegrationToken(integration, {
       currentUserId: userId,
-      workspaceType: integration?.workspace?.type,
-      workspaceOwnerClerkId: integration?.workspace?.owner.clerkId,
+      workspaceType: integration.workspace.type,
+      workspaceOwnerClerkId: integration.workspace.owner.clerkId,
     })
     if (!accessToken) {
       return NextResponse.json(
@@ -70,6 +77,24 @@ export async function POST(req: Request) {
     const knowledgeCreated = result.knowledgeCreated ?? 0
     const knowledgeUpdated = result.knowledgeUpdated ?? 0
     const fetched = result.fetched ?? result.pages
+    const extractionErrors = result.extractionEmbeddingErrors ?? 0
+
+    console.info('[notion/sync] route summary', {
+      workspaceId,
+      integrationId: integration.id,
+      integration: 'notion',
+      fetched,
+      processed: result.processed ?? result.pages,
+      textItems: result.diagnostics?.textCharactersExtracted ? result.pages : 0,
+      chunks: result.chunksExtracted ?? result.chunks,
+      knowledgeCreated,
+      knowledgeUpdated,
+      skipped: result.skipped,
+      skippedReasons: result.skippedReasons ?? {},
+      extractionErrors,
+      embeddingErrors: 0,
+      databaseErrors: 0,
+    })
 
     await prisma.integration.update({
       where: { workspaceId_type: { workspaceId, type: 'notion' } },
@@ -85,8 +110,9 @@ export async function POST(req: Request) {
       skipped: result.skipped,
       extracted: knowledgeCreated + knowledgeUpdated,
       chunksExtracted: result.chunksExtracted ?? result.chunks,
-      extractionEmbeddingErrors: result.extractionEmbeddingErrors ?? 0,
+      extractionEmbeddingErrors: extractionErrors,
       skippedReasons: result.skippedReasons ?? {},
+      diagnostics: result.diagnostics,
       pagesProcessed: result.pages,
       chunksCreated: result.chunks,
       failed: result.failed,

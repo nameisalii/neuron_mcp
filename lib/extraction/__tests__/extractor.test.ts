@@ -109,14 +109,15 @@ describe('extractKnowledge', () => {
     expect(result.map((r) => r.confidence)).toEqual(expect.arrayContaining([0.85, 0.4]))
   })
 
-  it('drops items with confidence below 0.4', async () => {
+  it('falls back when all extracted items are below confidence threshold', async () => {
     mockChatCreate.mockResolvedValue(extraction([
       { content: 'Too weak', category: 'idea', owner: null, confidence: 0.39 },
     ]))
 
     const result = await extractKnowledge(twoMessages, 'ws-1')
 
-    expect(result).toHaveLength(0)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ category: 'fact', confidence: 0.55 })
   })
 
   it('extracts and stores items with category fact', async () => {
@@ -176,13 +177,22 @@ describe('extractKnowledge', () => {
     }))
   })
 
-  it('returns empty array when LLM returns []', async () => {
+  it('creates a fallback fact when LLM returns []', async () => {
     mockChatCreate.mockResolvedValue(extraction([]))
 
-    const result = await extractKnowledge(twoMessages, 'ws-1')
+    const result = await extractKnowledgeDetailed(twoMessages, 'ws-1', 'slack')
 
-    expect(result).toHaveLength(0)
-    expect(mockCreate).not.toHaveBeenCalled()
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]).toMatchObject({ category: 'fact', confidence: 0.55 })
+    expect(result.diagnostics.fallbackItemsCreated).toBe(1)
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        workspaceId: 'ws-1',
+        category: 'fact',
+        source: 'slack',
+        visibility: 'team',
+      }),
+    }))
   })
 
   it('skips chunk entirely on invalid JSON from LLM', async () => {
@@ -228,7 +238,7 @@ describe('extractKnowledge', () => {
     expect(mockChatCreate).toHaveBeenCalledTimes(3)
   })
 
-  it('continues processing remaining items when one embedding fails', async () => {
+  it('keeps DB items when one embedding fails', async () => {
     mockChatCreate.mockResolvedValue(extraction([
       { content: 'Rule A', category: 'rule', owner: null, confidence: 0.9 },
       { content: 'Rule B', category: 'rule', owner: null, confidence: 0.85 },
@@ -239,8 +249,8 @@ describe('extractKnowledge', () => {
 
     const result = await extractKnowledge(twoMessages, 'ws-1')
 
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toBe('Rule B')
+    expect(result).toHaveLength(2)
+    expect(mockCreate).toHaveBeenCalledTimes(2)
   })
 
   describe('deduplication', () => {

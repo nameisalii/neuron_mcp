@@ -2,7 +2,7 @@
 import { POST } from '../route'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
-import { syncSlackMessages } from '@/lib/slack/sync'
+import { syncSlackMessagesDetailed } from '@/lib/slack/sync'
 import { extractKnowledgeDetailed } from '@/lib/extraction/extractor'
 
 jest.mock('@clerk/nextjs/server', () => ({ auth: jest.fn() }))
@@ -14,7 +14,7 @@ jest.mock('@/lib/db', () => ({
     knowledgeItem: { count: jest.fn() },
   },
 }))
-jest.mock('@/lib/slack/sync', () => ({ syncSlackMessages: jest.fn() }))
+jest.mock('@/lib/slack/sync', () => ({ syncSlackMessagesDetailed: jest.fn() }))
 jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledgeDetailed: jest.fn() }))
 
 const diagnostics = {
@@ -22,6 +22,7 @@ const diagnostics = {
   extractorReturnedEmpty: 0,
   extractorParseFailed: 0,
   validationFailed: 0,
+  fallbackItemsCreated: 0,
   knowledgeItemCreateFailed: 0,
   embeddingUpsertFailed: 0,
   itemProcessingFailed: 0,
@@ -34,9 +35,13 @@ beforeEach(() => {
     workspace: { id: 'ws-1', integrations: [{ id: 'int-1', lastSyncAt: null }] },
   })
   ;(prisma.workspaceMember.findUnique as jest.Mock).mockResolvedValue({ role: 'member' })
-  ;(syncSlackMessages as jest.Mock).mockResolvedValue([
-    { text: 'Deploys happen Tuesday', user: 'U1', channel: 'C1', ts: '1000.0' },
-  ])
+  ;(syncSlackMessagesDetailed as jest.Mock).mockResolvedValue({
+    messages: [{ text: 'Deploys happen Tuesday', user: 'U1', channel: 'C1', ts: '1000.0' }],
+    channelsDiscovered: 1,
+    channelsScanned: 1,
+    channelsSkipped: 0,
+    skippedReasons: {},
+  })
   ;(extractKnowledgeDetailed as jest.Mock).mockResolvedValue({
     items: [{ content: 'Deploys happen Tuesday', category: 'fact', owner: null, confidence: 0.9 }],
     diagnostics,
@@ -78,4 +83,25 @@ it('does not silently return 200 when every Slack extraction fails', async () =>
     error: expect.stringContaining('extraction failed'),
   })
   expect(prisma.integration.update).not.toHaveBeenCalled()
+})
+
+it('returns a clear reason when Slack has no accessible messages', async () => {
+  ;(syncSlackMessagesDetailed as jest.Mock).mockResolvedValue({
+    messages: [],
+    channelsDiscovered: 0,
+    channelsScanned: 0,
+    channelsSkipped: 0,
+    skippedReasons: { no_joined_channels: 1 },
+  })
+  ;(extractKnowledgeDetailed as jest.Mock).mockResolvedValue({ items: [], diagnostics: { ...diagnostics, extractorCalled: 0 } })
+
+  const res = await POST()
+
+  expect(res.status).toBe(200)
+  expect(await res.json()).toMatchObject({
+    success: true,
+    fetched: 0,
+    message: expect.stringContaining('Invite the Neuron bot'),
+    skippedReasons: expect.objectContaining({ no_joined_channels: 1 }),
+  })
 })

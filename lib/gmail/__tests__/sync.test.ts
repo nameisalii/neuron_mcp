@@ -165,9 +165,10 @@ beforeEach(() => {
       extractorReturnedEmpty: 1,
       extractorParseFailed: 0,
       validationFailed: 0,
+      fallbackItemsCreated: 0,
       knowledgeItemCreateFailed: 0,
-        embeddingUpsertFailed: 0,
-        itemProcessingFailed: 0,
+      embeddingUpsertFailed: 0,
+      itemProcessingFailed: 0,
     },
   })
   ;(trackEvent as jest.Mock).mockResolvedValue(undefined)
@@ -512,6 +513,7 @@ describe('syncGmail thread grouping and chunks', () => {
         extractorReturnedEmpty: 0,
         extractorParseFailed: 0,
         validationFailed: 0,
+        fallbackItemsCreated: 0,
         knowledgeItemCreateFailed: 0,
         embeddingUpsertFailed: 0,
         itemProcessingFailed: 0,
@@ -535,6 +537,7 @@ describe('syncGmail thread grouping and chunks', () => {
         extractorReturnedEmpty: 0,
         extractorParseFailed: 1,
         validationFailed: 0,
+        fallbackItemsCreated: 0,
         knowledgeItemCreateFailed: 0,
         embeddingUpsertFailed: 0,
         itemProcessingFailed: 0,

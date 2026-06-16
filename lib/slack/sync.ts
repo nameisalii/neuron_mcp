@@ -3,6 +3,18 @@ import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import type { SlackMessage } from '@/types'
 
+export interface SlackSyncFetchResult {
+  messages: SlackMessage[]
+  channelsDiscovered: number
+  channelsScanned: number
+  channelsSkipped: number
+  skippedReasons: Record<string, number>
+}
+
+function incrementReason(target: Record<string, number>, reason: string, count = 1) {
+  target[reason] = (target[reason] ?? 0) + count
+}
+
 async function fetchWithRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn()
@@ -24,7 +36,7 @@ async function discoverChannels(client: WebClient): Promise<string[]> {
   do {
     const page = await fetchWithRateLimitRetry(() =>
       client.conversations.list({
-        types: 'public_channel',
+        types: 'public_channel,private_channel',
         exclude_archived: true,
         limit: 200,
         cursor,
@@ -32,7 +44,7 @@ async function discoverChannels(client: WebClient): Promise<string[]> {
     )
 
     for (const ch of page.channels ?? []) {
-      if (ch.id) channelIds.push(ch.id)
+      if (ch.id && ch.is_member) channelIds.push(ch.id)
     }
 
     cursor = page.response_metadata?.next_cursor ?? undefined
@@ -49,6 +61,7 @@ const BENIGN_JOIN_ERRORS = new Set([
 async function fetchChannelMessages(
   client: WebClient,
   channelId: string,
+  skippedReasons: Record<string, number>,
   oldest?: string,
 ): Promise<SlackMessage[]> {
   try {
@@ -59,6 +72,7 @@ async function fetchChannelMessages(
     const code = (err as { data?: { error?: string } }).data?.error ?? 'unknown'
     if (!BENIGN_JOIN_ERRORS.has(code)) {
       console.error(`[slack/sync] Cannot join channel ${channelId} (${code}), skipping`)
+      incrementReason(skippedReasons, `channel_join_${code}`)
       return []
     }
   }
@@ -77,8 +91,14 @@ async function fetchChannelMessages(
     )
 
     for (const msg of page.messages ?? []) {
-      if (!msg.text?.trim()) continue
-      if (msg.bot_id || msg.subtype === 'bot_message') continue
+      if (!msg.text?.trim()) {
+        incrementReason(skippedReasons, 'empty_or_system_message')
+        continue
+      }
+      if (msg.bot_id || msg.subtype === 'bot_message') {
+        incrementReason(skippedReasons, 'bot_message')
+        continue
+      }
       messages.push({
         text: msg.text,
         user: msg.user ?? 'unknown',
@@ -93,7 +113,7 @@ async function fetchChannelMessages(
   return messages
 }
 
-export async function syncSlackMessages(workspaceId: string): Promise<SlackMessage[]> {
+export async function syncSlackMessagesDetailed(workspaceId: string): Promise<SlackSyncFetchResult> {
   const integration = await prisma.integration.findUnique({
     where: { workspaceId_type: { workspaceId, type: 'slack' } },
   })
@@ -102,6 +122,7 @@ export async function syncSlackMessages(workspaceId: string): Promise<SlackMessa
 
   const accessToken = decrypt(integration.accessToken)
   const client = new WebClient(accessToken)
+  const skippedReasons: Record<string, number> = {}
 
   const channelIds = integration.channels.length > 0
     ? integration.channels
@@ -114,11 +135,31 @@ export async function syncSlackMessages(workspaceId: string): Promise<SlackMessa
     : NINETY_DAYS_AGO
 
   const allMessages: SlackMessage[] = []
+  let channelsScanned = 0
 
   for (const channelId of channelIds) {
-    const messages = await fetchChannelMessages(client, channelId, oldest)
+    channelsScanned++
+    const messages = await fetchChannelMessages(client, channelId, skippedReasons, oldest)
     allMessages.push(...messages)
   }
 
-  return allMessages
+  if (channelIds.length === 0) {
+    incrementReason(skippedReasons, 'no_joined_channels')
+  }
+  if (channelIds.length > 0 && allMessages.length === 0) {
+    incrementReason(skippedReasons, 'no_recent_human_messages')
+  }
+
+  return {
+    messages: allMessages,
+    channelsDiscovered: channelIds.length,
+    channelsScanned,
+    channelsSkipped: channelIds.length - channelsScanned,
+    skippedReasons,
+  }
+}
+
+export async function syncSlackMessages(workspaceId: string): Promise<SlackMessage[]> {
+  const result = await syncSlackMessagesDetailed(workspaceId)
+  return result.messages
 }

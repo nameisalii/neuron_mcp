@@ -49,6 +49,7 @@ function makeRequest(body?: object) {
 beforeEach(() => {
   jest.clearAllMocks()
   mockIntegrationFind.mockResolvedValue({
+    id: 'int-notion-1',
     type: 'notion',
     accessToken: 'encrypted-workspace-token',
     metadata: { status: 'connected', connectedBy: CLERK_ID },

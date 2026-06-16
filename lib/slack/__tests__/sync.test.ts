@@ -10,6 +10,7 @@ import { WebClient } from '@slack/web-api'
 jest.mock('@slack/web-api', () => ({
   WebClient: jest.fn().mockImplementation(() => ({
     conversations: {
+      list: jest.fn(),
       join: jest.fn().mockResolvedValue({}),
       history: jest.fn(),
     },
@@ -53,7 +54,17 @@ const emptyMsg = { text: '   ', user: 'U4', ts: '1003.0' }
 
 function mockHistory(impl: jest.Mock): void {
   MockWebClient.mockImplementation(() => ({
-    conversations: { join: jest.fn().mockResolvedValue({}), history: impl },
+    conversations: { list: jest.fn(), join: jest.fn().mockResolvedValue({}), history: impl },
+  }) as unknown as WebClient)
+}
+
+function mockClient(impl: { list?: jest.Mock; join?: jest.Mock; history?: jest.Mock }): void {
+  MockWebClient.mockImplementation(() => ({
+    conversations: {
+      list: impl.list ?? jest.fn(),
+      join: impl.join ?? jest.fn().mockResolvedValue({}),
+      history: impl.history ?? jest.fn().mockResolvedValue(historyResponse([])),
+    },
   }) as unknown as WebClient)
 }
 
@@ -151,5 +162,27 @@ describe('syncSlackMessages', () => {
     const messages = await syncSlackMessages('ws-1')
 
     expect(messages).toHaveLength(0)
+  })
+
+  it('discovers only joined public/private channels when no channels are configured', async () => {
+    mockFindUnique.mockResolvedValue({ ...baseIntegration, channels: [] } as never)
+    const list = jest.fn().mockResolvedValue({
+      channels: [
+        { id: 'C_JOINED', is_member: true },
+        { id: 'C_NOT_JOINED', is_member: false },
+        { id: 'G_JOINED', is_member: true },
+      ],
+      response_metadata: { next_cursor: '' },
+    })
+    const history = jest.fn().mockResolvedValue(historyResponse([humanMsg]))
+    mockClient({ list, history })
+
+    const messages = await syncSlackMessages('ws-1')
+
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({
+      types: 'public_channel,private_channel',
+    }))
+    expect(history).toHaveBeenCalledTimes(2)
+    expect(messages).toHaveLength(2)
   })
 })

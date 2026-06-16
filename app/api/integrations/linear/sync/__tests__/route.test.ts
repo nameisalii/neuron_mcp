@@ -45,9 +45,9 @@ it('returns useful Linear issue and team counts', async () => {
 it('returns a useful error response when Linear fails', async () => {
   ;(syncLinearIssues as jest.Mock).mockRejectedValue(new Error('Linear GraphQL error: Insufficient scope'))
   const res = await POST()
-  expect(res.status).toBe(500)
+  expect(res.status).toBe(502)
   expect(await res.json()).toMatchObject({
     success: false, issuesFound: 0, teamsScanned: 0,
-    error: 'Linear GraphQL error: Insufficient scope',
+    error: 'Linear API query failed — Linear GraphQL error: Insufficient scope',
   })
 })

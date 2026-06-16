@@ -13,6 +13,9 @@ interface SyncResult {
   knowledgeUpdated?: number
   chunksExtracted?: number
   extractionEmbeddingErrors?: number
+  extractionErrors?: number
+  embeddingErrors?: number
+  databaseErrors?: number
   synced?: number
   extracted?: number
   imported?: number
@@ -182,6 +185,8 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
                 {result.teamsScanned != null && ` · ${result.teamsScanned} teams`}
                 {result.labelsScanned != null && ` · ${result.labelsScanned} labels`}
                 {result.extractionEmbeddingErrors != null && result.extractionEmbeddingErrors > 0 && ` · ${result.extractionEmbeddingErrors} extraction errors`}
+                {result.embeddingErrors != null && result.embeddingErrors > 0 && ` · ${result.embeddingErrors} embedding errors`}
+                {result.databaseErrors != null && result.databaseErrors > 0 && ` · ${result.databaseErrors} database errors`}
                 {result.namespaceUsed && ` · ${result.namespaceUsed}`}
                 {result.conflicts != null && result.conflicts > 0 && ` · ${result.conflicts} conflicts`}
               </p>
@@ -198,7 +203,7 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
             </button>
           )}
           {result.lastSyncedAt && <p className="text-xs text-gray-400">Last synced {new Date(result.lastSyncedAt).toLocaleString()}</p>}
-          {(result.gmailQueryUsed || result.selectedLabels || result.labelIdsUsed || result.messagesFoundBeforeFiltering != null) && (
+          {(result.gmailQueryUsed || result.selectedLabels || result.labelIdsUsed || result.messagesFoundBeforeFiltering != null || (result.skippedReasons && Object.keys(result.skippedReasons).length > 0) || (result.extractionDiagnostics && Object.values(result.extractionDiagnostics).some((value) => value > 0))) && (
             <p className="text-xs text-gray-400 break-words">
               {result.selectedLabels?.length ? `Labels: ${result.selectedLabels.join(', ')}` : null}
               {result.labelIdsUsed?.length ? `${result.selectedLabels?.length ? ' · ' : ''}Label IDs: ${result.labelIdsUsed.join(', ')}` : null}

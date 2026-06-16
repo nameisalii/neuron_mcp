@@ -118,6 +118,7 @@ function makeBlock(type: string, overrides: Record<string, unknown> = {}) {
     divider: { divider: {} },
     table_row: { table_row: { cells: [richText('col A'), richText('col B')] } },
     child_page: { child_page: { title: 'Child Page Title' } },
+    child_database: { child_database: { title: 'Roadmap Database' } },
   }
   return { type, id: `block-${type}`, has_children: false, ...defaults[type], ...overrides }
 }
@@ -153,6 +154,7 @@ beforeEach(() => {
       extractorReturnedEmpty: 1,
       extractorParseFailed: 0,
       validationFailed: 0,
+      fallbackItemsCreated: 0,
       knowledgeItemCreateFailed: 0,
       embeddingUpsertFailed: 0,
       itemProcessingFailed: 0,
@@ -219,6 +221,7 @@ describe('block extraction — all supported types', () => {
   singleBlockTest('toggle', 'toggle title')
   singleBlockTest('quote', 'quote text')
   singleBlockTest('child_page', 'Child Page Title')
+  singleBlockTest('child_database', 'Roadmap Database')
 
   it('extracts image caption as chunk content', async () => {
     mockSearch.mockResolvedValueOnce({ results: [makePage('page-1', 'Page')], next_cursor: null, has_more: false })

@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { decrypt } from '@/lib/crypto'
-import { extractKnowledge } from '@/lib/extraction/extractor'
+import { extractKnowledgeDetailed, type ExtractionDiagnostics } from '@/lib/extraction/extractor'
 import { generateEmbedding } from '@/lib/openai'
 import { deleteEmbeddings, upsertEmbedding } from '@/lib/pinecone'
 
@@ -124,6 +124,9 @@ export interface LinearSyncResult {
   processed?: number
   knowledgeCreated?: number
   knowledgeUpdated?: number
+  extractionErrors?: number
+  embeddingErrors?: number
+  databaseErrors?: number
   extractionEmbeddingErrors?: number
   synced: number
   extracted: number
@@ -138,6 +141,31 @@ export interface LinearSyncResult {
   viewer: { id: string; name: string }
   skippedReasons: Record<string, number>
   message?: string
+}
+
+function emptyExtractionDiagnostics(): ExtractionDiagnostics {
+  return {
+    extractorCalled: 0,
+    extractorReturnedEmpty: 0,
+    extractorParseFailed: 0,
+    validationFailed: 0,
+    fallbackItemsCreated: 0,
+    knowledgeItemCreateFailed: 0,
+    embeddingUpsertFailed: 0,
+    itemProcessingFailed: 0,
+  }
+}
+
+function addExtractionDiagnostics(target: ExtractionDiagnostics, source: ExtractionDiagnostics) {
+  for (const key of Object.keys(target) as Array<keyof ExtractionDiagnostics>) {
+    target[key] += source[key] ?? 0
+  }
+}
+
+function extractionErrorCount(diagnostics: ExtractionDiagnostics) {
+  return diagnostics.extractorParseFailed
+    + diagnostics.validationFailed
+    + diagnostics.itemProcessingFailed
 }
 
 async function linearRequest<T>(token: string, query: string, variables: Record<string, unknown>): Promise<T> {
@@ -226,20 +254,27 @@ export async function deleteLinearIssue(workspaceId: string, issueId: string, so
 export async function syncLinearIssue(
   workspaceId: string,
   issue: LinearIssue,
-): Promise<{ extracted: number; imported: number; updated: number; skipped: number; deleted: number }> {
+): Promise<{
+  extracted: number
+  imported: number
+  updated: number
+  skipped: number
+  deleted: number
+  diagnostics: ExtractionDiagnostics
+}> {
+  const diagnostics = emptyExtractionDiagnostics()
   const existingCount = await prisma.knowledgeItem.count({
     where: { workspaceId, source: 'linear', OR: [{ sourceExternalId: issue.id }, { sourceUrl: issue.url }] },
   })
 
   if (issue.archivedAt) {
     const deleted = await deleteLinearIssue(workspaceId, issue.id, issue.url)
-    return { extracted: 0, imported: 0, updated: 0, skipped: deleted ? 0 : 1, deleted }
+    return { extracted: 0, imported: 0, updated: 0, skipped: deleted ? 0 : 1, deleted, diagnostics }
   }
 
   await deleteLinearIssue(workspaceId, issue.id, issue.url)
   const document = buildContent(issue)
   const category = issue.completedAt || issue.canceledAt ? 'status_update' : 'fact'
-  const embedding = await generateEmbedding(document)
   const dbItem = await prisma.knowledgeItem.create({
     data: {
       workspaceId,
@@ -256,6 +291,7 @@ export async function syncLinearIssue(
     select: { id: true },
   })
   try {
+    const embedding = await generateEmbedding(document)
     await upsertEmbedding(dbItem.id, embedding, {
       workspaceId,
       category,
@@ -263,24 +299,26 @@ export async function syncLinearIssue(
     })
     await prisma.knowledgeItem.update({ where: { id: dbItem.id }, data: { embeddingId: dbItem.id } })
   } catch (err) {
-    await prisma.knowledgeItem.delete({ where: { id: dbItem.id } }).catch(() => null)
-    throw err
+    console.error('[linear/sync] embedding failed; keeping DB item without vector', err)
+    diagnostics.embeddingUpsertFailed++
   }
 
-  const extracted = await extractKnowledge(
+  const extraction = await extractKnowledgeDetailed(
     [{ text: document, user: issue.creator?.name ?? 'Linear', channel: issue.team?.name ?? 'Linear', ts: String(new Date(issue.createdAt).getTime() / 1000), permalink: issue.url }],
     workspaceId,
     'linear',
     issue.url,
     issue.id,
   )
+  addExtractionDiagnostics(diagnostics, extraction.diagnostics)
 
   return {
-    extracted: extracted.length + 1,
+    extracted: extraction.items.length + 1,
     imported: existingCount === 0 ? 1 : 0,
     updated: existingCount > 0 ? 1 : 0,
     skipped: 0,
     deleted: 0,
+    diagnostics,
   }
 }
 
@@ -308,6 +346,9 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
     processed: 0,
     knowledgeCreated: 0,
     knowledgeUpdated: 0,
+    extractionErrors: 0,
+    embeddingErrors: 0,
+    databaseErrors: 0,
     extractionEmbeddingErrors: 0,
     synced: 0,
     extracted: 0,
@@ -353,6 +394,12 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
           result.knowledgeUpdated! += itemResult.updated
           result.skipped += itemResult.skipped
           result.deleted += itemResult.deleted
+          result.extractionErrors! += extractionErrorCount(itemResult.diagnostics)
+          result.embeddingErrors! += itemResult.diagnostics.embeddingUpsertFailed
+          result.databaseErrors! += itemResult.diagnostics.knowledgeItemCreateFailed
+          result.extractionEmbeddingErrors! += extractionErrorCount(itemResult.diagnostics)
+            + itemResult.diagnostics.embeddingUpsertFailed
+            + itemResult.diagnostics.knowledgeItemCreateFailed
           if (itemResult.skipped > 0) {
             const reason = issue.archivedAt ? 'archived_issue_not_previously_imported' : 'unchanged_or_duplicate'
             result.skippedReasons[reason] = (result.skippedReasons[reason] ?? 0) + itemResult.skipped
@@ -360,6 +407,7 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
         } catch (err) {
           const reason = err instanceof Error ? err.message : 'Unknown issue processing error'
           console.error(`[linear/sync] issue ${issueRef.id} skipped:`, err)
+          result.databaseErrors!++
           result.extractionEmbeddingErrors!++
           result.skipped++
           result.skippedReasons[reason] = (result.skippedReasons[reason] ?? 0) + 1
@@ -379,13 +427,18 @@ export async function syncLinearIssues(integration: SyncInput): Promise<LinearSy
   console.info('[linear/sync] summary', {
     workspaceId: integration.workspaceId,
     integration: 'linear',
-    rawItemsFetched: result.fetched,
-    chunksExtracted: result.processed,
+    integrationId: integration.id,
+    fetched: result.fetched,
+    processed: result.processed,
+    textItems: result.synced,
+    chunks: result.processed,
     knowledgeItemsCreated: result.knowledgeCreated,
     knowledgeItemsUpdated: result.knowledgeUpdated,
     skipped: result.skipped,
     skippedReasons: result.skippedReasons,
-    extractionEmbeddingErrors: result.extractionEmbeddingErrors,
+    extractionErrors: result.extractionErrors,
+    embeddingErrors: result.embeddingErrors,
+    databaseErrors: result.databaseErrors,
     teamsScanned: result.teamsScanned,
   })
 
