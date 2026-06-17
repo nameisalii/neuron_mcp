@@ -4,6 +4,11 @@ import { prisma } from '@/lib/db'
 import { provisionUser } from '@/lib/provision-user'
 import DashboardShell from './DashboardShell'
 
+// Dashboard pages depend on the signed-in user (Clerk) and live data, so they
+// must render per-request. Forcing dynamic rendering prevents build-time
+// prerendering, which fails when auth/env isn't available at build.
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { userId: rawUserId } = await auth()
   if (!rawUserId) redirect('/sign-in')
