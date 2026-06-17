@@ -90,22 +90,45 @@
       </div>
     </div>`;
 
+  const sSync = `
+    <div class="np">
+      <div class="np-h" data-reveal>
+        <div><div class="np-title">Integrations</div>
+        <div class="np-sub">Connect your tools so Neuron can capture your team's knowledge.</div></div>
+      </div>
+      <div class="card" data-reveal style="margin-top:18px">
+        <div class="row">
+          ${tile(LINEAR)}
+          <div class="grow"><div class="itg-name">Linear</div>
+            <div class="itg-meta">Importing issues…</div></div>
+          <span class="badge on">${CKC} Connected</span>
+        </div>
+        <div data-reveal style="margin-top:16px"><div class="bar"><span style="width:68%"></span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:8px">
+            <span>Reading issues, comments &amp; status changes</span><span>59 / 87</span></div></div>
+        <div class="desc" data-reveal>Neuron classifies each issue and indexes it for semantic search.</div>
+      </div>
+    </div>`;
+
   window.NEURON_VIDEO = {
     eyebrow: 'Integrations · Step-by-step',
     scenes: [
-      { dur: 3.8, headline, step: 1, steps: 4, stepLabel: 'Open Integrations',
-        caption: 'In Neuron, open Integrations and find the Linear card. Click Connect.',
+      { dur: 4.6, headline, step: 1, steps: 5, stepLabel: 'Open Integrations',
+        caption: 'In Neuron, open Integrations, find the Linear card, and click Connect.',
         chrome: { url: 'app.neuron.so/dashboard/integrations' }, body: s1,
-        cursor: { to: '#connect', appearAt: 1.4, click: 2.9 } },
-      { dur: 3.7, headline, step: 2, steps: 4, stepLabel: 'Authorize in Linear',
+        cursor: { to: '#connect', appearAt: 2.0, click: 3.4 } },
+      { dur: 4.8, headline, step: 2, steps: 5, stepLabel: 'Authorize in Linear',
         caption: 'Linear opens. Review the access Neuron needs, then click Authorize.',
         chrome: { url: 'linear.app/oauth/authorize' }, body: s2,
-        cursor: { to: '#allow', appearAt: 1.5, click: 2.8 } },
-      { dur: 3.7, headline, step: 3, steps: 4, stepLabel: 'Back in Neuron',
+        cursor: { to: '#allow', appearAt: 2.2, click: 3.6 } },
+      { dur: 4.6, headline, step: 3, steps: 5, stepLabel: 'Back in Neuron',
         caption: 'Back in Neuron and connected. Click Sync Now to import your issues.',
         chrome: { url: 'app.neuron.so/dashboard/integrations?connected=linear' }, body: s3,
-        cursor: { to: '#sync', appearAt: 1.6, click: 2.9 } },
-      { dur: 3.6, headline, step: 4, steps: 4, stepLabel: 'Done',
+        cursor: { to: '#sync', appearAt: 2.0, click: 3.4 } },
+      { dur: 3.8, headline, step: 4, steps: 5, stepLabel: 'Syncing',
+        caption: 'Neuron reads every issue and builds searchable, verified knowledge.',
+        chrome: { url: 'app.neuron.so/dashboard/integrations' }, body: sSync },
+      { dur: 4.6, headline, step: 5, steps: 5, stepLabel: 'Done',
         caption: 'Done. Neuron re-syncs automatically as issues change, so context never goes stale.',
         chrome: { url: 'app.neuron.so/dashboard/integrations' }, body: s4 },
     ],

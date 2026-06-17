@@ -13,8 +13,8 @@ node capture.mjs "$V"
 FF="$(command -v ffmpeg)"
 
 "$FF" -y -framerate 30 -i "frames/$V/%04d.png" \
-  -vf "scale=1120:760:flags=lanczos,format=yuv420p" \
-  -c:v libx264 -profile:v high -crf 20 -movflags +faststart \
+  -vf "scale=2240:1520:flags=lanczos,format=yuv420p" \
+  -c:v libx264 -profile:v high -preset slow -crf 18 -movflags +faststart \
   "out/$OUTNAME.mp4" >/dev/null 2>&1
 
 echo "wrote out/$OUTNAME.mp4"

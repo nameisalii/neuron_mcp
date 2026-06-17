@@ -9,7 +9,7 @@ const FADE_OUT = 0.5;   // close to black
 const REVEAL_BASE = 0.18;
 const REVEAL_STAGGER = 0.12;
 const REVEAL_DUR = 0.42;
-const CURSOR_MOVE = 0.6;
+const CURSOR_MOVE = 0.78;
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
@@ -130,6 +130,14 @@ function applyCursor(scene, sceneEl, localT) {
   if (!cur) { cursorEl.style.opacity = '0'; rippleEl.style.opacity = '0'; return; }
   const target = sceneEl.querySelector(cur.to);
   if (!target) { cursorEl.style.opacity = '0'; return; }
+  // Guarantee the button the cursor interacts with is fully rendered (never
+  // mid-fade or shifted) for the whole scene — fixes "buttons not showing".
+  for (let node = target; node && node !== sceneEl; node = node.parentElement) {
+    if (node.hasAttribute('data-reveal') || node === target) {
+      node.style.opacity = '1';
+      node.style.transform = 'none';
+    }
+  }
   const wb = wrap.getBoundingClientRect();
   const tb = target.getBoundingClientRect();
   const tx = tb.left - wb.left + tb.width / 2;
