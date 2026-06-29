@@ -14,7 +14,7 @@ interface StoryEvent {
   sourceCreatedAt: string | null
 }
 
-const BRAND_KEYS = new Set<BrandKey>(['slack', 'notion', 'linear', 'gmail', 'discord'])
+const BRAND_KEYS = new Set<BrandKey>(['slack', 'notion', 'linear', 'gmail', 'discord', 'granola', 'telegram', 'whatsapp'])
 function asBrand(source: string): BrandKey | null {
   const s = source.toLowerCase()
   return BRAND_KEYS.has(s as BrandKey) ? (s as BrandKey) : null
@@ -130,9 +130,9 @@ export default function StoryTimeline() {
                   className="relative flex gap-4"
                 >
                   {/* branded node */}
-                  <div className="relative z-10 shrink-0 w-[52px] h-[52px] rounded-xl bg-white border border-warm shadow-soft flex items-center justify-center overflow-hidden">
+                  <div className="relative z-10 flex h-[56px] w-[56px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-warm bg-white shadow-soft">
                     {brand ? (
-                      <BrandLogo brand={brand} className="w-6 h-6" />
+                      <BrandLogo brand={brand} className="h-9 w-9" />
                     ) : (
                       <NeuronMark className="w-full h-full" />
                     )}

@@ -18,4 +18,20 @@ describe('SourceIcon', () => {
     render(<SourceIcon source="slack" />)
     expect(screen.getByAltText('Slack')).toHaveAttribute('src', expect.stringContaining('slack.png'))
   })
+
+  it('renders Discord, Granola, and WhatsApp from local logo assets', () => {
+    render(
+      <div>
+        <SourceIcon source="discord" />
+        <SourceIcon source="granola" />
+        <SourceIcon source="telegram" />
+        <SourceIcon source="whatsapp" />
+      </div>,
+    )
+
+    expect(screen.getByAltText('Discord')).toHaveAttribute('src', expect.stringContaining('discord.png'))
+    expect(screen.getByAltText('Granola')).toHaveAttribute('src', expect.stringContaining('granola.png'))
+    expect(screen.getByAltText('Telegram')).toHaveAttribute('src', expect.stringContaining('telegram.png'))
+    expect(screen.getByAltText('WhatsApp Business')).toHaveAttribute('src', expect.stringContaining('/icons/whatsapp.svg'))
+  })
 })

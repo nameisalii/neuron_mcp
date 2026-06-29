@@ -4,8 +4,9 @@ import { formatDate, type KnowledgePreviewInput } from '@/lib/knowledge/preview'
 import type { GmailSyncMetadata, KnowledgeCategory } from '@/types'
 import { isIntegrationConnected } from './connection'
 import { getConnectedIntegrationToken } from './connection-server'
+import { isTelegramConfigured } from '@/lib/telegram/config'
 
-export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail'
+export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'whatsapp'
 
 export type IntegrationFilter =
   | 'all'
@@ -100,6 +101,7 @@ function visibleKnowledgeWhere(source: IntegrationSource, workspaceId: string, u
 }
 
 function sourceTitle(source: IntegrationSource): string {
+  if (source === 'whatsapp') return 'WhatsApp Business Overview'
   return `${source.charAt(0).toUpperCase()}${source.slice(1)} Overview`
 }
 
@@ -113,6 +115,14 @@ function sourceSubtitle(source: IntegrationSource): string {
       return 'Knowledge extracted from your Linear issues and updates.'
     case 'gmail':
       return 'Private memory extracted from your selected Gmail labels.'
+    case 'granola':
+      return 'Knowledge extracted from your Granola meeting notes.'
+    case 'discord':
+      return 'Knowledge extracted from your Discord server channels.'
+    case 'telegram':
+      return 'Knowledge extracted from new Telegram group and channel messages.'
+    case 'whatsapp':
+      return 'Knowledge extracted from inbound WhatsApp Business messages.'
     default:
       return `${source} overview`
   }
@@ -120,11 +130,12 @@ function sourceSubtitle(source: IntegrationSource): string {
 
 function emptyState(source: IntegrationSource, connected: boolean): IntegrationOverviewEmptyState {
   const label = source.charAt(0).toUpperCase() + source.slice(1)
+  const displayLabel = source === 'whatsapp' ? 'WhatsApp Business' : label
   if (!connected) {
     return {
-      title: `${label} is not connected yet.`,
-      description: `Connect ${label} to start extracting knowledge from this source.`,
-      actionLabel: `Connect ${label}`,
+      title: `${displayLabel} is not connected yet.`,
+      description: `Connect ${displayLabel} to start extracting knowledge from this source.`,
+      actionLabel: `Connect ${displayLabel}`,
       actionHref: '/dashboard/integrations',
     }
   }
@@ -139,9 +150,13 @@ function emptyState(source: IntegrationSource, connected: boolean): IntegrationO
   }
 
   return {
-    title: `${label} is connected, but no knowledge has been synced yet.`,
-    description: `Run a sync from the integrations page to populate ${label.toLowerCase()} knowledge.`,
-    actionLabel: `Sync ${label} now`,
+    title: `${displayLabel} is connected, but no knowledge has been synced yet.`,
+    description: source === 'whatsapp'
+      ? 'New inbound WhatsApp messages will appear here after Meta sends webhook events.'
+      : source === 'telegram'
+        ? 'Telegram sync starts from new messages after the bot is added and the webhook is configured. Old chat history is not available through the official bot API.'
+      : `Run a sync from the integrations page to populate ${displayLabel.toLowerCase()} knowledge.`,
+    actionLabel: source === 'whatsapp' || source === 'telegram' ? 'Review webhook setup' : `Sync ${displayLabel} now`,
     actionHref: '/dashboard/integrations',
   }
 }
@@ -187,7 +202,9 @@ export async function loadIntegrationOverview(
       workspaceType: integration?.workspace.type,
       workspaceOwnerClerkId: integration?.workspace.owner.clerkId,
     }))
-    : isIntegrationConnected(integration)
+    : source === 'telegram'
+      ? isTelegramConfigured() && Boolean(integration?.channels.length)
+      : isIntegrationConnected(integration)
   const where = visibleKnowledgeWhere(source, workspaceId, userId)
   const activeCategory = FILTER_LOOKUP.get(filter)?.category
 

@@ -1,6 +1,6 @@
 import { clsx } from 'clsx'
 
-export type BrandKey = 'slack' | 'notion' | 'linear' | 'gmail' | 'discord'
+export type BrandKey = 'slack' | 'notion' | 'linear' | 'gmail' | 'discord' | 'granola' | 'telegram' | 'whatsapp'
 
 // simpleicons CDN is only a fallback for brands without a bundled asset.
 const BRAND_HEX: Record<BrandKey, string> = {
@@ -9,6 +9,9 @@ const BRAND_HEX: Record<BrandKey, string> = {
   linear: '5E6AD2',
   gmail: 'EA4335',
   discord: '5865F2',
+  granola: '1C1A17',
+  telegram: '26A5E4',
+  whatsapp: '25D366',
 }
 
 const BRAND_LABEL: Record<BrandKey, string> = {
@@ -17,6 +20,9 @@ const BRAND_LABEL: Record<BrandKey, string> = {
   linear: 'Linear',
   gmail: 'Gmail',
   discord: 'Discord',
+  granola: 'Granola',
+  telegram: 'Telegram',
+  whatsapp: 'WhatsApp Business',
 }
 
 // Brands with a bundled, full-color asset are served locally so they match the
@@ -26,6 +32,10 @@ const LOCAL_BRAND_ASSET: Partial<Record<BrandKey, string>> = {
   slack: '/icons/slack.png',
   notion: '/icons/notion.svg',
   linear: '/icons/linear.svg',
+  discord: '/icons/discord.png',
+  granola: '/icons/granola.png',
+  telegram: '/icons/telegram.png',
+  whatsapp: '/icons/whatsapp.svg',
 }
 
 interface BrandLogoProps {
@@ -47,16 +57,16 @@ export default function BrandLogo({ brand, className, tone = 'color' }: BrandLog
   )
 }
 
-/** Brand logo inside a soft warm tile — used as the connector card avatar. */
+/** Brand logo inside a white tile — used as the connector card avatar. */
 export function BrandTile({ brand, className }: { brand: BrandKey; className?: string }) {
   return (
     <div
       className={clsx(
-        'flex items-center justify-center rounded-xl bg-cream border border-warm shrink-0',
+        'flex items-center justify-center rounded-xl bg-white border border-warm shadow-sm shrink-0',
         className,
       )}
     >
-      <BrandLogo brand={brand} className="w-1/2 h-1/2" />
+      <BrandLogo brand={brand} className="h-[72%] w-[72%]" />
     </div>
   )
 }

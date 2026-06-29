@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import { BrandTile } from '@/components/BrandLogo'
 
 type Step = 'intent' | 'team-name' | 'connect' | 'syncing' | 'ready'
 type Intent = 'solo' | 'team'
@@ -158,7 +159,7 @@ export default function SetupPage() {
               <div className="space-y-3 mb-6">
                 <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-black rounded-md flex items-center justify-center text-white text-xs font-bold">N</div>
+                    <BrandTile brand="notion" className="h-10 w-10 rounded-lg" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">Notion</p>
                       <p className="text-xs text-gray-500">Sync all pages your integration can access</p>
@@ -171,11 +172,7 @@ export default function SetupPage() {
 
                 <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200">
                   <div className="flex items-center gap-3">
-                    <img
-                      src="/icons/slack.png"
-                      alt="Slack"
-                      className="w-8 h-8 rounded-md object-cover"
-                    />
+                    <BrandTile brand="slack" className="h-10 w-10 rounded-lg" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">Slack</p>
                       <p className="text-xs text-gray-500">Connect via OAuth to sync channels</p>

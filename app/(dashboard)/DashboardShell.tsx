@@ -87,18 +87,18 @@ export default function DashboardShell({
   const [showUpgrade, setShowUpgrade] = useState(false)
 
   return (
-    <div className="min-h-screen bg-cream flex">
+    <div className="flex h-screen overflow-hidden bg-cream">
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-navy-deep/40 backdrop-blur-sm z-20 lg:hidden"
+          className="fixed inset-0 z-20 bg-black/40 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-30 w-64 bg-navy flex flex-col',
-          'transform transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto',
+          'fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-black text-white',
+          'transform transition-transform duration-200 lg:static lg:z-auto lg:h-screen lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -137,7 +137,7 @@ export default function DashboardShell({
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="h-16 bg-cream/80 backdrop-blur-sm border-b border-warm flex items-center justify-between px-4 lg:px-8 shrink-0 sticky top-0 z-10">
           <button
             className="lg:hidden p-2 rounded-[10px] text-muted hover:bg-gray-100"
@@ -150,7 +150,7 @@ export default function DashboardShell({
           <UserButton />
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-8">{children}</main>
       </div>
     </div>
   )

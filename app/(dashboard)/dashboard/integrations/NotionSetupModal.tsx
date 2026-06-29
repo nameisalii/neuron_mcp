@@ -1,10 +1,10 @@
 'use client'
 
-import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronRight, ShieldCheck } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useEffect, useState } from 'react'
+import { BrandTile } from '@/components/BrandLogo'
 import { integrationConnectClass } from './IntegrationCardUi'
 
 const steps = [
@@ -63,9 +63,7 @@ export default function NotionSetupModal({
           >
             <div className="border-b border-warm px-6 py-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-warm bg-cream">
-                  <Image src="/icons/notion.svg" alt="Notion" width={24} height={24} />
-                </div>
+                <BrandTile brand="notion" className="h-12 w-12" />
                 <div>
                   <h2 id="notion-setup-title" className="text-xl font-display font-semibold text-ink">
                     Set up Notion

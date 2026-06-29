@@ -4,7 +4,10 @@ import { prisma } from '@/lib/db'
 import { deleteEmbeddings } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
 
-const ALLOWED_TYPES = new Set(['slack', 'notion', 'linear'])
+const ALLOWED_TYPES = new Set(['slack', 'notion', 'linear', 'granola', 'discord', 'telegram', 'whatsapp'])
+// These integrations have their config fully removed on reset (disconnect),
+// matching the Notion pattern, rather than only clearing lastSyncAt.
+const DISCONNECT_ON_RESET = new Set(['notion', 'granola', 'discord', 'telegram', 'whatsapp'])
 const ALLOWED_ROLES = new Set(['owner', 'admin'])
 
 export async function POST(
@@ -63,7 +66,7 @@ export async function POST(
     pagesDeleted = deletedPages.count
   }
 
-  if (type === 'notion') {
+  if (DISCONNECT_ON_RESET.has(type)) {
     await prisma.integration.delete({ where: { id: integration.id } })
   } else {
     await prisma.integration.update({

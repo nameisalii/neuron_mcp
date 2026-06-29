@@ -69,7 +69,7 @@ export default function GmailIntegrationCard({
         {/* Header: logo + name (left), status badge (right) */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3.5">
-            <BrandTile brand="gmail" className="h-10 w-10" />
+            <BrandTile brand="gmail" className="h-12 w-12" />
             <div className="min-w-0">
               <h3 className="text-lg font-display font-semibold text-ink">Gmail</h3>
               <p className="mt-0.5 text-xs text-muted">Sync selected emails into your private Neuron memory.</p>

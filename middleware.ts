@@ -30,6 +30,8 @@ const isPublicIntegrationRoute = createRouteMatcher([
   '/api/inn/callback',
   '/api/integrations/gmail/callback',
   '/api/integrations/slack/events',
+  '/api/integrations/telegram/webhook',
+  '/api/integrations/whatsapp/webhook',
 ])
 
 export default clerkMiddleware(async (auth, req) => {

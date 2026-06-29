@@ -13,6 +13,10 @@ const SOURCE_ASSET: Record<string, { alt: string; src: string }> = {
   notion: { alt: 'Notion', src: '/icons/notion.svg' },
   gmail: { alt: 'Gmail', src: '/icons/gmail.png' },
   slack: { alt: 'Slack', src: '/icons/slack.png' },
+  discord: { alt: 'Discord', src: '/icons/discord.png' },
+  granola: { alt: 'Granola', src: '/icons/granola.png' },
+  telegram: { alt: 'Telegram', src: '/icons/telegram.png' },
+  whatsapp: { alt: 'WhatsApp Business', src: '/icons/whatsapp.svg' },
 }
 
 export default function SourceIcon({ source, className, size = 20 }: SourceIconProps) {
@@ -21,13 +25,21 @@ export default function SourceIcon({ source, className, size = 20 }: SourceIconP
 
   if (asset) {
     return (
-      <Image
-        src={asset.src}
-        alt={asset.alt}
-        width={size}
-        height={size}
-        className={clsx('shrink-0 object-contain', className)}
-      />
+      <span
+        className={clsx(
+          'inline-flex shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white shadow-sm',
+          className,
+        )}
+        style={{ width: size + 8, height: size + 8 }}
+      >
+        <Image
+          src={asset.src}
+          alt={asset.alt}
+          width={size}
+          height={size}
+          className="object-contain"
+        />
+      </span>
     )
   }
 

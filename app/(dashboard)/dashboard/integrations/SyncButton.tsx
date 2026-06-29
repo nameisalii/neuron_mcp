@@ -66,7 +66,7 @@ interface SyncResult {
 interface SyncButtonProps {
   endpoint: string
   showReset?: boolean
-  resetType?: 'slack' | 'notion' | 'linear' | 'gmail'
+  resetType?: 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'whatsapp'
   resultLabel?: string
   requestBody?: Record<string, unknown>
   syncEnabled?: boolean
@@ -126,13 +126,15 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
     && ((result.inboxMessagesAvailable ?? 0) > 0 || (result.sentMessagesAvailable ?? 0) > 0)
   const knowledgeCreated = result?.knowledgeCreated ?? result?.extractedKnowledgeItems
   const syncSummary = result && !result.error
-    ? knowledgeCreated != null && knowledgeCreated > 0
+    ? result.message
+      ? result.message
+      : knowledgeCreated != null && knowledgeCreated > 0
       ? `Created ${knowledgeCreated} knowledge item${knowledgeCreated === 1 ? '' : 's'}`
       : (result.knowledgeUpdated ?? 0) > 0
         ? `Updated ${result.knowledgeUpdated} knowledge item${result.knowledgeUpdated === 1 ? '' : 's'}`
       : (result.fetched ?? result.synced ?? result.importedThreads ?? result.issuesFound ?? result.pagesDeleted ?? 0) === 0
         ? 'Synced 0 items — no accessible data found'
-        : result.message ?? 'Synced 0 items — no extractable knowledge found'
+        : 'Synced 0 items — no extractable knowledge found'
     : null
 
   return (

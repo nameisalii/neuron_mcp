@@ -18,7 +18,7 @@ export const integrationPrimaryClass = integrationConnectClass
 export const integrationResetClass =
   'inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-red-200 px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50'
 
-type ResetType = 'slack' | 'notion' | 'linear' | 'gmail'
+type ResetType = 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'whatsapp'
 
 export function IntegrationViewLink({ href }: { href: string }) {
   return (

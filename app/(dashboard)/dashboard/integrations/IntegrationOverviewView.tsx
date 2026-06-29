@@ -4,13 +4,20 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, CheckCircle, ChevronRight, ExternalLink, FileText } from 'lucide-react'
 import { Card } from '@/components/ui/card'
-import SourceIcon from '@/components/SourceIcon'
+import { BrandTile, type BrandKey } from '@/components/BrandLogo'
 import KnowledgeCard from '@/components/KnowledgeCard'
 import { INTEGRATION_FILTERS, type IntegrationOverviewData } from '@/lib/integrations/overview'
 import { clsx } from 'clsx'
 
 interface Props {
   data: IntegrationOverviewData
+}
+
+const BRAND_SOURCES = new Set<BrandKey>(['slack', 'notion', 'linear', 'gmail', 'discord', 'granola', 'telegram', 'whatsapp'])
+
+function asBrandKey(source: string): BrandKey | null {
+  const normalized = source.toLowerCase()
+  return BRAND_SOURCES.has(normalized as BrandKey) ? (normalized as BrandKey) : null
 }
 
 function timeAgo(iso: string | null): string {
@@ -41,6 +48,7 @@ export default function IntegrationOverviewView({ data }: Props) {
   }))
   const activeCategory = filterOptions.find((filter) => filter.active)?.category
   const visibleItems = activeCategory ? items.filter((item) => item.category === activeCategory) : items
+  const brand = asBrandKey(data.source)
   const summaryCards = data.summaryCards.map((card) => {
     const normalized = card.label.toLowerCase()
     if (normalized === 'decisions') return { ...card, value: String(categoryCounts.decision ?? 0) }
@@ -75,9 +83,9 @@ export default function IntegrationOverviewView({ data }: Props) {
             Back to Integrations
           </Link>
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl border border-gray-200 bg-white flex items-center justify-center shadow-sm overflow-hidden">
-              <SourceIcon source={data.source} size={44} className="rounded-xl" />
-            </div>
+            {brand ? (
+              <BrandTile brand={brand} className="h-12 w-12" />
+            ) : null}
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{data.title}</h1>
               <p className="text-sm text-gray-500 mt-1">{data.subtitle}</p>

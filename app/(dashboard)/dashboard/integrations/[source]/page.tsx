@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import IntegrationOverviewView from '../IntegrationOverviewView'
 import { loadIntegrationOverview, parseIntegrationFilter, type IntegrationSource } from '@/lib/integrations/overview'
 
-const ALLOWED_SOURCES = new Set<IntegrationSource>(['slack', 'notion', 'linear', 'gmail'])
+const ALLOWED_SOURCES = new Set<IntegrationSource>(['slack', 'notion', 'linear', 'gmail', 'granola', 'discord', 'telegram', 'whatsapp'])
 
 export default async function IntegrationSourcePage({
   params,

@@ -179,7 +179,11 @@ export async function extractKnowledgeDetailed(
           diagnostics.fallbackItemsCreated++
           items = [{
             content,
-            category: source === 'notion' || source === 'gmail' ? 'reference' : 'fact',
+            category: source === 'granola'
+              ? 'note'
+              : source === 'notion' || source === 'gmail'
+                ? 'reference'
+                : 'fact',
             owner: null,
             confidence: 0.55,
           }]

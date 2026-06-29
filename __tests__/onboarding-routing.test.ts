@@ -41,5 +41,6 @@ describe('onboarding routing', () => {
     expect(middleware).toContain("'/api/integrations/linear/callback'")
     expect(middleware).toContain("'/api/integrations/notion/callback'")
     expect(middleware).toContain("'/api/integrations/gmail/callback'")
+    expect(middleware).toContain("'/api/integrations/telegram/webhook'")
   })
 })

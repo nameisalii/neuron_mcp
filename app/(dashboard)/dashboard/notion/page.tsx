@@ -1,11 +1,11 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
-import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronRight, FileText } from 'lucide-react'
 import NotionSyncButton from '../integrations/NotionSyncButton'
 import { notionPageSummary, rankNotionPages } from '@/lib/notion/ranking'
+import { BrandTile } from '@/components/BrandLogo'
 
 export default async function NotionPagesPage({
   searchParams,
@@ -49,7 +49,7 @@ export default async function NotionPagesPage({
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Image src="/icons/notion.svg" alt="Notion" width={36} height={36} />
+          <BrandTile brand="notion" className="h-12 w-12" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Notion Knowledge</h1>
             <p className="text-sm text-gray-500">The pages carrying the most useful company context.</p>
