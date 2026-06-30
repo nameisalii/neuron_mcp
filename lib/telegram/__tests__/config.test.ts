@@ -20,6 +20,7 @@ describe('Telegram configuration', () => {
       botToken: null,
       webhookSecret: null,
       webhookUrl: null,
+      botUsername: 'neuron_mcp_bot',
     })
     expect(isTelegramConfigured()).toBe(false)
     expect(getTelegramWebhookUrl()).toContain('/api/integrations/telegram/webhook')

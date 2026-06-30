@@ -14,7 +14,7 @@ interface StoryEvent {
   sourceCreatedAt: string | null
 }
 
-const BRAND_KEYS = new Set<BrandKey>(['slack', 'notion', 'linear', 'gmail', 'discord', 'granola', 'telegram', 'whatsapp'])
+const BRAND_KEYS = new Set<BrandKey>(['slack', 'notion', 'linear', 'gmail', 'discord', 'granola', 'telegram', 'teams', 'jira', 'whatsapp'])
 function asBrand(source: string): BrandKey | null {
   const s = source.toLowerCase()
   return BRAND_KEYS.has(s as BrandKey) ? (s as BrandKey) : null

@@ -13,7 +13,7 @@ interface Props {
   data: IntegrationOverviewData
 }
 
-const BRAND_SOURCES = new Set<BrandKey>(['slack', 'notion', 'linear', 'gmail', 'discord', 'granola', 'telegram', 'whatsapp'])
+const BRAND_SOURCES = new Set<BrandKey>(['slack', 'notion', 'linear', 'gmail', 'discord', 'granola', 'telegram', 'teams', 'jira', 'whatsapp'])
 
 function asBrandKey(source: string): BrandKey | null {
   const normalized = source.toLowerCase()

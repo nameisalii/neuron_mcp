@@ -59,6 +59,7 @@ model KnowledgeItem {
   source           String
   sourceUrl        String?
   sourceExternalId String?
+  sourceMetadata   Json?
   owner            String?
   verified         Boolean     @default(false)
   verifiedAt       DateTime?

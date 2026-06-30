@@ -1,6 +1,6 @@
 import { clsx } from 'clsx'
 
-export type BrandKey = 'slack' | 'notion' | 'linear' | 'gmail' | 'discord' | 'granola' | 'telegram' | 'whatsapp'
+export type BrandKey = 'slack' | 'notion' | 'linear' | 'gmail' | 'discord' | 'granola' | 'telegram' | 'teams' | 'jira' | 'whatsapp'
 
 // simpleicons CDN is only a fallback for brands without a bundled asset.
 const BRAND_HEX: Record<BrandKey, string> = {
@@ -11,6 +11,8 @@ const BRAND_HEX: Record<BrandKey, string> = {
   discord: '5865F2',
   granola: '1C1A17',
   telegram: '26A5E4',
+  teams: '6264A7',
+  jira: '0052CC',
   whatsapp: '25D366',
 }
 
@@ -22,6 +24,8 @@ const BRAND_LABEL: Record<BrandKey, string> = {
   discord: 'Discord',
   granola: 'Granola',
   telegram: 'Telegram',
+  teams: 'Microsoft Teams',
+  jira: 'Jira',
   whatsapp: 'WhatsApp Business',
 }
 
@@ -35,6 +39,8 @@ const LOCAL_BRAND_ASSET: Partial<Record<BrandKey, string>> = {
   discord: '/icons/discord.png',
   granola: '/icons/granola.png',
   telegram: '/icons/telegram.png',
+  teams: '/icons/teams.png',
+  jira: '/icons/jira.png',
   whatsapp: '/icons/whatsapp.svg',
 }
 

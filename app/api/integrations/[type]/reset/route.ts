@@ -4,10 +4,10 @@ import { prisma } from '@/lib/db'
 import { deleteEmbeddings } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
 
-const ALLOWED_TYPES = new Set(['slack', 'notion', 'linear', 'granola', 'discord', 'telegram', 'whatsapp'])
+const ALLOWED_TYPES = new Set(['slack', 'notion', 'linear', 'granola', 'discord', 'telegram', 'teams', 'jira', 'whatsapp'])
 // These integrations have their config fully removed on reset (disconnect),
 // matching the Notion pattern, rather than only clearing lastSyncAt.
-const DISCONNECT_ON_RESET = new Set(['notion', 'granola', 'discord', 'telegram', 'whatsapp'])
+const DISCONNECT_ON_RESET = new Set(['notion', 'granola', 'discord', 'telegram', 'teams', 'jira', 'whatsapp'])
 const ALLOWED_ROLES = new Set(['owner', 'admin'])
 
 export async function POST(

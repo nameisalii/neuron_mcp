@@ -6,7 +6,7 @@ import { isIntegrationConnected } from './connection'
 import { getConnectedIntegrationToken } from './connection-server'
 import { isTelegramConfigured } from '@/lib/telegram/config'
 
-export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'whatsapp'
+export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'teams' | 'jira' | 'whatsapp'
 
 export type IntegrationFilter =
   | 'all'
@@ -121,6 +121,10 @@ function sourceSubtitle(source: IntegrationSource): string {
       return 'Knowledge extracted from your Discord server channels.'
     case 'telegram':
       return 'Knowledge extracted from new Telegram group and channel messages.'
+    case 'teams':
+      return 'Knowledge extracted from Microsoft Teams channel messages.'
+    case 'jira':
+      return 'Knowledge extracted from Jira issues, comments, bugs, and project updates.'
     case 'whatsapp':
       return 'Knowledge extracted from inbound WhatsApp Business messages.'
     default:
@@ -154,9 +158,13 @@ function emptyState(source: IntegrationSource, connected: boolean): IntegrationO
     description: source === 'whatsapp'
       ? 'New inbound WhatsApp messages will appear here after Meta sends webhook events.'
       : source === 'telegram'
-        ? 'Telegram sync starts from new messages after the bot is added and the webhook is configured. Old chat history is not available through the official bot API.'
+        ? 'Neuron only captures new Telegram messages after setup. Old Telegram history cannot be imported through the official bot API.'
+      : source === 'teams'
+        ? 'Run a recent sync after connecting Microsoft Teams. Tenant-wide or private chat access may require Microsoft admin consent.'
+      : source === 'jira'
+        ? 'Connect Jira and run a sync to import recent issues, comments, bugs, decisions, and project updates.'
       : `Run a sync from the integrations page to populate ${displayLabel.toLowerCase()} knowledge.`,
-    actionLabel: source === 'whatsapp' || source === 'telegram' ? 'Review webhook setup' : `Sync ${displayLabel} now`,
+    actionLabel: source === 'whatsapp' ? 'Review webhook setup' : source === 'telegram' ? 'Check Telegram setup' : `Sync ${displayLabel} now`,
     actionHref: '/dashboard/integrations',
   }
 }
@@ -335,6 +343,33 @@ export async function loadIntegrationOverview(
       { label: 'Last sync', value: lastSyncAt ? formatDate(lastSyncAt) : 'Never' },
     ]
     details.push({ label: 'Team', value: team })
+  }
+
+  if (source === 'teams') {
+    summaryCards = [
+      { label: 'Knowledge items', value: formatCount(totalCount) },
+      { label: 'Messages', value: formatCount(totalCount) },
+      { label: 'Decisions', value: formatCount(categoryCounts.decision) },
+      { label: 'Rules', value: formatCount(categoryCounts.rule) },
+      { label: 'Facts', value: formatCount(categoryCounts.fact) },
+      { label: 'Last sync', value: lastSyncAt ? formatDate(lastSyncAt) : 'Never' },
+    ]
+    details.push({ label: 'Account', value: integration?.teamName ?? 'Microsoft Teams' })
+    if (integration?.channels.length) {
+      details.push({ label: 'Selected channels', value: formatCount(integration.channels.length) })
+    }
+  }
+
+  if (source === 'jira') {
+    summaryCards = [
+      { label: 'Knowledge items', value: formatCount(totalCount) },
+      { label: 'Issues', value: formatCount(totalCount) },
+      { label: 'Decisions', value: formatCount(categoryCounts.decision) },
+      { label: 'Rules', value: formatCount(categoryCounts.rule) },
+      { label: 'Facts', value: formatCount(categoryCounts.fact) },
+      { label: 'Last sync', value: lastSyncAt ? formatDate(lastSyncAt) : 'Never' },
+    ]
+    details.push({ label: 'Site', value: integration?.teamName ?? 'Jira Cloud' })
   }
 
   if (source === 'gmail') {

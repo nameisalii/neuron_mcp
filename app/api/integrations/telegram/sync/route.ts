@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getTelegramWebhookInfo } from '@/lib/telegram/api'
 import { getTelegramConfig } from '@/lib/telegram/config'
 
-const MESSAGE = 'Telegram uses webhooks. Neuron can ingest new messages after the bot is added and connected. Full old chat history is not available through the Telegram Bot API.'
+const MESSAGE = 'Telegram is connected through the Neuron bot. Neuron can ingest new useful messages after the bot is added and connected. Old Telegram history cannot be imported through the official bot API.'
 
 export async function POST() {
   const { userId } = await auth()

@@ -66,7 +66,7 @@ interface SyncResult {
 interface SyncButtonProps {
   endpoint: string
   showReset?: boolean
-  resetType?: 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'whatsapp'
+  resetType?: 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'teams' | 'jira' | 'whatsapp'
   resultLabel?: string
   requestBody?: Record<string, unknown>
   syncEnabled?: boolean

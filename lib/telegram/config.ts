@@ -10,7 +10,12 @@ export function getTelegramConfig() {
     botToken: trim(process.env.TELEGRAM_BOT_TOKEN),
     webhookSecret: trim(process.env.TELEGRAM_WEBHOOK_SECRET),
     webhookUrl: trim(process.env.TELEGRAM_WEBHOOK_URL),
+    botUsername: trim(process.env.TELEGRAM_BOT_USERNAME) ?? 'neuron_mcp_bot',
   }
+}
+
+export function getTelegramBotUsername(): string {
+  return getTelegramConfig().botUsername
 }
 
 export function getTelegramWebhookUrl(): string {

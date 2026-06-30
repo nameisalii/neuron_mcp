@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
             {
               role: 'system',
               content:
-                "You are a company historian. Given timestamped knowledge items from connected sources such as Slack, Notion, Linear, Gmail, Discord, Telegram, and WhatsApp, reconstruct a clear chronological narrative answering the user's question. Be concise and factual. Cite each source inline using its lowercase source name, for example [telegram].",
+                "You are a company historian. Given timestamped knowledge items from connected sources such as Slack, Notion, Linear, Gmail, Discord, Telegram, Microsoft Teams, Jira, and WhatsApp, reconstruct a clear chronological narrative answering the user's question. Be concise and factual. Cite each source inline using its lowercase source name, for example [jira].",
             },
             {
               role: 'user',

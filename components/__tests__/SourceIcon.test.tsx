@@ -25,6 +25,8 @@ describe('SourceIcon', () => {
         <SourceIcon source="discord" />
         <SourceIcon source="granola" />
         <SourceIcon source="telegram" />
+        <SourceIcon source="teams" />
+        <SourceIcon source="jira" />
         <SourceIcon source="whatsapp" />
       </div>,
     )
@@ -32,6 +34,8 @@ describe('SourceIcon', () => {
     expect(screen.getByAltText('Discord')).toHaveAttribute('src', expect.stringContaining('discord.png'))
     expect(screen.getByAltText('Granola')).toHaveAttribute('src', expect.stringContaining('granola.png'))
     expect(screen.getByAltText('Telegram')).toHaveAttribute('src', expect.stringContaining('telegram.png'))
+    expect(screen.getByAltText('Microsoft Teams')).toHaveAttribute('src', expect.stringContaining('teams.png'))
+    expect(screen.getByAltText('Jira')).toHaveAttribute('src', expect.stringContaining('jira.png'))
     expect(screen.getByAltText('WhatsApp Business')).toHaveAttribute('src', expect.stringContaining('/icons/whatsapp.svg'))
   })
 })

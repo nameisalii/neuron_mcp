@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { setTelegramWebhook } from '@/lib/telegram/api'
-import { getTelegramConfig, getTelegramWebhookUrl, isTelegramConfigured } from '@/lib/telegram/config'
+import { getTelegramBotUsername, getTelegramConfig, getTelegramWebhookUrl, isTelegramConfigured } from '@/lib/telegram/config'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin'])
 
@@ -39,16 +39,14 @@ export async function GET() {
   const setupCode = existingSetupCode(current?.metadata) ?? randomBytes(18).toString('base64url')
   const configured = isTelegramConfigured()
   const webhookUrl = getTelegramWebhookUrl()
-  let webhookRegistered = false
 
   if (configured) {
     const { botToken, webhookSecret } = getTelegramConfig()
     try {
       await setTelegramWebhook(botToken!, webhookUrl, webhookSecret!)
-      webhookRegistered = true
     } catch {
       return NextResponse.json(
-        { error: 'Telegram rejected the webhook configuration. Check the Telegram environment variables and HTTPS webhook URL.' },
+        { error: 'Telegram setup is temporarily unavailable. Please try again or contact support.' },
         { status: 502 },
       )
     }
@@ -78,11 +76,10 @@ export async function GET() {
   return NextResponse.json({
     configured,
     connected: Boolean(current?.channels.length),
-    webhookRegistered,
-    webhookUrl,
+    botUsername: getTelegramBotUsername(),
     setupCommand: `/start ${setupCode}`,
     message: configured
-      ? 'Add the bot to a group or channel, then send the setup command there.'
-      : 'Telegram environment variables are not configured.',
+      ? 'Copy this command and send it in the Telegram group/channel where you added the Neuron bot.'
+      : 'Telegram server configuration is managed by Neuron.',
   })
 }

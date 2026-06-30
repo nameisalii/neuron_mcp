@@ -31,6 +31,9 @@ const isPublicIntegrationRoute = createRouteMatcher([
   '/api/integrations/gmail/callback',
   '/api/integrations/slack/events',
   '/api/integrations/telegram/webhook',
+  '/api/integrations/teams/callback',
+  '/api/integrations/teams/webhook',
+  '/api/integrations/jira/callback',
   '/api/integrations/whatsapp/webhook',
 ])
 

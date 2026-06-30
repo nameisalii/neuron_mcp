@@ -16,6 +16,8 @@ const SOURCE_ASSET: Record<string, { alt: string; src: string }> = {
   discord: { alt: 'Discord', src: '/icons/discord.png' },
   granola: { alt: 'Granola', src: '/icons/granola.png' },
   telegram: { alt: 'Telegram', src: '/icons/telegram.png' },
+  teams: { alt: 'Microsoft Teams', src: '/icons/teams.png' },
+  jira: { alt: 'Jira', src: '/icons/jira.png' },
   whatsapp: { alt: 'WhatsApp Business', src: '/icons/whatsapp.svg' },
 }
 

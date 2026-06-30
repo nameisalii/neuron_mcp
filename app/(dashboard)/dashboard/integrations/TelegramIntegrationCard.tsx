@@ -16,7 +16,7 @@ import {
 interface TelegramIntegrationCardProps {
   connected: boolean
   configured: boolean
-  webhookUrl: string
+  botUsername: string
   createdAt?: string | null
   lastSyncAt?: string | null
 }
@@ -24,8 +24,7 @@ interface TelegramIntegrationCardProps {
 interface SetupData {
   configured: boolean
   connected: boolean
-  webhookRegistered: boolean
-  webhookUrl: string
+  botUsername: string
   setupCommand: string
   message: string
 }
@@ -35,7 +34,7 @@ const statTileClass = 'rounded-xl border border-warm/60 bg-cream px-3.5 py-2.5'
 export default function TelegramIntegrationCard({
   connected,
   configured,
-  webhookUrl,
+  botUsername,
   createdAt,
   lastSyncAt,
 }: TelegramIntegrationCardProps) {
@@ -77,7 +76,9 @@ export default function TelegramIntegrationCard({
           <div className="min-w-0">
             <h3 className="text-lg font-display font-semibold text-ink">Telegram</h3>
             <p className="mt-0.5 truncate text-xs text-muted">
-              {connected ? 'Receiving new group and channel messages' : 'Connect the Neuron bot to Telegram'}
+              {connected
+                ? 'Telegram is connected. Neuron will capture new useful messages from connected groups/channels.'
+                : 'Telegram is not connected yet. Add the Neuron bot to a Telegram group or channel, then send the connection command there.'}
             </p>
           </div>
         </div>
@@ -103,13 +104,12 @@ export default function TelegramIntegrationCard({
           </div>
         ) : (
           <p>
-            Telegram sync starts from new messages after the bot is added and the webhook is configured. Old chat history is not available through the official bot API.
+            Telegram is not connected yet. Add the Neuron bot to a Telegram group or channel, then send the connection command there.
           </p>
         )}
-        <div className="mt-3 rounded-lg border border-warm/60 bg-cream px-3 py-2">
-          <p className="text-xs font-medium text-ink">Webhook URL</p>
-          <p className="mt-1 break-all font-mono text-xs text-muted">{webhookUrl}</p>
-        </div>
+        <p className="mt-3 text-xs text-muted">
+          Neuron only captures new messages after setup. Old Telegram history cannot be imported through the official bot API.
+        </p>
       </div>
 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-warm/60 pt-4">
@@ -135,41 +135,44 @@ export default function TelegramIntegrationCard({
       {showSetup && (
         <div className="mt-5 space-y-4 border-t border-warm/60 pt-5">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-ink">Telegram Bot API setup</h4>
+            <h4 className="font-semibold text-ink">Connect Telegram to Neuron</h4>
             <button type="button" onClick={() => setShowSetup(false)} className="text-xs text-muted hover:text-ink">Close</button>
           </div>
           <p className="text-sm text-muted">
-            Telegram sync starts from new messages after the bot is added and the webhook is configured. Old chat history is not available through the official bot API.
+            Connect a Telegram group or channel to Neuron so new useful messages can become searchable company knowledge. Neuron starts capturing messages after the bot is added and connected. Old chat history is not available through Telegram’s official bot API.
+          </p>
+          <p className="rounded-lg border border-warm/60 bg-cream px-3 py-2 text-sm text-ink">
+            Bot to add: <span className="font-mono">@{setup?.botUsername ?? botUsername}</span>
           </p>
           <ol className="list-decimal space-y-2 pl-5 text-sm text-muted">
-            <li>Open <span className="font-medium text-ink">@BotFather</span> in Telegram.</li>
-            <li>Create a bot with <code>/newbot</code>. For group capture, use <code>/setprivacy</code> in BotFather and disable privacy mode.</li>
-            <li>Add <code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_WEBHOOK_SECRET</code> to the server.</li>
-            <li>Set the webhook using the generated URL below. Neuron registers it automatically when configured.</li>
-            <li>Add the bot to a Telegram group or channel and grant permission to read posts.</li>
-            <li>Send the connection command, then send a test message.</li>
+            <li>Open the Telegram group or channel you want Neuron to learn from.</li>
+            <li>Add the Neuron bot to the group or channel.</li>
+            <li>If it is a group, make sure the bot can read messages.</li>
+            <li>Copy the connection command below.</li>
+            <li>Paste the command inside that Telegram group or channel.</li>
+            <li>Send one useful test message after connecting.</li>
+            <li>Come back to Neuron and click Sync Now or check the Overview.</li>
           </ol>
 
           {loading && <p className="inline-flex items-center gap-2 text-sm text-muted"><Loader2 className="h-4 w-4 animate-spin" /> Preparing setup…</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
           {!configured && !loading && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Telegram environment variables are not configured on this server yet.
+              Telegram server configuration is managed by Neuron.
             </p>
           )}
           {setup && (
             <div className="space-y-3">
-              <CopyField
-                label="Webhook URL"
-                value={setup.webhookUrl}
-                copied={copied === 'webhook'}
-                onCopy={() => void copy(setup.webhookUrl, 'webhook')}
-              />
+              <p className="text-sm text-muted">
+                Copy this command and send it in the Telegram group/channel where you added the Neuron bot.
+              </p>
               <CopyField
                 label="Connection command"
                 value={setup.setupCommand}
                 copied={copied === 'command'}
                 onCopy={() => void copy(setup.setupCommand, 'command')}
+                copyLabel="Copy connection command"
+                copiedLabel="Connection command copied"
               />
               <p className="text-xs text-muted">{setup.message}</p>
             </div>
@@ -185,21 +188,26 @@ function CopyField({
   value,
   copied,
   onCopy,
+  copyLabel,
+  copiedLabel,
 }: {
   label: string
   value: string
   copied: boolean
   onCopy: () => void
+  copyLabel?: string
+  copiedLabel?: string
 }) {
   return (
     <div>
       <p className="mb-1 text-xs font-medium text-muted">{label}</p>
       <div className="flex items-center gap-2 rounded-lg border border-warm bg-white px-3 py-2">
         <code className="min-w-0 flex-1 break-all text-xs text-ink">{value}</code>
-        <button type="button" onClick={onCopy} className="shrink-0 text-muted hover:text-ink" aria-label={`Copy ${label}`}>
+        <button type="button" onClick={onCopy} className="shrink-0 text-muted hover:text-ink" aria-label={copyLabel ?? `Copy ${label}`}>
           {copied ? <CheckCircle className="h-4 w-4 text-positive" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
+      {copied && <p className="mt-1 text-xs text-positive">{copiedLabel ?? `${label} copied`}</p>}
     </div>
   )
 }

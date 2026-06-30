@@ -10,12 +10,14 @@ import NotionIntegrationCard from './NotionIntegrationCard'
 import GranolaIntegrationCard from './GranolaIntegrationCard'
 import DiscordIntegrationCard from './DiscordIntegrationCard'
 import TelegramIntegrationCard from './TelegramIntegrationCard'
+import TeamsIntegrationCard from './TeamsIntegrationCard'
+import JiraIntegrationCard from './JiraIntegrationCard'
 import WhatsAppIntegrationCard from './WhatsAppIntegrationCard'
 import { BrandTile } from '@/components/BrandLogo'
 import { StatusBadge, ResetLink, IntegrationViewLink, integrationConnectClass } from './IntegrationCardUi'
 import { isIntegrationConnected } from '@/lib/integrations/connection'
 import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
-import { getTelegramWebhookUrl, isTelegramConfigured } from '@/lib/telegram/config'
+import { getTelegramBotUsername, isTelegramConfigured } from '@/lib/telegram/config'
 
 function timeAgo(date: Date): string {
   const s = Math.floor((Date.now() - date.getTime()) / 1000)
@@ -75,6 +77,8 @@ export default async function IntegrationsPage(
   const granola = user?.workspace?.integrations.find((i) => i.type === 'granola') ?? null
   const discord = user?.workspace?.integrations.find((i) => i.type === 'discord') ?? null
   const telegram = user?.workspace?.integrations.find((i) => i.type === 'telegram') ?? null
+  const teams = user?.workspace?.integrations.find((i) => i.type === 'teams') ?? null
+  const jira = user?.workspace?.integrations.find((i) => i.type === 'jira') ?? null
   const whatsapp = user?.workspace?.integrations.find((i) => i.type === 'whatsapp') ?? null
   const slackConnected = isIntegrationConnected(slack)
   const notionConnected = Boolean(getConnectedIntegrationToken(notion, {
@@ -88,6 +92,18 @@ export default async function IntegrationsPage(
   const discordConnected = isIntegrationConnected(discord)
   const telegramConfigured = isTelegramConfigured()
   const telegramConnected = telegramConfigured && Boolean(telegram?.channels.length)
+  const teamsConnected = isIntegrationConnected(teams)
+  const teamsMetadata = teams?.metadata && typeof teams.metadata === 'object' && !Array.isArray(teams.metadata)
+    ? teams.metadata as Record<string, unknown>
+    : {}
+  const teamsNeedsReconnect = teamsMetadata.status === 'needs_reconnect'
+  const teamsAdminConsentRequired = teamsMetadata.status === 'admin_consent_required'
+  const jiraConnected = isIntegrationConnected(jira)
+  const jiraMetadata = jira?.metadata && typeof jira.metadata === 'object' && !Array.isArray(jira.metadata)
+    ? jira.metadata as Record<string, unknown>
+    : {}
+  const jiraNeedsReconnect = jiraMetadata.status === 'needs_reconnect'
+  const jiraPermissionIssue = jiraMetadata.status === 'permission_issue'
   const whatsappConnected = isIntegrationConnected(whatsapp)
 
   let pageCount = 0
@@ -128,6 +144,8 @@ export default async function IntegrationsPage(
       {searchParams.connected === 'gmail' && <SuccessBanner>Gmail connected successfully.</SuccessBanner>}
       {searchParams.connected === 'notion' && <SuccessBanner>Notion connected. Choose Sync Now when you are ready to import pages.</SuccessBanner>}
       {searchParams.success === 'discord' && <SuccessBanner>Discord connected. Choose Sync Now to import messages.</SuccessBanner>}
+      {searchParams.connected === 'teams' && <SuccessBanner>Microsoft Teams connected. Choose Sync Now to import recent channel messages.</SuccessBanner>}
+      {searchParams.connected === 'jira' && <SuccessBanner>Jira connected. Choose Sync Now to import recent issues and comments.</SuccessBanner>}
       {searchParams.connected === 'granola' && <SuccessBanner>Granola connected. Choose Sync Now to import meeting notes.</SuccessBanner>}
       {searchParams.connected === 'whatsapp' && <SuccessBanner>WhatsApp Business connected. New inbound messages will import through the webhook.</SuccessBanner>}
       {searchParams.error && (
@@ -150,6 +168,18 @@ export default async function IntegrationsPage(
             )}
             {searchParams.error === 'notion_forbidden' && 'You do not have permission to connect Notion.'}
             {searchParams.error === 'discord_failed' && 'Discord connection failed. Please try again.'}
+            {searchParams.error === 'teams_failed' && (
+              searchParams.reason === 'token_exchange_failed'
+                ? 'Microsoft Teams connection failed during token exchange. Check Azure app redirect URI and client secret.'
+                : 'Microsoft Teams connection failed. Please try again.'
+            )}
+            {searchParams.error === 'jira_failed' && (
+              searchParams.reason === 'no_accessible_resources'
+                ? 'Jira connected, but no accessible Jira Cloud site was returned. Check Atlassian app permissions.'
+                : searchParams.reason === 'token_exchange_failed'
+                  ? 'Jira connection failed during token exchange. Check Atlassian redirect URI and client secret.'
+                  : 'Jira connection failed. Please try again.'
+            )}
             {searchParams.error === 'discord_not_configured' && (
               process.env.NODE_ENV === 'development'
                 ? 'Discord is not configured locally. Add DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_BOT_TOKEN, and DISCORD_REDIRECT_URI to .env.local, then restart the development server.'
@@ -323,9 +353,27 @@ export default async function IntegrationsPage(
         <TelegramIntegrationCard
           connected={telegramConnected}
           configured={telegramConfigured}
-          webhookUrl={getTelegramWebhookUrl()}
+          botUsername={getTelegramBotUsername()}
           createdAt={telegram?.createdAt.toISOString() ?? null}
           lastSyncAt={telegram?.lastSyncAt?.toISOString() ?? null}
+        />
+
+        <TeamsIntegrationCard
+          connected={teamsConnected}
+          needsReconnect={teamsNeedsReconnect}
+          adminConsentRequired={teamsAdminConsentRequired}
+          teamName={teams?.teamName ?? null}
+          createdAt={teams?.createdAt.toISOString() ?? null}
+          lastSyncAt={teams?.lastSyncAt?.toISOString() ?? null}
+        />
+
+        <JiraIntegrationCard
+          connected={jiraConnected}
+          needsReconnect={jiraNeedsReconnect}
+          permissionIssue={jiraPermissionIssue}
+          siteName={jira?.teamName ?? null}
+          createdAt={jira?.createdAt.toISOString() ?? null}
+          lastSyncAt={jira?.lastSyncAt?.toISOString() ?? null}
         />
 
         <div className="relative overflow-hidden rounded-xl">
