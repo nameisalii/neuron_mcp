@@ -7,6 +7,8 @@ import { prisma } from '@/lib/db'
 import { generateEmbedding, openai } from '@/lib/openai'
 import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
+import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/persistence'
+import { searchDocumentAttachments } from '@/lib/documents/search'
 
 jest.mock('@clerk/nextjs/server', () => ({ auth: jest.fn() }))
 jest.mock('@/lib/db', () => ({
@@ -26,6 +28,11 @@ jest.mock('@/lib/openai', () => ({
 }))
 jest.mock('@/lib/pinecone', () => ({ searchSimilar: jest.fn(), searchInNamespace: jest.fn() }))
 jest.mock('@/lib/activity', () => ({ trackEvent: jest.fn() }))
+jest.mock('@/lib/chat/persistence', () => ({
+  createOrAppendConversation: jest.fn(),
+  storeAssistantMessage: jest.fn(),
+}))
+jest.mock('@/lib/documents/search', () => ({ searchDocumentAttachments: jest.fn() }))
 
 const mockAuth = jest.mocked(auth)
 const mockUserFind = jest.mocked(prisma.user.findUnique)
@@ -40,6 +47,9 @@ const mockPersonalSearch = jest.mocked(searchInNamespace)
 const mockChat = jest.mocked(openai.chat.completions.create)
 const mockTrackEvent = jest.mocked(trackEvent)
 const mockEmailThreadFindMany = jest.mocked(prisma.emailThread.findMany)
+const mockCreateOrAppendConversation = jest.mocked(createOrAppendConversation)
+const mockStoreAssistantMessage = jest.mocked(storeAssistantMessage)
+const mockSearchDocumentAttachments = jest.mocked(searchDocumentAttachments)
 
 const CLERK_ID = 'user-clerk-1'
 const WORKSPACE_ID = 'ws-1'
@@ -96,6 +106,9 @@ beforeEach(() => {
   mockEmailThreadFindMany.mockResolvedValue([] as never)
   mockQueryLogCreate.mockResolvedValue({ id: 'log-1' } as never)
   mockTrackEvent.mockResolvedValue(undefined)
+  mockCreateOrAppendConversation.mockResolvedValue({ conversationId: 'conversation-1', relatedLoadId: null })
+  mockStoreAssistantMessage.mockResolvedValue(undefined)
+  mockSearchDocumentAttachments.mockResolvedValue([])
   mockChat.mockResolvedValue(mockStream('Refunds over $500 require manager approval.') as never)
 })
 
@@ -111,6 +124,12 @@ describe('POST /api/query', () => {
   it('returns 400 when question is fewer than 3 characters', async () => {
     const res = await POST(makeRequest({ question: 'hi' }))
     expect(res.status).toBe(400)
+  })
+
+  it('returns 400 with a clear error when question is blank', async () => {
+    const res = await POST(makeRequest({ question: '   ' }))
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({ error: 'Question must be 3–500 characters' })
   })
 
   it('returns 400 when question exceeds 500 characters', async () => {
@@ -225,6 +244,53 @@ describe('POST /api/query', () => {
     expect(typeof done!.confidence).toBe('number')
   })
 
+  it('returns conversationId in sources and done SSE events', async () => {
+    const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
+    const events = await readSSE(res)
+    expect(events.find((e) => e.type === 'sources')?.conversationId).toBe('conversation-1')
+    expect(events.find((e) => e.type === 'done')?.conversationId).toBe('conversation-1')
+  })
+
+  it('stores chat conversation and assistant message for a query', async () => {
+    await readSSE(await POST(makeRequest({ question: 'What is the refund policy?' })))
+    expect(mockCreateOrAppendConversation).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId: WORKSPACE_ID,
+      userId: CLERK_ID,
+      question: 'What is the refund policy?',
+    }))
+    expect(mockStoreAssistantMessage).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId: WORKSPACE_ID,
+      userId: CLERK_ID,
+      conversationId: 'conversation-1',
+      answer: expect.stringContaining('Refunds'),
+    }))
+  })
+
+  it('passes conversationId when appending to a conversation', async () => {
+    await readSSE(await POST(makeRequest({ question: 'What is the refund policy?', conversationId: 'conversation-existing' })))
+    expect(mockCreateOrAppendConversation).toHaveBeenCalledWith(expect.objectContaining({
+      question: 'What is the refund policy?',
+      conversationId: 'conversation-existing',
+    }))
+  })
+
+  it('still answers when chat persistence fails', async () => {
+    mockCreateOrAppendConversation.mockRejectedValue(new Error('chat table missing'))
+    const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
+    expect(res.status).toBe(200)
+    const events = await readSSE(res)
+    expect(events.some((event) => event.type === 'delta')).toBe(true)
+    expect(mockStoreAssistantMessage).not.toHaveBeenCalled()
+  })
+
+  it('still answers when document search fails', async () => {
+    mockSearchDocumentAttachments.mockRejectedValue(new Error('document table missing'))
+    const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
+    expect(res.status).toBe(200)
+    const events = await readSSE(res)
+    expect(events.some((event) => event.type === 'delta')).toBe(true)
+  })
+
   it('returns the top three ranked distinct sources in the streamed payload', async () => {
     mockSearch.mockResolvedValue([
       { id: 'linear-duplicate', score: 0.99 },
@@ -322,12 +388,20 @@ describe('POST /api/query', () => {
 
   it('returns no-information SSE done event when no chunks found', async () => {
     mockSearch.mockResolvedValue([])
+    mockPersonalSearch.mockResolvedValue([])
     mockChunkFindMany.mockResolvedValue([] as never)
+    mockKnowledgeFindMany.mockResolvedValue([] as never)
     const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
     expect(res.status).toBe(200)
     const events = await readSSE(res)
+    expect(events.find((e) => e.type === 'sources')?.conversationId).toBe('conversation-1')
     const done = events.find((e) => e.type === 'done')
+    expect(done!.conversationId).toBe('conversation-1')
     expect(done!.confidence).toBe(0)
+    expect(mockStoreAssistantMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: 'conversation-1',
+      answer: "I don't have verified information about this yet.",
+    }))
   })
 
   it('returns 500 on unexpected upstream error', async () => {

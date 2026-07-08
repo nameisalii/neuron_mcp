@@ -124,18 +124,42 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
   const gmailNeedsReconfigure = result?.importedThreads === 0
     && result.canReadMailbox === true
     && ((result.inboxMessagesAvailable ?? 0) > 0 || (result.sentMessagesAvailable ?? 0) > 0)
-  const knowledgeCreated = result?.knowledgeCreated ?? result?.extractedKnowledgeItems
-  const syncSummary = result && !result.error
-    ? result.message
-      ? result.message
-      : knowledgeCreated != null && knowledgeCreated > 0
-      ? `Created ${knowledgeCreated} knowledge item${knowledgeCreated === 1 ? '' : 's'}`
-      : (result.knowledgeUpdated ?? 0) > 0
-        ? `Updated ${result.knowledgeUpdated} knowledge item${result.knowledgeUpdated === 1 ? '' : 's'}`
-      : (result.fetched ?? result.synced ?? result.importedThreads ?? result.issuesFound ?? result.pagesDeleted ?? 0) === 0
-        ? 'Synced 0 items — no accessible data found'
-        : 'Synced 0 items — no extractable knowledge found'
-    : null
+
+  function normalizedSyncMessage(syncResult: SyncResult | null) {
+    if (!syncResult || syncResult.error) return null
+    const created = syncResult.knowledgeCreated
+      ?? syncResult.extractedKnowledgeItems
+      ?? syncResult.imported
+      ?? syncResult.importedThreads
+      ?? syncResult.synced
+      ?? syncResult.pagesDeleted
+      ?? 0
+    const updated = syncResult.knowledgeUpdated ?? syncResult.updated ?? 0
+    const fetched = syncResult.fetched
+      ?? syncResult.messagesFetched
+      ?? syncResult.messagesFoundBeforeFiltering
+      ?? syncResult.issuesFound
+      ?? syncResult.synced
+      ?? 0
+    const hasErrors = (syncResult.extractionEmbeddingErrors ?? 0) > 0
+      || (syncResult.extractionErrors ?? 0) > 0
+      || (syncResult.embeddingErrors ?? 0) > 0
+      || (syncResult.databaseErrors ?? 0) > 0
+
+    if (hasErrors) return 'Sync completed with some skipped items.'
+    if (created > 0 || updated > 0) return 'Sync complete.'
+    if (fetched === 0) return 'No new items found.'
+    return 'Sync complete.'
+  }
+
+  function normalizedErrorMessage(syncResult: SyncResult | null) {
+    const raw = syncResult?.error ?? syncResult?.message ?? ''
+    if (/setup|configure|configured|credential|connect|auth|token|scope|permission|consent/i.test(raw)) {
+      return 'Connection needs setup.'
+    }
+    if (resetting) return 'Reset failed. Try again.'
+    return 'Sync failed. Try again.'
+  }
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -163,38 +187,7 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
       </div>
       {result && !result.error && (
         <div className="max-w-sm text-left">
-          {syncSummary && <p className="text-xs font-medium text-gray-700">{syncSummary}</p>}
-          {(() => {
-            const total = result.issuesFound ?? result.synced ?? result.importedThreads ?? result.imported ?? result.deleted ?? 0
-            return (
-              <p className="text-xs text-gray-500">
-                {result.fetched != null && `${result.fetched} fetched · `}
-                {result.processed != null && `${result.processed} processed · `}
-                {result.knowledgeCreated != null && `${result.knowledgeCreated} created · `}
-                {result.knowledgeUpdated != null && `${result.knowledgeUpdated} updated · `}
-                {result.chunksExtracted != null && `${result.chunksExtracted} chunks extracted · `}
-                {result.importedThreads != null && `${result.importedThreads} threads · `}
-                {result.importedChunks != null && `${result.importedChunks} chunks · `}
-                {result.chunksEmbedded != null && `${result.chunksEmbedded} chunks embedded · `}
-                {result.aiExtractedKnowledgeItems != null && `${result.aiExtractedKnowledgeItems} AI extracted · `}
-                {result.fallbackKnowledgeItems != null && `${result.fallbackKnowledgeItems} fallback · `}
-                {result.extractedKnowledgeItems != null && `${result.extractedKnowledgeItems} total memory items · `}
-                {result.imported != null && `${result.imported} imported · `}
-                {result.updated != null && `${result.updated} updated · `}
-                {result.skipped != null && `${result.skipped} skipped · `}
-                {result.deleted != null && `${result.deleted} deleted · `}
-                {total} {resultLabel} · {result.extracted ?? 0} extracted
-                {result.teamsScanned != null && ` · ${result.teamsScanned} teams`}
-                {result.labelsScanned != null && ` · ${result.labelsScanned} labels`}
-                {result.extractionEmbeddingErrors != null && result.extractionEmbeddingErrors > 0 && ` · ${result.extractionEmbeddingErrors} extraction errors`}
-                {result.embeddingErrors != null && result.embeddingErrors > 0 && ` · ${result.embeddingErrors} embedding errors`}
-                {result.databaseErrors != null && result.databaseErrors > 0 && ` · ${result.databaseErrors} database errors`}
-                {result.namespaceUsed && ` · ${result.namespaceUsed}`}
-                {result.conflicts != null && result.conflicts > 0 && ` · ${result.conflicts} conflicts`}
-              </p>
-            )
-          })()}
-          {result.message && <p className="text-xs text-amber-600">{result.message}</p>}
+          <p className="text-xs font-medium text-gray-700">{normalizedSyncMessage(result)}</p>
           {gmailNeedsReconfigure && onNeedsReconfigure && (
             <button
               type="button"
@@ -205,36 +198,10 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
             </button>
           )}
           {result.lastSyncedAt && <p className="text-xs text-gray-400">Last synced {new Date(result.lastSyncedAt).toLocaleString()}</p>}
-          {(result.gmailQueryUsed || result.selectedLabels || result.labelIdsUsed || result.messagesFoundBeforeFiltering != null || (result.skippedReasons && Object.keys(result.skippedReasons).length > 0) || (result.extractionDiagnostics && Object.values(result.extractionDiagnostics).some((value) => value > 0))) && (
-            <p className="text-xs text-gray-400 break-words">
-              {result.selectedLabels?.length ? `Labels: ${result.selectedLabels.join(', ')}` : null}
-              {result.labelIdsUsed?.length ? `${result.selectedLabels?.length ? ' · ' : ''}Label IDs: ${result.labelIdsUsed.join(', ')}` : null}
-              {result.gmailQueryUsed ? `${result.selectedLabels?.length || result.labelIdsUsed?.length ? ' · ' : ''}Query: ${result.gmailQueryUsed}` : null}
-              {result.messagesFoundBeforeFiltering != null ? ` · Found: ${result.messagesFoundBeforeFiltering}` : null}
-              {result.messagesFetched != null ? ` · Fetched: ${result.messagesFetched}` : null}
-              {result.threadsCreated != null ? ` · Threads: ${result.threadsCreated}` : null}
-              {result.chunksCreated != null ? ` · Chunks: ${result.chunksCreated}` : null}
-              {result.skippedReasons && Object.keys(result.skippedReasons).length > 0
-                ? ` · Skips: ${Object.entries(result.skippedReasons).map(([key, value]) => `${key}:${value}`).join(', ')}`
-                : null}
-              {result.extractionDiagnostics && Object.values(result.extractionDiagnostics).some((value) => value > 0)
-                ? ` · Extraction: ${Object.entries(result.extractionDiagnostics).filter(([, value]) => value > 0).map(([key, value]) => `${key}:${value}`).join(', ')}`
-                : null}
-              {result.configuredSyncFrom ? ` · Configured sync from: ${result.configuredSyncFrom}` : null}
-              {result.effectiveQueryStart ? ` · Effective query start: ${result.effectiveQueryStart}` : null}
-              {result.lastSyncAttemptAt ? ` · Last attempt: ${result.lastSyncAttemptAt}` : null}
-              {result.lastSuccessfulImportAt ? ` · Last successful import: ${result.lastSuccessfulImportAt}` : null}
-              {result.canReadMailbox != null ? ` · Mailbox readable: ${result.canReadMailbox ? 'yes' : 'no'}` : null}
-              {result.recentMessagesAvailable != null ? ` · Recent: ${result.recentMessagesAvailable}` : null}
-              {result.inboxMessagesAvailable != null ? ` · Inbox: ${result.inboxMessagesAvailable}` : null}
-              {result.sentMessagesAvailable != null ? ` · Sent: ${result.sentMessagesAvailable}` : null}
-              {result.namespaceUsed ? ` · ${result.namespaceUsed}` : null}
-            </p>
-          )}
         </div>
       )}
       {result?.error && (
-        <p className="text-xs text-red-600">{result.error}</p>
+        <p className="text-xs text-red-600">{normalizedErrorMessage(result)}</p>
       )}
     </div>
   )

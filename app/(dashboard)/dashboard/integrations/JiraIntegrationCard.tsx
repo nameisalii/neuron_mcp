@@ -7,6 +7,7 @@ import SyncButton from './SyncButton'
 import {
   IntegrationViewLink,
   ResetLink,
+  DisconnectIntegrationButton,
   integrationConnectClass,
 } from './IntegrationCardUi'
 
@@ -91,6 +92,7 @@ export default function JiraIntegrationCard({
               <IntegrationViewLink href="/dashboard/integrations/jira" />
               <SyncButton endpoint="/api/integrations/jira/sync" resultLabel="issues" hideReset />
               {needsReconnect && <a href="/api/integrations/jira/connect" className={integrationConnectClass}>Reconnect</a>}
+              <DisconnectIntegrationButton type="jira" />
             </div>
             <ResetLink resetType="jira" />
           </>

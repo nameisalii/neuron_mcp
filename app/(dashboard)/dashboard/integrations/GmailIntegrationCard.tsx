@@ -11,6 +11,7 @@ import {
   StatusBadge,
   ResetLink,
   IntegrationViewLink,
+  DisconnectIntegrationButton,
   integrationActionClass,
   integrationConnectClass,
 } from './IntegrationCardUi'
@@ -125,6 +126,7 @@ export default function GmailIntegrationCard({
                   <Settings className="h-3.5 w-3.5" />
                   Configure
                 </button>
+                <DisconnectIntegrationButton type="gmail" />
               </div>
               <ResetLink resetType="gmail" />
             </>

@@ -7,6 +7,7 @@ import SyncButton from './SyncButton'
 import {
   IntegrationViewLink,
   ResetLink,
+  DisconnectIntegrationButton,
   integrationConnectClass,
 } from './IntegrationCardUi'
 
@@ -91,6 +92,7 @@ export default function TeamsIntegrationCard({
               <IntegrationViewLink href="/dashboard/integrations/teams" />
               <SyncButton endpoint="/api/integrations/teams/sync" resultLabel="messages" hideReset />
               {needsReconnect && <a href="/api/integrations/teams/connect" className={integrationConnectClass}>Reconnect</a>}
+              <DisconnectIntegrationButton type="teams" />
             </div>
             <ResetLink resetType="teams" />
           </>

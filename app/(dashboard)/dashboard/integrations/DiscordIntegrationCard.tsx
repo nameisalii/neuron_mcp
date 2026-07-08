@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card'
 import { BrandTile } from '@/components/BrandLogo'
 import SyncButton from './SyncButton'
-import { StatusBadge, ResetLink, IntegrationViewLink, integrationConnectClass } from './IntegrationCardUi'
+import { StatusBadge, ResetLink, IntegrationViewLink, DisconnectIntegrationButton, integrationConnectClass } from './IntegrationCardUi'
 
 interface DiscordIntegrationCardProps {
   connected: boolean
@@ -58,6 +58,7 @@ export default function DiscordIntegrationCard({
             <div className="flex flex-wrap items-center gap-3">
               <IntegrationViewLink href="/dashboard/integrations/discord" />
               <SyncButton endpoint="/api/integrations/discord/sync" resultLabel="messages" hideReset />
+              <DisconnectIntegrationButton type="discord" />
             </div>
             <ResetLink resetType="discord" />
           </>

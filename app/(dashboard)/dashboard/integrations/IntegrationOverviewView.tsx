@@ -1,13 +1,23 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle, ChevronRight, ExternalLink, FileText } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, CheckCircle, ChevronRight, ExternalLink, FileText, Truck } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { BrandTile, type BrandKey } from '@/components/BrandLogo'
 import KnowledgeCard from '@/components/KnowledgeCard'
 import { INTEGRATION_FILTERS, type IntegrationOverviewData } from '@/lib/integrations/overview'
 import { clsx } from 'clsx'
+import DatatruckSetupModal from './DatatruckSetupModal'
+import AddKnowledgeModal from './AddKnowledgeModal'
+import { integrationConnectClass } from './IntegrationCardUi'
+
+function manualMetadataOf(item: { sourceMetadata?: unknown }): Record<string, unknown> | null {
+  const metadata = item.sourceMetadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
+  return (metadata as Record<string, unknown>).manual === true ? metadata as Record<string, unknown> : null
+}
 
 interface Props {
   data: IntegrationOverviewData
@@ -31,8 +41,11 @@ function timeAgo(iso: string | null): string {
 }
 
 export default function IntegrationOverviewView({ data }: Props) {
+  const router = useRouter()
   const [items, setItems] = useState(data.items)
   const [overrides, setOverrides] = useState<Record<string, { from: string; to: string }>>({})
+  const [isDatatruckSetupOpen, setIsDatatruckSetupOpen] = useState(false)
+  const [isAddKnowledgeOpen, setIsAddKnowledgeOpen] = useState(false)
   const categoryCounts = useMemo(() => {
     const next = { ...data.categoryCounts }
     for (const change of Object.values(overrides)) {
@@ -99,11 +112,31 @@ export default function IntegrationOverviewView({ data }: Props) {
           )}
         </div>
         <div className="text-right">
-          <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium', data.connected ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600')}>
-            <CheckCircle className="w-3 h-3" />
-            {data.connected ? 'Connected' : 'Not connected'}
-          </span>
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsAddKnowledgeOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+            >
+              <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
+              Add knowledge
+            </button>
+            <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium', data.connected ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600')}>
+              <CheckCircle className="w-3 h-3" />
+              {data.connected ? 'Connected' : 'Not connected'}
+            </span>
+          </div>
           <p className="mt-2 text-xs text-gray-400">Last sync: {timeAgo(data.lastSyncAt)}</p>
+          {!data.connected && data.source === 'datatruck' && (
+            <button
+              type="button"
+              onClick={() => setIsDatatruckSetupOpen(true)}
+              className={`mt-3 ${integrationConnectClass}`}
+            >
+              <Truck className="h-3.5 w-3.5" />
+              Connect Datatruck
+            </button>
+          )}
         </div>
       </div>
 
@@ -197,25 +230,53 @@ export default function IntegrationOverviewView({ data }: Props) {
 
       {visibleItems.length > 0 ? (
         <div className="space-y-3">
-          {visibleItems.map((item) => (
-            <KnowledgeCard
-              key={item.id}
-              compact
-              item={item}
-              onCategoryChange={handleCategoryChange}
-              footer={item.sourceUrl ? (
-                <a
-                  href={item.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
-                >
-                  Open source
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              ) : null}
-            />
-          ))}
+          {visibleItems.map((item) => {
+            const manual = manualMetadataOf(item)
+            const documentId = manual && typeof manual.documentId === 'string' ? manual.documentId : null
+            const createdByName = manual && typeof manual.createdByName === 'string' ? manual.createdByName : null
+            const manualLoadId = manual && typeof manual.externalLoadId === 'string' ? manual.externalLoadId : null
+            const manualDocumentType = manual && typeof manual.documentType === 'string' ? manual.documentType : null
+            const footerChips = manual ? (
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">
+                  Manual
+                </span>
+                {createdByName && <span className="text-xs text-gray-400">Added by {createdByName}</span>}
+                {manualLoadId && <span className="text-xs text-gray-500">Load {manualLoadId}</span>}
+                {manualDocumentType && <span className="text-xs text-gray-500">{manualDocumentType.replace(/_/g, ' ')}</span>}
+                {documentId && (
+                  <a
+                    href={`/api/documents/${documentId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    Open document
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </span>
+            ) : null
+            return (
+              <KnowledgeCard
+                key={item.id}
+                compact
+                item={item}
+                onCategoryChange={handleCategoryChange}
+                footer={footerChips ?? (item.sourceUrl ? (
+                  <a
+                    href={item.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    Open source
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : null)}
+              />
+            )
+          })}
         </div>
       ) : (
         <Card padding="md">
@@ -235,6 +296,26 @@ export default function IntegrationOverviewView({ data }: Props) {
           </div>
         </Card>
       )}
+
+      <DatatruckSetupModal
+        isOpen={isDatatruckSetupOpen}
+        onClose={() => setIsDatatruckSetupOpen(false)}
+        onConfigured={() => {
+          setIsDatatruckSetupOpen(false)
+          router.refresh()
+        }}
+      />
+
+      <AddKnowledgeModal
+        source={data.source}
+        sourceLabel={data.title.replace(/ Overview$/, '')}
+        isOpen={isAddKnowledgeOpen}
+        onClose={() => setIsAddKnowledgeOpen(false)}
+        onSaved={() => {
+          setIsAddKnowledgeOpen(false)
+          router.refresh()
+        }}
+      />
     </div>
   )
 }

@@ -13,11 +13,13 @@ import TelegramIntegrationCard from './TelegramIntegrationCard'
 import TeamsIntegrationCard from './TeamsIntegrationCard'
 import JiraIntegrationCard from './JiraIntegrationCard'
 import WhatsAppIntegrationCard from './WhatsAppIntegrationCard'
+import DatatruckIntegrationCard from './DatatruckIntegrationCard'
 import { BrandTile } from '@/components/BrandLogo'
-import { StatusBadge, ResetLink, IntegrationViewLink, integrationConnectClass } from './IntegrationCardUi'
+import { StatusBadge, ResetLink, IntegrationViewLink, DisconnectIntegrationButton, integrationConnectClass } from './IntegrationCardUi'
 import { isIntegrationConnected } from '@/lib/integrations/connection'
 import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 import { getTelegramBotUsername, isTelegramConfigured } from '@/lib/telegram/config'
+import { getDatatruckEnvConfig, isDatatruckEnvConfigured } from '@/lib/datatruck/client'
 
 function timeAgo(date: Date): string {
   const s = Math.floor((Date.now() - date.getTime()) / 1000)
@@ -37,6 +39,20 @@ function SuccessBanner({ children }: { children: React.ReactNode }) {
   )
 }
 
+function IntegrationSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
+        <div className="h-px flex-1 bg-warm/70" />
+      </div>
+      <div className="grid grid-cols-1 gap-6">
+        {children}
+      </div>
+    </section>
+  )
+}
+
 const statTileClass = 'bg-cream rounded-xl px-3.5 py-2.5 border border-warm/60'
 const notionOAuthAdminMessage =
   'Notion OAuth client mismatch. Check NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, and redirect URI in Vercel/Notion.'
@@ -47,6 +63,21 @@ const notionOAuthMismatchReasons = new Set([
   'invalid_grant',
   'token_exchange',
 ])
+
+async function loadDatatruckConnector(workspaceId: string | undefined) {
+  if (!workspaceId) return null
+  try {
+    const rows = await prisma.$queryRaw<Array<{ status: string; createdAt: Date; lastSyncAt: Date | null; metadata: unknown }>>`
+      SELECT "status", "createdAt", "lastSyncAt", "metadata"
+      FROM "ApiConnector"
+      WHERE "workspaceId" = ${workspaceId} AND "sourceKey" = 'datatruck'
+      LIMIT 1
+    `
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
 
 export default async function IntegrationsPage(
   props: {
@@ -80,6 +111,7 @@ export default async function IntegrationsPage(
   const teams = user?.workspace?.integrations.find((i) => i.type === 'teams') ?? null
   const jira = user?.workspace?.integrations.find((i) => i.type === 'jira') ?? null
   const whatsapp = user?.workspace?.integrations.find((i) => i.type === 'whatsapp') ?? null
+  const datatruck = await loadDatatruckConnector(workspaceId)
   const slackConnected = isIntegrationConnected(slack)
   const notionConnected = Boolean(getConnectedIntegrationToken(notion, {
     currentUserId: userId,
@@ -105,6 +137,19 @@ export default async function IntegrationsPage(
   const jiraNeedsReconnect = jiraMetadata.status === 'needs_reconnect'
   const jiraPermissionIssue = jiraMetadata.status === 'permission_issue'
   const whatsappConnected = isIntegrationConnected(whatsapp)
+  const datatruckEnvConfig = getDatatruckEnvConfig()
+  const datatruckMetadata = datatruck?.metadata && typeof datatruck.metadata === 'object' && !Array.isArray(datatruck.metadata)
+    ? datatruck.metadata as Record<string, unknown>
+    : {}
+  const datatruckCompanyName = typeof datatruckMetadata.companyName === 'string' ? datatruckMetadata.companyName : null
+  // Legacy connector statuses (e.g. needs_endpoint_mapping) fall back to the connect flow.
+  const datatruckStatus = datatruck?.status === 'connected'
+    ? 'connected' as const
+    : datatruck?.status === 'sync_error'
+      ? 'sync_error' as const
+      : isDatatruckEnvConfigured(datatruckEnvConfig)
+        ? 'ready' as const
+        : 'not_connected' as const
 
   let pageCount = 0
   let syncedByName: string | null = null
@@ -201,8 +246,7 @@ export default async function IntegrationsPage(
         </Link>
       </div>
 
-      {/* One card per row, full width — Slack, Linear, Gmail, Notion stacked */}
-      <div className="grid grid-cols-1 gap-6">
+      <IntegrationSection title="General">
         {/* Slack */}
         <Card padding="md" className="flex h-full flex-col">
           <div className="flex items-start justify-between gap-3">
@@ -259,6 +303,7 @@ export default async function IntegrationsPage(
                 <div className="flex flex-wrap items-center gap-3">
                   <IntegrationViewLink href="/dashboard/integrations/slack" />
                   <SyncButton endpoint="/api/integrations/slack/sync" resultLabel="messages" hideReset />
+                  <DisconnectIntegrationButton type="slack" />
                 </div>
                 <ResetLink resetType="slack" />
               </>
@@ -310,6 +355,7 @@ export default async function IntegrationsPage(
                 <div className="flex flex-wrap items-center gap-3">
                   <IntegrationViewLink href="/dashboard/integrations/linear" />
                   <SyncButton endpoint="/api/integrations/linear/sync" resultLabel="issues" hideReset />
+                  <DisconnectIntegrationButton type="linear" />
                 </div>
                 <ResetLink resetType="linear" />
               </>
@@ -375,7 +421,18 @@ export default async function IntegrationsPage(
           createdAt={jira?.createdAt.toISOString() ?? null}
           lastSyncAt={jira?.lastSyncAt?.toISOString() ?? null}
         />
+      </IntegrationSection>
 
+      <IntegrationSection title="Truck">
+        <DatatruckIntegrationCard
+          status={datatruckStatus}
+          companyName={datatruckCompanyName}
+          lastSyncAt={datatruck?.lastSyncAt?.toISOString() ?? null}
+          envCompanyName={datatruckEnvConfig.companyName ?? null}
+        />
+      </IntegrationSection>
+
+      <IntegrationSection title="Upcoming">
         <div className="relative overflow-hidden rounded-xl">
           <div className="pointer-events-none opacity-45" aria-hidden="true" inert>
             <WhatsAppIntegrationCard
@@ -392,7 +449,7 @@ export default async function IntegrationsPage(
             </span>
           </div>
         </div>
-      </div>
+      </IntegrationSection>
     </div>
   )
 }

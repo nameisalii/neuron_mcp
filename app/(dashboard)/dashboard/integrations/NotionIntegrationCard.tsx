@@ -9,6 +9,7 @@ import {
   StatusBadge,
   ResetLink,
   IntegrationViewLink,
+  DisconnectIntegrationButton,
   integrationConnectClass,
 } from './IntegrationCardUi'
 
@@ -94,6 +95,7 @@ export default function NotionIntegrationCard({
               <div className="flex flex-wrap items-center gap-3">
                 <IntegrationViewLink href="/dashboard/integrations/notion" />
                 <SyncButton endpoint="/api/integrations/notion/sync" requestBody={{ workspaceId }} resultLabel="pages" hideReset />
+                <DisconnectIntegrationButton type="notion" />
               </div>
               <ResetLink resetType="notion" />
             </>

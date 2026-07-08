@@ -39,6 +39,11 @@ model Workspace {
   invitations     Invitation[]
   activityEvents  ActivityEvent[]
   queryLogs       QueryLog[]
+  chatConversations ChatConversation[]
+  chatMessages    ChatMessage[]
+  chatAnalyticsEvents ChatAnalyticsEvent[]
+  documentAttachments DocumentAttachment[]
+  apiConnectors   ApiConnector[]
   captureRules    CaptureRule[]
   captureLogs     CaptureLog[]
   syncStatuses    SyncStatus[]
@@ -299,6 +304,115 @@ model QueryLog {
 
   @@index([workspaceId])
   @@index([workspaceId, createdAt])
+}
+
+model ChatConversation {
+  id             String        @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId         String
+  title          String
+  relatedLoadId  String?
+  sourceContext  Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  messages       ChatMessage[]
+  analyticsEvents ChatAnalyticsEvent[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, userId])
+  @@index([workspaceId, relatedLoadId])
+  @@index([workspaceId, updatedAt])
+}
+
+model ChatMessage {
+  id                 String           @id @default(cuid())
+  conversationId     String
+  conversation       ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workspaceId        String
+  workspace          Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId             String?
+  role               String
+  content            String
+  sourceReferences   Json?
+  documentReferences Json?
+  relatedLoadId      String?
+  metadata           Json?
+  createdAt          DateTime         @default(now())
+
+  @@index([conversationId])
+  @@index([workspaceId])
+  @@index([workspaceId, userId])
+  @@index([workspaceId, relatedLoadId])
+  @@index([workspaceId, createdAt])
+}
+
+model ChatAnalyticsEvent {
+  id             String            @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId         String?
+  conversationId String?
+  conversation   ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  eventType      String
+  source         String?
+  metadata       Json?
+  createdAt      DateTime          @default(now())
+
+  @@index([workspaceId])
+  @@index([workspaceId, userId])
+  @@index([workspaceId, conversationId])
+  @@index([workspaceId, eventType])
+  @@index([workspaceId, createdAt])
+}
+
+model DocumentAttachment {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  externalLoadId   String?
+  documentType     String?
+  fileName         String
+  mimeType         String?
+  fileSize         Int?
+  source           String
+  sourceExternalId String?
+  sourceMessageId  String?
+  sourceUrl        String?
+  storageUrl       String?
+  storageKey       String?
+  extractedText    String?
+  extractionStatus String?
+  uploadedByUserId String?
+  uploadedByName   String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([workspaceId, externalLoadId])
+  @@index([workspaceId, documentType])
+  @@index([workspaceId, source])
+  @@index([workspaceId, sourceExternalId])
+}
+
+model ApiConnector {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name                String
+  sourceKey           String
+  apiBaseUrl          String
+  authType            String
+  encryptedCredential String?
+  status              String    @default("not_configured")
+  lastSyncAt          DateTime?
+  metadata            Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([workspaceId, sourceKey])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
 }
 
 model CaptureRule {

@@ -6,7 +6,7 @@ import { isIntegrationConnected } from './connection'
 import { getConnectedIntegrationToken } from './connection-server'
 import { isTelegramConfigured } from '@/lib/telegram/config'
 
-export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'teams' | 'jira' | 'whatsapp'
+export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'teams' | 'jira' | 'whatsapp' | 'datatruck'
 
 export type IntegrationFilter =
   | 'all'
@@ -46,6 +46,7 @@ export interface IntegrationDetail {
 
 export interface IntegrationOverviewItem extends KnowledgePreviewInput {
   id: string
+  sourceMetadata?: Prisma.JsonValue | null
 }
 
 export interface IntegrationOverviewEmptyState {
@@ -102,6 +103,7 @@ function visibleKnowledgeWhere(source: IntegrationSource, workspaceId: string, u
 
 function sourceTitle(source: IntegrationSource): string {
   if (source === 'whatsapp') return 'WhatsApp Business Overview'
+  if (source === 'datatruck') return 'Datatruck Overview'
   return `${source.charAt(0).toUpperCase()}${source.slice(1)} Overview`
 }
 
@@ -127,6 +129,8 @@ function sourceSubtitle(source: IntegrationSource): string {
       return 'Knowledge extracted from Jira issues, comments, bugs, and project updates.'
     case 'whatsapp':
       return 'Knowledge extracted from inbound WhatsApp Business messages.'
+    case 'datatruck':
+      return 'Knowledge extracted from Datatruck loads, documents, carriers, and dispatch context.'
     default:
       return `${source} overview`
   }
@@ -139,7 +143,7 @@ function emptyState(source: IntegrationSource, connected: boolean): IntegrationO
     return {
       title: `${displayLabel} is not connected yet.`,
       description: `Connect ${displayLabel} to start extracting knowledge from this source.`,
-      actionLabel: `Connect ${displayLabel}`,
+      actionLabel: 'Back to Integrations',
       actionHref: '/dashboard/integrations',
     }
   }
@@ -204,6 +208,13 @@ export async function loadIntegrationOverview(
     },
   })
 
+  const datatruckConnector = source === 'datatruck'
+    ? await prisma.apiConnector.findUnique({
+      where: { workspaceId_sourceKey: { workspaceId, sourceKey: 'datatruck' } },
+      select: { id: true, lastSyncAt: true, metadata: true },
+    })
+    : null
+
   const connected = source === 'notion'
     ? Boolean(getConnectedIntegrationToken(integration, {
       currentUserId: userId,
@@ -212,6 +223,8 @@ export async function loadIntegrationOverview(
     }))
     : source === 'telegram'
       ? isTelegramConfigured() && Boolean(integration?.channels.length)
+      : source === 'datatruck'
+        ? Boolean(datatruckConnector)
       : isIntegrationConnected(integration)
   const where = visibleKnowledgeWhere(source, workspaceId, userId)
   const activeCategory = FILTER_LOOKUP.get(filter)?.category
@@ -256,6 +269,7 @@ export async function loadIntegrationOverview(
         source: true,
         sourceUrl: true,
         sourceExternalId: true,
+        sourceMetadata: true,
         owner: true,
         sourceCreatedAt: true,
         updatedAt: true,
@@ -264,7 +278,9 @@ export async function loadIntegrationOverview(
     }),
   ])
 
-  const lastSyncAt = integration?.lastSyncAt?.toISOString() ?? null
+  const lastSyncAt = source === 'datatruck'
+    ? datatruckConnector?.lastSyncAt?.toISOString() ?? null
+    : integration?.lastSyncAt?.toISOString() ?? null
   let summaryCards: IntegrationSummaryCard[] = [
     { label: 'Knowledge items', value: formatCount(totalCount) },
     { label: 'Decisions', value: formatCount(categoryCounts.decision) },
@@ -276,6 +292,57 @@ export async function loadIntegrationOverview(
   ]
 
   const details: IntegrationDetail[] = []
+
+  if (source === 'datatruck') {
+    const metadata = datatruckConnector?.metadata && typeof datatruckConnector.metadata === 'object' && !Array.isArray(datatruckConnector.metadata)
+      ? datatruckConnector.metadata as Record<string, unknown>
+      : {}
+    const lastSyncSummary = metadata.lastSyncSummary && typeof metadata.lastSyncSummary === 'object' && !Array.isArray(metadata.lastSyncSummary)
+      ? metadata.lastSyncSummary as Record<string, unknown>
+      : {}
+    const endpoints = lastSyncSummary.endpoints && typeof lastSyncSummary.endpoints === 'object' && !Array.isArray(lastSyncSummary.endpoints)
+      ? lastSyncSummary.endpoints as Record<string, { fetched?: number }>
+      : {}
+
+    const [documentCount, recentDocuments] = await Promise.all([
+      prisma.documentAttachment.count({ where: { workspaceId, source: 'datatruck' } }),
+      prisma.documentAttachment.findMany({
+        where: { workspaceId, source: 'datatruck' },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { fileName: true, documentType: true, externalLoadId: true, extractionStatus: true, createdAt: true },
+      }),
+    ])
+
+    summaryCards = [
+      { label: 'Knowledge items', value: formatCount(totalCount) },
+      { label: 'Loads', value: formatCount(endpoints.loads?.fetched ?? 0) },
+      { label: 'Drivers', value: formatCount(endpoints.drivers?.fetched ?? 0) },
+      { label: 'Trucks', value: formatCount(endpoints.trucks?.fetched ?? 0) },
+      { label: 'Trailers', value: formatCount(endpoints.trailers?.fetched ?? 0) },
+      { label: 'Documents', value: formatCount(documentCount) },
+    ]
+
+    details.push({ label: 'Company', value: typeof metadata.companyName === 'string' ? metadata.companyName : 'Datatruck' })
+    for (const document of recentDocuments) {
+      details.push({
+        label: 'Document',
+        value: [
+          document.fileName,
+          document.documentType,
+          document.externalLoadId ? `Load ${document.externalLoadId}` : null,
+          document.extractionStatus,
+          document.createdAt.toLocaleDateString(),
+        ].filter(Boolean).join(' · '),
+      })
+    }
+    if (typeof lastSyncSummary.fetched === 'number') {
+      details.push({ label: 'Last sync', value: `${formatCount(lastSyncSummary.fetched)} records imported` })
+    }
+    if (Array.isArray(lastSyncSummary.warnings) && lastSyncSummary.warnings.length > 0) {
+      details.push({ label: 'Warnings', value: lastSyncSummary.warnings.join(' · ') })
+    }
+  }
 
   if (source === 'slack') {
     summaryCards = [

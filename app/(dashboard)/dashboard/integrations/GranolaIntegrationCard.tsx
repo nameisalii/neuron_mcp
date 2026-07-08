@@ -11,6 +11,7 @@ import {
   StatusBadge,
   ResetLink,
   IntegrationViewLink,
+  DisconnectIntegrationButton,
   integrationActionClass,
   integrationConnectClass,
 } from './IntegrationCardUi'
@@ -85,6 +86,7 @@ export default function GranolaIntegrationCard({
                   <Settings className="h-3.5 w-3.5" />
                   Configure
                 </button>
+                <DisconnectIntegrationButton type="granola" />
               </div>
               <ResetLink resetType="granola" />
             </>

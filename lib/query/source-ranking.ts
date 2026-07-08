@@ -9,6 +9,7 @@ export interface QuerySource {
   sourceUrl: string | null
   sourceExternalId: string | null
   owner: string | null
+  sourceMetadata?: Record<string, unknown> | null
   sourceCreatedAt: string | null
   updatedAt: string | null
   relevanceScore: number

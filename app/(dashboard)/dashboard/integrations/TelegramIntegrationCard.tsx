@@ -9,6 +9,7 @@ import SyncButton from './SyncButton'
 import {
   IntegrationViewLink,
   ResetLink,
+  DisconnectIntegrationButton,
   integrationActionClass,
   integrationConnectClass,
 } from './IntegrationCardUi'
@@ -122,6 +123,7 @@ export default function TelegramIntegrationCard({
                 <Settings className="h-3.5 w-3.5" />
                 Setup
               </button>
+              <DisconnectIntegrationButton type="telegram" />
             </div>
             <ResetLink resetType="telegram" />
           </>

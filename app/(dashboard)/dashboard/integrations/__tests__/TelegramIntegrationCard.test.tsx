@@ -37,7 +37,61 @@ describe('TelegramIntegrationCard', () => {
     expect(screen.getByText(/Telegram is connected. Neuron will capture new useful messages/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/telegram')
     expect(screen.getByText('Sync Now')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
     expect(screen.getByText('Nuclear Reset')).toBeInTheDocument()
+  })
+
+  it('does not render raw sync counters or duplicated bot copy after Sync Now', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        message: 'Telegram is connected through the Neuron bot. Neuron can ingest new useful messages after the bot is added and connected. Old Telegram history cannot be imported through the official bot API.',
+        fetched: 0,
+        processed: 0,
+        knowledgeCreated: 0,
+        synced: 0,
+        extracted: 0,
+      }),
+    } as Response)
+
+    render(
+      <TelegramIntegrationCard
+        connected
+        configured
+        botUsername="neuron_mcp_bot"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sync Now' }))
+
+    expect(await screen.findByText('No new items found.')).toBeInTheDocument()
+    const visibleText = document.body.textContent ?? ''
+    expect(visibleText).not.toContain('0 fetched')
+    expect(visibleText).not.toContain('0 processed')
+    expect(visibleText).not.toContain('0 created')
+    expect(visibleText).not.toContain('0 messages · 0 extracted')
+    expect(visibleText).not.toContain('Telegram is connected through the Neuron bot')
+  })
+
+  it('shows a concise sync error', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ success: false, error: 'Long provider token/scope/debug failure with internal details' }),
+    } as Response)
+
+    render(
+      <TelegramIntegrationCard
+        connected
+        configured
+        botUsername="neuron_mcp_bot"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sync Now' }))
+
+    expect(await screen.findByText('Connection needs setup.')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('Long provider token/scope/debug failure')
   })
 
   it('shows public user setup copy without developer-only instructions', async () => {

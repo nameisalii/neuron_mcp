@@ -4,7 +4,11 @@ import { prisma } from '@/lib/db'
 import QueryClient from './QueryClient'
 import type { WorkspaceType } from '@/types'
 
-export default async function QueryPage() {
+export default async function QueryPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ conversationId?: string | string[] }>
+}) {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
 
@@ -35,11 +39,13 @@ export default async function QueryPage() {
     ...q,
     createdAt: q.createdAt.toISOString(),
   }))
+  const params = searchParams ? await searchParams : {}
+  const initialConversationId = typeof params.conversationId === 'string' ? params.conversationId : null
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="mx-auto flex h-[calc(100dvh-8rem)] min-h-0 max-w-5xl flex-col gap-4 overflow-hidden">
       <h1 className="text-2xl font-bold text-gray-900">Ask your Brain</h1>
-      <QueryClient workspaceType={workspaceType} recentQueries={recentQueries} />
+      <QueryClient workspaceType={workspaceType} recentQueries={recentQueries} initialConversationId={initialConversationId} />
     </div>
   )
 }

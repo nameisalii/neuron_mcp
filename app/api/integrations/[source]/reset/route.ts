@@ -12,12 +12,12 @@ const ALLOWED_ROLES = new Set(['owner', 'admin'])
 
 export async function POST(
   _req: NextRequest,
-  context: { params: Promise<{ type: string }> },
+  context: { params: Promise<{ source: string }> },
 ) {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { type } = await context.params
+  const { source: type } = await context.params
   if (!ALLOWED_TYPES.has(type)) return NextResponse.json({ error: 'Unsupported integration' }, { status: 400 })
 
   const user = await prisma.user.findUnique({

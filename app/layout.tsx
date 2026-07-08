@@ -1,20 +1,6 @@
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
-import { Inter, Fraunces } from 'next/font/google'
 import './globals.css'
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
-
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  variable: '--font-fraunces',
-  display: 'swap',
-  axes: ['opsz'],
-})
 
 export const metadata: Metadata = {
   title: 'Neuron — Your Company Brain',
@@ -24,7 +10,15 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
-      <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
+      <html
+        lang="en"
+        style={
+          {
+            '--font-inter': 'Inter, system-ui, -apple-system, sans-serif',
+            '--font-fraunces': 'Georgia, Cambria, "Times New Roman", serif',
+          } as React.CSSProperties
+        }
+      >
         <body>{children}</body>
       </html>
     </ClerkProvider>

@@ -43,6 +43,12 @@ h1, h2, h3, .font-display {
   outline-offset: 2px;
 }
 
+.query-composer-input:focus,
+.query-composer-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

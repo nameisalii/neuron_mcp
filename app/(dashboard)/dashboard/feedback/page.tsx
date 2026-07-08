@@ -1,7 +1,7 @@
 import { Mail, ArrowRight } from 'lucide-react'
 
 const LINKEDIN_URL = 'https://www.linkedin.com/in/ali-dinov-702a11232/'
-const EMAIL_ADDRESS = 'msirozhdinov@gmail.com'
+const EMAIL_ADDRESS = 'team@tryneuron.net'
 const EMAIL_HREF = `mailto:${EMAIL_ADDRESS}?subject=Neuron%20Feedback`
 
 function LinkedInIcon({ className }: { className?: string }) {

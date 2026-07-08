@@ -34,7 +34,7 @@ beforeEach(() => {
 })
 
 it('resets only the requested integration data', async () => {
-  const res = await POST(request, { params: Promise.resolve({ type: 'notion' }) })
+  const res = await POST(request, { params: Promise.resolve({ source: 'notion' }) })
   expect(res.status).toBe(200)
   expect(prisma.knowledgeItem.deleteMany).toHaveBeenCalledWith({ where: { workspaceId: 'ws-1', source: 'notion' } })
   expect(prisma.notionPage.deleteMany).toHaveBeenCalledWith({ where: { workspaceId: 'ws-1' } })
@@ -44,7 +44,7 @@ it('resets only the requested integration data', async () => {
 })
 
 it('does not delete Notion pages when resetting Linear', async () => {
-  await POST(request, { params: Promise.resolve({ type: 'linear' }) })
+  await POST(request, { params: Promise.resolve({ source: 'linear' }) })
   expect(prisma.knowledgeItem.deleteMany).toHaveBeenCalledWith({ where: { workspaceId: 'ws-1', source: 'linear' } })
   expect(prisma.notionPage.deleteMany).not.toHaveBeenCalled()
   expect(prisma.integration.delete).not.toHaveBeenCalled()

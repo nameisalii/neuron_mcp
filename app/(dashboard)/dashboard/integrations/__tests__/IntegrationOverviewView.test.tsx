@@ -1,6 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import IntegrationOverviewView from '../IntegrationOverviewView'
 import type { IntegrationOverviewData } from '@/lib/integrations/overview'
+
+const mockRefresh = jest.fn()
+
+jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mockRefresh }) }))
 
 function makeData(overrides: Partial<IntegrationOverviewData> = {}): IntegrationOverviewData {
   return {
@@ -104,5 +108,28 @@ describe('IntegrationOverviewView', () => {
     expect(screen.getByText('All Notion projects')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Product Plan/ })).toHaveAttribute('href', '/dashboard/notion/page-1')
     expect(screen.getByRole('link', { name: /Launch Notes/ })).toHaveAttribute('href', '/dashboard/notion/page-2')
+  })
+
+  it('renders a Datatruck connect button that opens the setup flow when not connected', () => {
+    render(<IntegrationOverviewView data={makeData({
+      source: 'datatruck',
+      title: 'Datatruck Overview',
+      subtitle: 'Knowledge extracted from Datatruck loads, documents, carriers, and dispatch context.',
+      connected: false,
+      items: [],
+      emptyState: {
+        title: 'Datatruck is not connected yet.',
+        description: 'Connect Datatruck to start extracting knowledge from this source.',
+        actionLabel: 'Back to Integrations',
+        actionHref: '/dashboard/integrations',
+      },
+    })} />)
+
+    expect(screen.getByRole('button', { name: 'Connect Datatruck' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect Datatruck' }))
+
+    expect(screen.getByRole('heading', { name: 'Connect Datatruck' })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('sflogistics')).toBeInTheDocument()
   })
 })

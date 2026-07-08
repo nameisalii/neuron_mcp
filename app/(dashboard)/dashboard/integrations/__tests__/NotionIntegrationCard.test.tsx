@@ -24,6 +24,7 @@ describe('NotionIntegrationCard', () => {
     expect(screen.getByRole('dialog', { name: 'Set up Notion' })).toBeInTheDocument()
     expect(screen.getByText('Choose pages')).toBeInTheDocument()
     expect(screen.queryByText('Sync Now')).not.toBeInTheDocument()
+    expect(screen.queryByText('Disconnect')).not.toBeInTheDocument()
     expect(screen.queryByText('Nuclear Reset')).not.toBeInTheDocument()
     expect(screen.queryByText('Connected')).not.toBeInTheDocument()
     expect(global.fetch).not.toHaveBeenCalled()
@@ -61,6 +62,7 @@ describe('NotionIntegrationCard', () => {
 
     expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/notion')
     expect(screen.getByRole('button', { name: 'Sync Now' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Nuclear Reset' })).toBeInTheDocument()
     expect(screen.getByText('Connected')).toBeInTheDocument()
     expect(screen.getByText('No Notion pages were found. Open Notion, share pages with the Neuron integration, then sync again.')).toBeInTheDocument()

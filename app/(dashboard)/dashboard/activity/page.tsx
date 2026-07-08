@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
+import { getBrainActivityAnalytics } from '@/lib/activity/analytics'
 import ActivityFeedClient from './ActivityFeedClient'
 
 export default async function ActivityPage() {
@@ -16,9 +17,11 @@ export default async function ActivityPage() {
 
   const members = await prisma.workspaceMember.findMany({
     where: { workspaceId, status: 'active' },
-    select: { userId: true, displayName: true },
+    select: { userId: true, displayName: true, avatarUrl: true },
     orderBy: { displayName: 'asc' },
   })
+
+  const analytics = await getBrainActivityAnalytics(workspaceId, members)
 
   return (
     <ActivityFeedClient
@@ -26,6 +29,7 @@ export default async function ActivityPage() {
       workspaceType={workspaceType}
       members={members}
       currentUserId={userId}
+      analytics={analytics}
     />
   )
 }

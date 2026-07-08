@@ -11,6 +11,7 @@ import {
   StatusBadge,
   ResetLink,
   IntegrationViewLink,
+  DisconnectIntegrationButton,
   integrationActionClass,
   integrationConnectClass,
 } from './IntegrationCardUi'
@@ -86,6 +87,7 @@ export default function WhatsAppIntegrationCard({
                   <Settings className="h-3.5 w-3.5" />
                   Configure
                 </button>
+                <DisconnectIntegrationButton type="whatsapp" />
               </div>
               <ResetLink resetType="whatsapp" />
             </>

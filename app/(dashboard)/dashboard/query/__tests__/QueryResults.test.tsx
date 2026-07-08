@@ -13,6 +13,7 @@ function source(index: number, overrides: Partial<SourceItem> = {}): SourceItem 
     source: 'linear',
     sourceUrl: `https://linear.app/issue/DT-${index}`,
     sourceExternalId: `issue-${index}`,
+    sourceMetadata: null,
     owner: 'Ali',
     sourceCreatedAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-02T00:00:00.000Z',
@@ -21,22 +22,27 @@ function source(index: number, overrides: Partial<SourceItem> = {}): SourceItem 
   }
 }
 
-it('renders the answer before the top sources and only shows three by default', () => {
+it('renders the answer before collapsed sources', () => {
   const { container } = render(<QueryResults answer="DeepTracer has active issues." sources={[1, 2, 3, 4].map((index) => source(index))} complete copied={false} onCopy={jest.fn()} />)
   expect(screen.getByText('DeepTracer has active issues.')).toBeInTheDocument()
-  expect(screen.getByText('DT-1: Issue 1')).toBeInTheDocument()
-  expect(screen.queryByText('DT-4: Issue 4')).not.toBeInTheDocument()
-  expect(container.textContent?.indexOf('Answer')).toBeLessThan(container.textContent?.indexOf('Top Sources') ?? 0)
+  expect(screen.getByRole('button', { name: 'Sources (4)' })).toHaveAttribute('aria-expanded', 'false')
+  expect(screen.queryByText(/DT-1: Issue 1/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/DT-4: Issue 4/)).not.toBeInTheDocument()
+  expect(container.textContent?.indexOf('Neuron')).toBeLessThan(container.textContent?.indexOf('Sources (4)') ?? 0)
 })
 
-it('shows remaining sources on demand', () => {
+it('expands sources on demand', () => {
   render(<QueryResults answer="Answer" sources={[1, 2, 3, 4].map((index) => source(index))} complete copied={false} onCopy={jest.fn()} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Show more sources (1)' }))
-  expect(screen.getByText('DT-4: Issue 4')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Sources (4)' }))
+  expect(screen.getByText(/DT-1: Issue 1/)).toBeInTheDocument()
+  expect(screen.getByText(/DT-4: Issue 4/)).toBeInTheDocument()
+  fireEvent.click(screen.getByText('Show less'))
+  expect(screen.queryByText(/DT-1: Issue 1/)).not.toBeInTheDocument()
 })
 
 it('formats status_update as Status Update', () => {
   render(<QueryResults answer="Answer" sources={[source(1)]} complete copied={false} onCopy={jest.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Sources (1)' }))
   expect(screen.getByText('Status Update')).toBeInTheDocument()
   expect(screen.queryByText('status_update')).not.toBeInTheDocument()
 })
@@ -44,5 +50,24 @@ it('formats status_update as Status Update', () => {
 it('shows the weak-answer fallback with the closest sources', () => {
   render(<QueryResults answer="" sources={[source(1)]} complete copied={false} onCopy={jest.fn()} />)
   expect(screen.getByText(/could not find enough information to answer confidently/i)).toBeInTheDocument()
-  expect(screen.getByText('DT-1: Issue 1')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Sources (1)' }))
+  expect(screen.getByText(/DT-1: Issue 1/)).toBeInTheDocument()
+})
+
+it('shows source account metadata in the subtitle without empty placeholders', () => {
+  render(
+    <QueryResults
+      answer="Answer"
+      sources={[source(1, {
+        source: 'telegram',
+        sourceMetadata: { channelName: '@dispatch_updates' },
+      })]}
+      complete
+      copied={false}
+      onCopy={jest.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Sources (1)' }))
+  expect(screen.getByText(/@dispatch_updates · Telegram ·/)).toBeInTheDocument()
+  expect(screen.queryByText(/undefined|null/)).not.toBeInTheDocument()
 })

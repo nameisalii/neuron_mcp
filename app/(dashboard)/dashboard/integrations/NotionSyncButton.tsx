@@ -16,6 +16,12 @@ interface SyncResult {
   error?: string
 }
 
+function syncMessage(result: SyncResult) {
+  if ((result.knowledgeCreated ?? 0) > 0 || (result.knowledgeUpdated ?? 0) > 0) return 'Sync complete.'
+  if ((result.fetched ?? 0) === 0) return 'No new items found.'
+  return 'Sync complete.'
+}
+
 export default function NotionSyncButton({ workspaceId, label = 'Sync Now' }: { workspaceId?: string; label?: string }) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<SyncResult | null>(null)
@@ -52,21 +58,11 @@ export default function NotionSyncButton({ workspaceId, label = 'Sync Now' }: { 
       </button>
       {result?.success && (
         <div className="text-right">
-          <p className="text-xs font-medium text-gray-700">
-            {(result.knowledgeCreated ?? 0) > 0
-              ? `Created ${result.knowledgeCreated} knowledge item${result.knowledgeCreated === 1 ? '' : 's'}`
-              : (result.fetched ?? 0) === 0
-                ? 'Synced 0 items — no accessible data found'
-                : result.message ?? 'Synced 0 items — no extractable knowledge found'}
-          </p>
-          <p className="text-xs text-gray-500">
-            {result.pagesProcessed} pages · {result.chunksCreated} chunks
-            {result.knowledgeUpdated ? ` · ${result.knowledgeUpdated} updated` : ''}
-          </p>
+          <p className="text-xs font-medium text-gray-700">{syncMessage(result)}</p>
         </div>
       )}
       {result?.error && (
-        <p className="text-xs text-red-600">{result.error}</p>
+        <p className="text-xs text-red-600">Sync failed. Try again.</p>
       )}
     </div>
   )

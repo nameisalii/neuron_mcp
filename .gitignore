@@ -19,3 +19,7 @@ coverage/
 # os
 .DS_Store
 .vercel
+
+# Uploaded documents (local/dev storage)
+storage/
+uploads/

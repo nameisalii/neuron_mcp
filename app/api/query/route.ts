@@ -10,29 +10,144 @@ import { buildQuerySystemPrompt } from '@/lib/extraction/prompts'
 import { splitRankedSources, type QuerySource } from '@/lib/query/source-ranking'
 import { gmailThreadUrl } from '@/lib/gmail/api'
 import { escapeXml } from '@/lib/utils'
+import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/persistence'
+import { searchDocumentAttachments, type DocumentResult } from '@/lib/documents/search'
+import {
+  applyDocumentAssignment,
+  attachedDocumentContext,
+  loadWorkspaceDocuments,
+  toDocumentResults,
+} from '@/lib/documents/queryAttachments'
 import type { LabeledByEntry } from '@/types'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 
 const QuerySchema = z.object({
-  question: z.string().min(3).max(500),
+  question: z.string().optional(),
+  query: z.string().optional(),
+  conversationId: z.string().trim().min(1).nullable().optional(),
+  documentIds: z.array(z.string().trim().min(1)).max(5).optional(),
+}).transform((data) => ({
+  question: (data.question ?? data.query ?? '').trim(),
+  conversationId: data.conversationId ?? undefined,
+  documentIds: data.documentIds ?? [],
+})).refine((data) => data.question.length >= 3 && data.question.length <= 500, {
+  message: 'Question must be 3-500 characters',
+  path: ['question'],
 })
 
 function sendSSE(controller: ReadableStreamDefaultController, data: object) {
   controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`))
 }
 
-function makeEmptyStream(answer: string): ReadableStream {
+function makeEmptyStream(answer: string, conversationId: string | null, confidence = 0): ReadableStream {
   return new ReadableStream({
     start(controller) {
-      sendSSE(controller, { type: 'done', answer, sources: [], topSources: [], remainingSources: [], totalSources: 0, confidence: 0 })
+      sendSSE(controller, { type: 'sources', sources: [], topSources: [], remainingSources: [], totalSources: 0, documents: [], conversationId, confidence })
+      sendSSE(controller, { type: 'done', answer, sources: [], topSources: [], remainingSources: [], totalSources: 0, documents: [], conversationId, confidence })
       controller.close()
     },
   })
 }
 
+function documentContext(documents: DocumentResult[]): string {
+  if (documents.length === 0) return ''
+  return documents.map((document, i) => {
+    const parts = [
+      `File: ${document.fileName}`,
+      document.documentType ? `Type: ${document.documentType}` : null,
+      document.externalLoadId ? `Load: ${document.externalLoadId}` : null,
+      `Source: ${document.source}`,
+      document.sourceUrl ? `Source URL: ${document.sourceUrl}` : null,
+      document.storageUrl ? `Download URL: ${document.storageUrl}` : null,
+      document.snippet ? `Snippet: ${document.snippet}` : null,
+    ].filter(Boolean).join(' · ')
+    return `[Document ${i + 1}] ${parts}`
+  }).join('\n')
+}
+
 function dateToIso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null
+}
+
+type KnowledgeItemResult = {
+  id: string
+  content: string
+  source: string
+  sourceUrl: string | null
+  sourceExternalId: string | null
+  category: string
+  label: string | null
+  owner: string | null
+  sourceMetadata: Prisma.JsonValue | null
+  notionPageTitle: string | null
+  sourceCreatedAt: Date | null
+  updatedAt: Date
+  visibility: string
+  visibilitySetBy: string | null
+}
+
+function isMissingColumnError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err)
+  return message.includes('column') && message.includes('does not exist')
+}
+
+async function findKnowledgeItems(where: Prisma.KnowledgeItemWhereInput, take?: number): Promise<KnowledgeItemResult[]> {
+  const baseSelect = {
+    id: true,
+    content: true,
+    source: true,
+    sourceUrl: true,
+    sourceExternalId: true,
+    category: true,
+    label: true,
+    owner: true,
+    notionPageTitle: true,
+    sourceCreatedAt: true,
+    updatedAt: true,
+    visibility: true,
+    visibilitySetBy: true,
+  } satisfies Prisma.KnowledgeItemSelect
+
+  try {
+    return await prisma.knowledgeItem.findMany({
+      where,
+      select: { ...baseSelect, sourceMetadata: true },
+      ...(take ? { take } : {}),
+    }) as KnowledgeItemResult[]
+  } catch (err) {
+    if (!isMissingColumnError(err)) throw err
+    console.error('[query] source metadata unavailable; continuing without source metadata')
+    const rows = await prisma.knowledgeItem.findMany({
+      where,
+      select: baseSelect,
+      ...(take ? { take } : {}),
+    })
+    return rows.map((row) => ({ ...row, sourceMetadata: null }))
+  }
+}
+
+async function safeTrackEvent(...args: Parameters<typeof trackEvent>) {
+  try {
+    await trackEvent(...args)
+  } catch (err) {
+    console.error('[query] activity tracking skipped', err instanceof Error ? err.message : 'unknown error')
+  }
+}
+
+async function safeSaveQueryLog(
+  workspaceId: string,
+  userId: string,
+  displayName: string,
+  query: string,
+  answer: string,
+  sourceChunkIds: string[],
+) {
+  try {
+    await saveQueryLog(workspaceId, userId, displayName, query, answer, sourceChunkIds)
+  } catch (err) {
+    console.error('[query] query log skipped', err instanceof Error ? err.message : 'unknown error')
+  }
 }
 
 export async function POST(req: Request) {
@@ -70,8 +185,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Question must be 3–500 characters' }, { status: 400 })
     }
 
-    const { question } = parsed.data
+    const { question, conversationId: requestedConversationId, documentIds } = parsed.data
     const escapedQuestion = escapeXml(question)
+    let conversationId: string | null = null
+    let relatedLoadId: string | null = null
+
+    // Documents explicitly attached to this question — must belong to this workspace.
+    let attachedDocuments = await loadWorkspaceDocuments(workspaceId, documentIds)
+    if (attachedDocuments === null) {
+      return NextResponse.json({ error: 'Document not found in this workspace' }, { status: 403 })
+    }
+    if (attachedDocuments.length > 0) {
+      attachedDocuments = await applyDocumentAssignment(workspaceId, question, attachedDocuments)
+    }
+
+    try {
+      const conversation = await createOrAppendConversation({
+        workspaceId,
+        userId,
+        question,
+        conversationId: requestedConversationId,
+      })
+      conversationId = conversation.conversationId
+      relatedLoadId = conversation.relatedLoadId
+    } catch (err) {
+      console.error('[query] chat persistence failed', err)
+    }
 
     const workspace = await prisma.workspace.findUnique({
       where: { id: workspaceId },
@@ -96,58 +235,41 @@ export async function POST(req: Request) {
 
     const chunkInclude = { page: { select: { id: true, title: true, notionPageId: true, lastEditedAt: true } } } as const
 
+    let documentResults: DocumentResult[] = []
+    try {
+      documentResults = await searchDocumentAttachments(workspaceId, question)
+    } catch (err) {
+      console.error('[query] document search failed', err instanceof Error ? err.message : 'unknown error')
+    }
+    // Attached documents lead the Resources list; drop duplicate search hits.
+    if (attachedDocuments.length > 0) {
+      const attachedIds = new Set(attachedDocuments.map((document) => document.id))
+      documentResults = [
+        ...toDocumentResults(attachedDocuments),
+        ...documentResults.filter((document) => !attachedIds.has(document.id)),
+      ]
+    }
+
     let [chunks, knowledgeItems] = allPineconeIds.length > 0
       ? await Promise.all([
         prisma.notionChunk.findMany({
           where: { pineconeId: { in: allPineconeIds }, workspaceId },
           include: chunkInclude,
         }),
-          prisma.knowledgeItem.findMany({
-            where: {
+          findKnowledgeItems({
               workspaceId,
               id: { in: allPineconeIds },
               OR: [
                 { visibility: 'team' },
                 { visibility: 'personal', visibilitySetBy: userId },
               ],
-            },
-            select: {
-              id: true,
-              content: true,
-              source: true,
-              sourceUrl: true,
-              sourceExternalId: true,
-              category: true,
-              label: true,
-              owner: true,
-              notionPageTitle: true,
-              sourceCreatedAt: true,
-              updatedAt: true,
-              visibility: true,
-              visibilitySetBy: true,
-            },
           }),
         ])
       : [[], []]
 
-    type KnowledgeItemResult = {
-      id: string
-      content: string
-      source: string
-      sourceUrl: string | null
-      sourceExternalId: string | null
-      category: string
-      label: string | null
-      owner: string | null
-      notionPageTitle: string | null
-      sourceCreatedAt: Date | null
-      updatedAt: Date
-      visibility: string
-      visibilitySetBy: string | null
-    }
     knowledgeItems = knowledgeItems as KnowledgeItemResult[]
 
-    if (chunks.length === 0 && knowledgeItems.length === 0) {
+    if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0) {
       // Pinecone returned nothing — fall back to Postgres keyword search
       const keywords = question.trim().split(/\s+/).filter(w => w.length > 2)
       if (keywords.length > 0) {
@@ -159,8 +281,7 @@ export async function POST(req: Request) {
             take: 10,
             orderBy: { position: 'asc' },
           }),
-          prisma.knowledgeItem.findMany({
-            where: {
+          findKnowledgeItems({
               workspaceId,
               AND: [
                 {
@@ -171,33 +292,28 @@ export async function POST(req: Request) {
                 },
                 { OR: keywordFilter },
               ],
-            },
-            select: {
-              id: true,
-              content: true,
-              source: true,
-              sourceUrl: true,
-              sourceExternalId: true,
-              category: true,
-              label: true,
-              owner: true,
-              notionPageTitle: true,
-              sourceCreatedAt: true,
-              updatedAt: true,
-              visibility: true,
-              visibilitySetBy: true,
-            },
-            take: 10,
-          }),
+            }, 10),
         ])
       }
     }
 
-    if (chunks.length === 0 && knowledgeItems.length === 0) {
+    if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0) {
       const noInfoAnswer = "I don't have verified information about this yet."
-      void saveQueryLog(workspaceId, userId, displayName, question, noInfoAnswer, [])
-      void trackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, {})
-      return new Response(makeEmptyStream(noInfoAnswer), { headers: { 'Content-Type': 'text/event-stream' } })
+      if (conversationId) {
+        void storeAssistantMessage({
+          workspaceId,
+          userId,
+          conversationId,
+          answer: noInfoAnswer,
+          sourceReferences: [],
+          documentReferences: [],
+          relatedLoadId,
+          metadata: { confidence: 0, totalSources: 0, documentCount: 0 },
+        }).catch((err) => console.error('[query] assistant persistence failed', err))
+      }
+      void safeSaveQueryLog(workspaceId, userId, displayName, question, noInfoAnswer, [])
+      void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, conversationId ? { conversationId, relatedLoadId } : {})
+      return new Response(makeEmptyStream(noInfoAnswer, conversationId), { headers: { 'Content-Type': 'text/event-stream' } })
     }
 
     const chunkContext = chunks.map((chunk, i) => {
@@ -256,7 +372,12 @@ export async function POST(req: Request) {
       return `[${chunks.length + i + 1}] ${ref} ${item.content}`
     })
 
-    const context = [...chunkContext, ...knowledgeContext].join('\n\n')
+    const context = [
+      attachedDocumentContext(attachedDocuments),
+      ...chunkContext,
+      ...knowledgeContext,
+      documentContext(documentResults),
+    ].filter(Boolean).join('\n\n')
 
     const systemPrompt = buildQuerySystemPrompt({
       workspaceName,
@@ -280,6 +401,7 @@ export async function POST(req: Request) {
       sourceUrl: null,
       sourceExternalId: c.page.notionPageId,
       owner: null,
+      sourceMetadata: null,
       sourceCreatedAt: c.page.lastEditedAt?.toISOString() ?? null,
       updatedAt: c.updatedAt?.toISOString() ?? null,
       relevanceScore: scoreMap.get(c.pineconeId ?? '') ?? 0,
@@ -308,6 +430,9 @@ export async function POST(req: Request) {
       owner: item.source === 'gmail'
         ? (item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.sender : null) ?? item.owner ?? null
         : item.owner ?? null,
+      sourceMetadata: item.sourceMetadata && typeof item.sourceMetadata === 'object' && !Array.isArray(item.sourceMetadata)
+        ? item.sourceMetadata as Record<string, unknown>
+        : null,
       sourceCreatedAt: item.source === 'gmail'
         ? dateToIso(item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.lastMessageAt ?? null : null)
           ?? item.sourceCreatedAt?.toISOString()
@@ -334,7 +459,7 @@ export async function POST(req: Request) {
 
     const readable = new ReadableStream({
       async start(controller) {
-        sendSSE(controller, { type: 'sources', ...ranked, confidence })
+        sendSSE(controller, { type: 'sources', ...ranked, documents: documentResults, conversationId, confidence })
         let fullAnswer = ''
         try {
           for await (const chunk of openaiStream as AsyncIterable<{ choices: Array<{ delta?: { content?: string }; finish_reason?: string | null }> }>) {
@@ -344,13 +469,34 @@ export async function POST(req: Request) {
               sendSSE(controller, { type: 'delta', content })
             }
           }
-          void saveQueryLog(workspaceId, userId, displayName, question, fullAnswer, [
+          void safeSaveQueryLog(workspaceId, userId, displayName, question, fullAnswer, [
             ...chunks.map((c) => c.id),
             ...knowledgeItems.map((k) => k.id),
           ])
-          void trackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, {})
+          if (conversationId) {
+            void storeAssistantMessage({
+              workspaceId,
+              userId,
+              conversationId,
+              answer: fullAnswer,
+              sourceReferences: ranked.sources as unknown as Prisma.InputJsonValue,
+              documentReferences: documentResults as unknown as Prisma.InputJsonValue,
+              relatedLoadId,
+              metadata: {
+                confidence,
+                totalSources: ranked.totalSources,
+                documentCount: documentResults.length,
+                ...(documentIds.length > 0 ? { uploadedDocumentIds: documentIds } : {}),
+              },
+            }).catch((err) => console.error('[query] assistant persistence failed', err))
+          }
+          void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, {
+            conversationId,
+            relatedLoadId,
+            documentCount: documentResults.length,
+          })
           const answer = fullAnswer.trim() || 'I could not find enough information to answer confidently, but these are the closest sources I found.'
-          sendSSE(controller, { type: 'done', answer, ...ranked, confidence })
+          sendSSE(controller, { type: 'done', answer, ...ranked, documents: documentResults, conversationId, confidence })
         } finally {
           controller.close()
         }
