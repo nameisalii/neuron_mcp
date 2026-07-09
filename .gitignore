@@ -21,5 +21,5 @@ coverage/
 .vercel
 
 # Uploaded documents (local/dev storage)
-storage/
-uploads/
+/storage/
+/uploads/
