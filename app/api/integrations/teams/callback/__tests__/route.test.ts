@@ -48,6 +48,18 @@ it('rejects invalid OAuth state', async () => {
   expect(exchangeTeamsCode).not.toHaveBeenCalled()
 })
 
+it('redirects admin consent errors to a friendly Teams UI state', async () => {
+  cookieStore.get.mockReturnValue({ value: 'saved.user-1.ws-1' })
+
+  const res = await GET(new Request('http://localhost/api/integrations/teams/callback?error=access_denied&error_description=AADSTS65001%3A%20Administrator%20approval%20required&state=saved.user-1.ws-1') as never)
+
+  expect(res.status).toBe(307)
+  expect(res.headers.get('location')).toBe('http://localhost:3000/dashboard/integrations/microsoft/admin-required')
+  expect(res.headers.get('location')).not.toContain('AADSTS65001')
+  expect(res.headers.get('location')).not.toContain('error_description')
+  expect(exchangeTeamsCode).not.toHaveBeenCalled()
+})
+
 it('stores encrypted Teams token on callback success', async () => {
   cookieStore.get.mockReturnValue({ value: 'saved.user-1.ws-1' })
 
@@ -62,6 +74,19 @@ it('stores encrypted Teams token on callback success', async () => {
       accessToken: 'encrypted-teams-token',
       metadata: expect.objectContaining({ status: 'connected', accountId: 'ms-user-1' }),
     }),
+  }))
+  expect(res.headers.get('location')).toContain('connected=microsoft')
+})
+
+it('records the separate Teams sync authorization level', async () => {
+  cookieStore.get.mockImplementation((name: string) => name === 'teams_oauth_level'
+    ? { value: 'teams' }
+    : { value: 'saved.user-1.ws-1' })
+
+  const res = await GET(new Request('http://localhost/api/integrations/teams/callback?code=abc&state=saved.user-1.ws-1') as never)
+
+  expect(prisma.integration.upsert).toHaveBeenCalledWith(expect.objectContaining({
+    create: expect.objectContaining({ metadata: expect.objectContaining({ connectionLevel: 'teams' }) }),
   }))
   expect(res.headers.get('location')).toContain('connected=teams')
 })

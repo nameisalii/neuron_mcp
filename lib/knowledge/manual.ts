@@ -24,6 +24,8 @@ export interface ManualKnowledgeParams {
   createdByName: string
   externalLoadId?: string | null
   documentType?: string | null
+  /** Datatruck module this entry belongs to (e.g. "invoices") for file-import coverage. */
+  moduleKey?: string | null
   file?: ManualKnowledgeFile | null
 }
 
@@ -83,6 +85,7 @@ export async function createManualKnowledgeItemWithOptionalDocument(
     createdByName: params.createdByName,
     ...(params.externalLoadId ? { externalLoadId: params.externalLoadId } : {}),
     ...(params.documentType ? { documentType: params.documentType } : {}),
+    ...(params.moduleKey ? { moduleKey: params.moduleKey, importMethod: 'file_import' } : {}),
     ...(documentAttachment ? { documentId: documentAttachment.id } : {}),
   }
 

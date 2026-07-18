@@ -5,7 +5,8 @@ import { prisma } from '@/lib/db'
 import { requireWorkspaceMember } from '@/lib/api/workspace-auth'
 import { decrypt } from '@/lib/crypto'
 import { trackEvent } from '@/lib/activity'
-import { syncDatatruckKnowledge } from '@/lib/datatruck/sync'
+import { syncDatatruckFullAccountKnowledge, syncDatatruckKnowledge } from '@/lib/datatruck/sync'
+import { decodeDatatruckCredentialBundle } from '@/lib/datatruck/auth'
 
 const SYNC_ERROR_MESSAGE = 'Datatruck sync failed. Check API token or permissions.'
 
@@ -18,20 +19,10 @@ export async function POST() {
 
   const connector = await prisma.apiConnector.findUnique({
     where: { workspaceId_sourceKey: { workspaceId: workspace.workspaceId, sourceKey: 'datatruck' } },
-    select: { id: true, apiBaseUrl: true, encryptedCredential: true, metadata: true },
+    select: { id: true, apiBaseUrl: true, authType: true, encryptedCredential: true, metadata: true },
   })
   if (!connector?.encryptedCredential || !connector.apiBaseUrl) {
     return NextResponse.json({ success: false, error: 'Datatruck is not connected.' }, { status: 404 })
-  }
-
-  let apiToken: string
-  try {
-    apiToken = decrypt(connector.encryptedCredential)
-  } catch {
-    return NextResponse.json(
-      { success: false, error: 'Datatruck connection is corrupted — reconnect Datatruck.' },
-      { status: 422 },
-    )
   }
 
   const metadata = connector.metadata && typeof connector.metadata === 'object' && !Array.isArray(connector.metadata)
@@ -39,10 +30,31 @@ export async function POST() {
     : {}
 
   try {
-    const result = await syncDatatruckKnowledge(
-      workspace.workspaceId,
-      { apiBaseUrl: connector.apiBaseUrl, apiToken },
-    )
+    let result
+    if (connector.authType === 'full_account') {
+      const credential = decodeDatatruckCredentialBundle(connector.encryptedCredential)
+      result = await syncDatatruckFullAccountKnowledge(workspace.workspaceId, {
+        workspaceId: workspace.workspaceId,
+        companyName: credential.companyName,
+      })
+    } else {
+      let apiToken: string
+      try {
+        apiToken = decrypt(connector.encryptedCredential)
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'Datatruck connection is corrupted — reconnect Datatruck.' },
+          { status: 422 },
+        )
+      }
+      result = await syncDatatruckKnowledge(
+        workspace.workspaceId,
+        { apiBaseUrl: connector.apiBaseUrl, apiToken },
+        {},
+        undefined,
+        metadata,
+      )
+    }
 
     const nextMetadata = {
       ...metadata,
@@ -54,6 +66,7 @@ export async function POST() {
         embeddingErrors: result.embeddingErrors,
         warnings: result.warnings,
         endpoints: result.endpoints,
+        connectionMode: connector.authType === 'full_account' ? 'full_account' : 'open_api',
       },
     }
     await prisma.apiConnector.update({

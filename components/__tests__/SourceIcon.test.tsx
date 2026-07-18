@@ -19,6 +19,12 @@ describe('SourceIcon', () => {
     expect(screen.getByAltText('Slack')).toHaveAttribute('src', expect.stringContaining('slack.png'))
   })
 
+  it('renders Datatruck and Five ELD from their integration logo assets', () => {
+    render(<><SourceIcon source="datatruck" /><SourceIcon source="five_eld" /></>)
+    expect(decodeURIComponent(screen.getByAltText('Datatruck logo').getAttribute('src') ?? '')).toContain('/integrations/datalogo.png')
+    expect(decodeURIComponent(screen.getByAltText('Five ELD logo').getAttribute('src') ?? '')).toContain('/integrations/tt_eld.png')
+  })
+
   it('renders Discord, Granola, and WhatsApp from local logo assets', () => {
     render(
       <div>

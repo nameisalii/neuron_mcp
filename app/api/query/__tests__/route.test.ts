@@ -334,6 +334,102 @@ describe('POST /api/query', () => {
     ])
   })
 
+  it('summarizes recent Telegram updates from retrieved workspace sources', async () => {
+    mockSearch.mockResolvedValue([])
+    mockPersonalSearch.mockResolvedValue([])
+    mockChunkFindMany.mockResolvedValue([] as never)
+    mockKnowledgeFindMany.mockResolvedValue([
+      {
+        id: 'telegram-1',
+        content: 'Dispatch team added a Wednesday appointment for load 2543 and asked the team not to book over it.',
+        source: 'telegram',
+        sourceUrl: null,
+        sourceExternalId: 'telegram-msg-1',
+        category: 'status_update',
+        label: null,
+        owner: 'Sam Dispatcher',
+        sourceMetadata: { channelName: 'Dispatch updates', authorName: 'Sam Dispatcher' },
+        notionPageTitle: null,
+        sourceCreatedAt: new Date('2026-07-09T15:00:00.000Z'),
+        updatedAt: new Date('2026-07-09T15:01:00.000Z'),
+        visibility: 'team',
+        visibilitySetBy: null,
+      },
+      {
+        id: 'telegram-2',
+        content: 'Load 2543 status changed to in transit and the ETA was moved to 3:30 PM.',
+        source: 'telegram',
+        sourceUrl: null,
+        sourceExternalId: 'telegram-msg-2',
+        category: 'status_update',
+        label: null,
+        owner: 'Alex',
+        sourceMetadata: { channelName: 'Dispatch updates', authorName: 'Alex' },
+        notionPageTitle: null,
+        sourceCreatedAt: new Date('2026-07-09T16:00:00.000Z'),
+        updatedAt: new Date('2026-07-09T16:01:00.000Z'),
+        visibility: 'team',
+        visibilitySetBy: null,
+      },
+    ] as never)
+
+    const events = await readSSE(await POST(makeRequest({ question: 'give recent updates in telegram' })))
+    const answer = String(events.find((event) => event.type === 'done')?.answer ?? '')
+    const sources = events.find((event) => event.type === 'sources')?.sources as Array<{ chunkId: string; source: string }> | undefined
+
+    expect(answer).toContain('Recent Telegram updates')
+    expect(answer).toContain('Wednesday appointment')
+    expect(answer).toContain('Load 2543')
+    expect(answer).not.toMatch(/no specific updates|official Telegram channels/i)
+    expect(sources?.map((source) => source.chunkId)).toEqual(['telegram-2', 'telegram-1'])
+    expect(sources?.every((source) => source.source === 'telegram')).toBe(true)
+    expect(mockChat).not.toHaveBeenCalled()
+    expect(mockStoreAssistantMessage).toHaveBeenCalledWith(expect.objectContaining({
+      sourceReferences: expect.arrayContaining([
+        expect.objectContaining({ chunkId: 'telegram-2' }),
+        expect.objectContaining({ chunkId: 'telegram-1' }),
+      ]),
+    }))
+  })
+
+  it.each([
+    ['What changed in Slack today?', 'slack', 'Slack'],
+    ['Summarize recent Linear updates.', 'linear', 'Linear'],
+    ['Latest Gmail updates.', 'gmail', 'Gmail'],
+    ['What happened in Datatruck today?', 'datatruck', 'Datatruck'],
+  ])('uses source-specific summary mode for %s', async (question, source, displayName) => {
+    mockSearch.mockResolvedValue([])
+    mockPersonalSearch.mockResolvedValue([])
+    mockChunkFindMany.mockResolvedValue([] as never)
+    mockKnowledgeFindMany.mockResolvedValue([
+      {
+        id: `${source}-1`,
+        content: `${displayName} update: the operations team changed an important status today.`,
+        source,
+        sourceUrl: null,
+        sourceExternalId: `${source}-external-1`,
+        category: 'status_update',
+        label: null,
+        owner: 'Operator',
+        sourceMetadata: source === 'slack' ? { channelName: '#ops' } : {},
+        notionPageTitle: null,
+        sourceCreatedAt: new Date('2026-07-09T15:00:00.000Z'),
+        updatedAt: new Date('2026-07-09T15:01:00.000Z'),
+        visibility: 'team',
+        visibilitySetBy: null,
+      },
+    ] as never)
+
+    const events = await readSSE(await POST(makeRequest({ question })))
+    const answer = String(events.find((event) => event.type === 'done')?.answer ?? '')
+    const sources = events.find((event) => event.type === 'sources')?.sources as Array<{ source: string }> | undefined
+
+    expect(answer).toContain(`Recent ${displayName} updates`)
+    expect(answer).toContain('operations team changed')
+    expect(sources?.every((item) => item.source === source)).toBe(true)
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
   it('includes workspace name in system prompt', async () => {
     await POST(makeRequest({ question: 'What is the refund policy?' }))
     const call = mockChat.mock.calls[0][0]

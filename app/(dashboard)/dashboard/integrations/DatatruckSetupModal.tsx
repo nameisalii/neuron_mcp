@@ -10,19 +10,24 @@ interface DatatruckSetupModalProps {
   isOpen: boolean
   onClose: () => void
   onConfigured: () => void
-  /** Prefill from the developer env fallback — never a token, only the company name. */
-  initialCompanyName?: string | null
+  fullAccountEnabled?: boolean
 }
 
 export default function DatatruckSetupModal({
   isOpen,
   onClose,
   onConfigured,
-  initialCompanyName,
+  fullAccountEnabled = false,
 }: DatatruckSetupModalProps) {
   const [mounted, setMounted] = useState(false)
+  const [connectionMode, setConnectionMode] = useState<'open_api' | 'full_account'>('open_api')
   const [companyName, setCompanyName] = useState('')
+  const [usernameOrEmail, setUsernameOrEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [apiToken, setApiToken] = useState('')
+  const [mfaChallenge, setMfaChallenge] = useState<{ challengeId: string; challengeType: string } | null>(null)
+  const [mfaCode, setMfaCode] = useState('')
+  const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -31,22 +36,91 @@ export default function DatatruckSetupModal({
   // Reset on every open. The token is write-only from the UI — never prefilled.
   useEffect(() => {
     if (!isOpen) return
-    setCompanyName(initialCompanyName ?? '')
+    setConnectionMode('open_api')
+    setCompanyName('')
+    setUsernameOrEmail('')
+    setPassword('')
     setApiToken('')
+    setMfaChallenge(null)
+    setMfaCode('')
+    setIsHelpOpen(false)
     setError(null)
-  }, [isOpen, initialCompanyName])
+  }, [isOpen])
 
   const normalizedCompanyName = normalizeDatatruckCompanyName(companyName)
   const trimmedToken = apiToken.trim()
-  const canSubmit = normalizedCompanyName.length > 0 && trimmedToken.length > 0
+  const canSubmit = mfaChallenge
+    ? mfaCode.trim().length > 0
+    : connectionMode === 'open_api'
+      ? normalizedCompanyName.length > 0 && trimmedToken.length > 0
+      : usernameOrEmail.trim().length > 0 && password.length > 0
 
   async function handleConnect() {
+    if (mfaChallenge) {
+      setSaving(true)
+      setError(null)
+      try {
+        const res = await fetch('/api/integrations/datatruck/full-account/mfa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ challengeId: mfaChallenge.challengeId, code: mfaCode.trim() }),
+        })
+        const data = (await res.json()) as { status?: string; message?: string }
+        if (!res.ok || data.status !== 'connected') throw new Error(data.message ?? 'Could not verify the MFA code.')
+        setPassword('')
+        setMfaCode('')
+        onConfigured()
+        onClose()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not verify the MFA code.')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
+    if (connectionMode === 'full_account') {
+      if (!fullAccountEnabled) {
+        setError('Full Datatruck Account connector is not enabled.')
+        return
+      }
+      if (!usernameOrEmail.trim() || !password) {
+        setError('Datatruck username and password are required.')
+        return
+      }
+      setSaving(true)
+      setError(null)
+      try {
+        const company = normalizedCompanyName || undefined
+        const res = await fetch('/api/integrations/datatruck/full-account/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company, usernameOrEmail: usernameOrEmail.trim(), password }),
+        })
+        const data = (await res.json()) as { status?: string; message?: string; challengeId?: string; challengeType?: string }
+        if (data.status === 'mfa_required' && data.challengeId && data.challengeType) {
+          setPassword('')
+          setMfaChallenge({ challengeId: data.challengeId, challengeType: data.challengeType })
+          return
+        }
+        if (!res.ok || data.status !== 'connected') throw new Error(data.message ?? 'Failed to connect Datatruck')
+        setPassword('')
+        onConfigured()
+        onClose()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to connect Datatruck')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
     if (!normalizedCompanyName) {
       setError('Company name is required.')
       return
     }
     if (!isValidDatatruckCompanyName(normalizedCompanyName)) {
-      setError('Enter a valid Datatruck company name, like "sflogistics".')
+      setError('Enter a valid Datatruck company name using lowercase letters, numbers, and hyphens.')
       return
     }
     if (!trimmedToken) {
@@ -102,29 +176,77 @@ export default function DatatruckSetupModal({
 
           <div className="space-y-4 px-6 py-5">
             <p className="text-sm text-gray-600">
-              Enter your Datatruck company name and API token. Neuron will use this to sync loads,
-              drivers, trucks, trailers, work orders, and dispatcher board data.
+              {fullAccountEnabled
+                ? 'Connect your Datatruck workspace with an API token, or use the local-only Full Account connector when enabled.'
+                : 'Connect your Datatruck workspace by entering your Datatruck company name and API token.'}
             </p>
 
-            <label className="block">
-              <span className="text-xs font-medium text-gray-500">Company name</span>
+            {fullAccountEnabled && !mfaChallenge && (
+              <div className="grid grid-cols-2 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
+                <button
+                  type="button"
+                  onClick={() => setConnectionMode('open_api')}
+                  className={`rounded-md px-3 py-2 text-sm font-medium ${connectionMode === 'open_api' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                >
+                  API Token
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConnectionMode('full_account')}
+                  className={`rounded-md px-3 py-2 text-sm font-medium ${connectionMode === 'full_account' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                >
+                  Full Datatruck Account
+                </button>
+              </div>
+            )}
+
+            {mfaChallenge ? (
+              <div className="block">
+                <label htmlFor="datatruck-mfa-code" className="text-xs font-medium text-gray-500">
+                  Datatruck MFA code
+                </label>
+                <input
+                  id="datatruck-mfa-code"
+                  type="text"
+                  autoComplete="one-time-code"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  placeholder="Enter your Datatruck MFA code"
+                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                />
+                <span className="mt-1 block text-xs text-gray-500">
+                  Challenge type: {mfaChallenge.challengeType}. The challenge is stored server-side for a short time and is bound to this workspace.
+                </span>
+              </div>
+            ) : (
+              <>
+            <div className="block">
+              <label htmlFor="datatruck-company-name" className="text-xs font-medium text-gray-500">
+                {connectionMode === 'full_account' ? 'Company or organization' : 'Datatruck company name'}
+              </label>
               <input
+                id="datatruck-company-name"
                 type="text"
                 autoComplete="off"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="sflogistics"
+                placeholder="Example: sflogistics"
                 className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
               />
               <span className="mt-1 block text-xs text-gray-500">
-                Your company name is the first part of your Datatruck URL. For example, if your URL is
-                sflogistics.datatruck.io, enter sflogistics.
+                {connectionMode === 'full_account'
+                  ? 'Optional if Datatruck can find your tenant from your username. Otherwise enter the first part of your Datatruck URL.'
+                  : 'This is the first part of your Datatruck URL. For example, if your Datatruck URL is https://sflogistics.datatruck.io, enter sflogistics.'}
               </span>
-            </label>
+            </div>
 
-            <label className="block">
-              <span className="text-xs font-medium text-gray-500">API token</span>
+            {connectionMode === 'open_api' ? (
+              <div className="block">
+              <label htmlFor="datatruck-api-token" className="text-xs font-medium text-gray-500">
+                API token
+              </label>
               <input
+                id="datatruck-api-token"
                 type="password"
                 autoComplete="off"
                 value={apiToken}
@@ -133,9 +255,78 @@ export default function DatatruckSetupModal({
                 className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 font-mono text-sm"
               />
               <span className="mt-1 block text-xs text-gray-500">
-                You can create this in Datatruck Settings → API Tokens.
+                Create or copy this from Datatruck → Settings → API Tokens.
               </span>
-            </label>
+            </div>
+            ) : (
+              <>
+                <div className="block">
+                  <label htmlFor="datatruck-username" className="text-xs font-medium text-gray-500">
+                    Email or username
+                  </label>
+                  <input
+                    id="datatruck-username"
+                    type="text"
+                    autoComplete="username"
+                    value={usernameOrEmail}
+                    onChange={(e) => setUsernameOrEmail(e.target.value)}
+                    placeholder="Datatruck email or username"
+                    className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="block">
+                  <label htmlFor="datatruck-password" className="text-xs font-medium text-gray-500">
+                    Password
+                  </label>
+                  <input
+                    id="datatruck-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Datatruck password"
+                    className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                  />
+                  <span className="mt-1 block text-xs text-gray-500">
+                    Your password is used only to authenticate with Datatruck and is not stored by Neuron.
+                  </span>
+                </div>
+              </>
+            )}
+            </>
+            )}
+
+            {connectionMode === 'open_api' && !mfaChallenge && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+              <button
+                type="button"
+                onClick={() => setIsHelpOpen((current) => !current)}
+                className="flex w-full items-center justify-between text-left text-sm font-medium text-gray-800"
+              >
+                <span>How to find your Datatruck API token</span>
+                <span className="text-xs text-gray-500">{isHelpOpen ? 'Hide' : 'Show'}</span>
+              </button>
+              {isHelpOpen && (
+                <div className="mt-3 space-y-3 text-sm text-gray-600">
+                  <ol className="list-decimal space-y-1 pl-5">
+                    <li>Open Datatruck.</li>
+                    <li>Go to Settings.</li>
+                    <li>Scroll to Developer.</li>
+                    <li>Click API Tokens.</li>
+                    <li>Click Create if you do not already have a token.</li>
+                    <li>Copy your Company name shown on the API Tokens page.</li>
+                    <li>Copy your API token.</li>
+                    <li>Paste both values here in Neuron.</li>
+                  </ol>
+                  <p>Your company name is shown in Datatruck on the API Tokens page. It is also the first part of your Datatruck URL.</p>
+                  <div className="rounded-md bg-white p-3 text-xs text-gray-600">
+                    <p>https://sflogistics.datatruck.io → company name is sflogistics</p>
+                  </div>
+                  <p className="text-xs font-medium text-gray-700">Neuron stores your token securely and never shows it again after connection.</p>
+                </div>
+              )}
+            </div>
+            )}
 
             <div className="flex items-start gap-2 rounded-lg border border-warm/60 bg-cream px-3 py-2.5">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
@@ -155,7 +346,7 @@ export default function DatatruckSetupModal({
                 className="inline-flex items-center gap-2 rounded-md bg-navy px-4 py-2 text-sm font-medium text-white hover:bg-navy-deep disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Connect Datatruck
+                {mfaChallenge ? 'Verify MFA' : 'Connect Datatruck'}
               </button>
             </div>
           </div>

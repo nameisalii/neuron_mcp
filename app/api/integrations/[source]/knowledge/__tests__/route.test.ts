@@ -147,6 +147,21 @@ it('rejects unsupported file types', async () => {
   expect(mockCreate).not.toHaveBeenCalled()
 })
 
+it('stores a Datatruck module assignment for file imports', async () => {
+  const res = await jsonRequest('datatruck', { title: 'Invoices import', description: 'CSV import', category: 'reference', moduleKey: 'invoices' })
+
+  expect(res.status).toBe(200)
+  expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ moduleKey: 'invoices' }))
+})
+
+it('rejects unknown module keys and non-Datatruck module assignments', async () => {
+  const badModule = await jsonRequest('datatruck', { title: 'T', description: 'D', moduleKey: 'nonsense' })
+  expect(badModule.status).toBe(400)
+
+  const wrongSource = await jsonRequest('slack', { title: 'T', description: 'D', moduleKey: 'invoices' })
+  expect(wrongSource.status).toBe(400)
+})
+
 it('never exposes local file paths in the response', async () => {
   mockCreate.mockResolvedValue({
     knowledgeItem: {

@@ -23,12 +23,14 @@ export async function GET(req: NextRequest) {
   const savedState = cookieStore.get('gmail_oauth_state')?.value
   const returnedState = req.nextUrl.searchParams.get('state')
   const code = req.nextUrl.searchParams.get('code')
+  const oauthError = req.nextUrl.searchParams.get('error')
   cookieStore.delete('gmail_oauth_state')
 
   if (!savedState) return gmailRedirect({ error: 'gmail_failed', reason: 'state_expired' })
   if (!returnedState || returnedState !== savedState) {
     return gmailRedirect({ error: 'gmail_failed', reason: 'invalid_state' })
   }
+  if (oauthError) return gmailRedirect({ error: 'gmail_failed', reason: oauthError === 'access_denied' ? 'access_denied' : 'oauth_error' })
   if (!code) return gmailRedirect({ error: 'gmail_failed', reason: 'missing_code' })
 
   const embeddedUserId = savedState.split('.')[1]

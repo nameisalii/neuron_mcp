@@ -3,15 +3,35 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireWorkspaceMember } from '@/lib/api/workspace-auth'
 import { decrypt } from '@/lib/crypto'
-import { buildDatatruckUrl, datatruckRequest } from '@/lib/datatruck/client'
+import {
+  datatruckEndpointPath,
+  datatruckRequest,
+  getDatatruckEnvConfig,
+  summarizeDatatruckShape,
+  type DatatruckConnection,
+  type DatatruckEndpointKey,
+} from '@/lib/datatruck/client'
 
-function summarizeValue(value: unknown): string {
-  if (Array.isArray(value)) return `array(${value.length})`
-  if (value && typeof value === 'object') return 'object'
-  return typeof value
+async function datatruckDebugConnection(workspaceId: string): Promise<DatatruckConnection | null> {
+  const connector = await prisma.apiConnector.findUnique({
+    where: { workspaceId_sourceKey: { workspaceId, sourceKey: 'datatruck' } },
+    select: { apiBaseUrl: true, encryptedCredential: true, metadata: true },
+  })
+
+  if (connector?.apiBaseUrl && connector.encryptedCredential) {
+    try {
+      return { apiBaseUrl: connector.apiBaseUrl, apiToken: decrypt(connector.encryptedCredential) }
+    } catch {
+      return null
+    }
+  }
+
+  const env = getDatatruckEnvConfig()
+  if (env.apiBaseUrl && env.apiToken) return { apiBaseUrl: env.apiBaseUrl, apiToken: env.apiToken }
+  return null
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   if (process.env.NODE_ENV !== 'development') {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
@@ -22,53 +42,26 @@ export async function GET() {
   const workspace = await requireWorkspaceMember(userId)
   if ('error' in workspace) return NextResponse.json({ error: workspace.error }, { status: workspace.status })
 
-  const connector = await prisma.apiConnector.findUnique({
-    where: { workspaceId_sourceKey: { workspaceId: workspace.workspaceId, sourceKey: 'datatruck' } },
-    select: { apiBaseUrl: true, encryptedCredential: true },
-  })
+  const url = new URL(req.url)
+  const endpointKey = url.searchParams.get('endpointKey') as DatatruckEndpointKey | null
+  const explicitPath = url.searchParams.get('path')
+  const path = explicitPath?.trim() || (endpointKey ? datatruckEndpointPath(endpointKey) : null) || '/orders/'
+  const connection = await datatruckDebugConnection(workspace.workspaceId)
+  if (!connection) return NextResponse.json({ error: 'Datatruck is not connected.' }, { status: 404 })
 
-  if (!connector?.apiBaseUrl || !connector.encryptedCredential) {
-    return NextResponse.json({ error: 'Datatruck is not connected.' }, { status: 404 })
-  }
-
-  let apiToken: string
+  const response = await datatruckRequest(connection, path)
+  let payload: unknown = null
   try {
-    apiToken = decrypt(connector.encryptedCredential)
+    payload = await response.json()
   } catch {
-    return NextResponse.json({ error: 'Datatruck connection is corrupted.' }, { status: 422 })
+    payload = null
   }
-
-  const response = await datatruckRequest(
-    { apiBaseUrl: connector.apiBaseUrl, apiToken },
-    buildDatatruckUrl({ apiBaseUrl: connector.apiBaseUrl }, '/orders/'),
-  )
-  if (!response.ok) {
-    return NextResponse.json({ error: `Datatruck responded with HTTP ${response.status}` }, { status: 502 })
-  }
-
-  const payload = (await response.json()) as unknown
-  const topLevelKeys = payload && typeof payload === 'object' && !Array.isArray(payload)
-    ? Object.keys(payload as Record<string, unknown>)
-    : []
-  const results = payload && typeof payload === 'object' && !Array.isArray(payload) && Array.isArray((payload as Record<string, unknown>).results)
-    ? (payload as Record<string, unknown>).results as unknown[]
-    : Array.isArray(payload)
-      ? payload
-      : []
-  const firstResult = results[0]
-  const firstResultKeys = firstResult && typeof firstResult === 'object' && !Array.isArray(firstResult)
-    ? Object.keys(firstResult as Record<string, unknown>).slice(0, 40)
-    : []
-  const nestedKeys = firstResult && typeof firstResult === 'object' && !Array.isArray(firstResult)
-    ? Object.fromEntries(Object.entries(firstResult as Record<string, unknown>).map(([key, value]) => [key, summarizeValue(value)]))
-    : {}
 
   return NextResponse.json({
-    success: true,
-    endpoint: 'loads',
-    topLevelKeys,
-    resultCount: results.length,
-    firstResultKeys,
-    nestedKeys,
-  })
+    success: response.ok,
+    endpointKey: endpointKey ?? null,
+    path,
+    shape: summarizeDatatruckShape(response.status, payload),
+    error: response.ok ? null : `Datatruck responded with HTTP ${response.status}`,
+  }, { status: response.ok ? 200 : 502 })
 }

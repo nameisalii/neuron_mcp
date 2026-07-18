@@ -3,11 +3,11 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { prisma } from '@/lib/db'
-import { getTeamsAuthorizeUrl, isTeamsOAuthConfigured } from '@/lib/teams/config'
+import { getTeamsAuthorizeUrl, isTeamsOAuthConfigured, type MicrosoftConnectionLevel } from '@/lib/teams/config'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 
-export async function GET() {
+export async function GET(req: Request) {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -32,15 +32,24 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const requestedLevel = new URL(req.url).searchParams.get('level')
+  const level: MicrosoftConnectionLevel = requestedLevel === 'teams' ? 'teams' : 'basic'
   const stateToken = randomBytes(24).toString('hex')
   const state = `${stateToken}.${userId}.${user.workspace.id}`
-  const authorizeUrl = getTeamsAuthorizeUrl(state)
+  const authorizeUrl = getTeamsAuthorizeUrl(state, level)
   if (!authorizeUrl) {
     return NextResponse.json({ error: 'Microsoft Teams is not configured' }, { status: 500 })
   }
 
   const cookieStore = await cookies()
   cookieStore.set('teams_oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 600,
+    path: '/',
+  })
+  cookieStore.set('teams_oauth_level', level, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',

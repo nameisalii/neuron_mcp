@@ -12,8 +12,6 @@ const REQUIRED_VARS = [
   'LINEAR_CLIENT_ID',
   'LINEAR_CLIENT_SECRET',
   'LINEAR_WEBHOOK_SECRET',
-  'GOOGLE_CLIENT_ID',
-  'GOOGLE_CLIENT_SECRET',
   'ENCRYPTION_KEY',
   'RESEND_API_KEY',
   'NEXT_PUBLIC_APP_URL',
@@ -27,7 +25,9 @@ const REQUIRED_VARS = [
 export function validateEnv(): void {
   if (process.env.NODE_ENV === 'test') return
 
-  const missing = REQUIRED_VARS.filter((key) => !process.env[key])
+  const missing: string[] = REQUIRED_VARS.filter((key) => !process.env[key])
+  if (!process.env.GMAIL_CLIENT_ID && !process.env.GOOGLE_CLIENT_ID) missing.push('GMAIL_CLIENT_ID or GOOGLE_CLIENT_ID')
+  if (!process.env.GMAIL_CLIENT_SECRET && !process.env.GOOGLE_CLIENT_SECRET) missing.push('GMAIL_CLIENT_SECRET or GOOGLE_CLIENT_SECRET')
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`)
   }

@@ -6,7 +6,7 @@ function source(overrides: Partial<QuerySource>): QuerySource {
     pageId: null,
     pageTitle: 'Source',
     notionPageId: null,
-    content: 'Context',
+    content: 'Meaningful workspace context with enough details to rank.',
     labels: ['fact'],
     source: 'linear',
     sourceUrl: null,

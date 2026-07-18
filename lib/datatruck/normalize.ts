@@ -7,6 +7,7 @@ export type DatatruckEntityKind =
   | 'truck'
   | 'trailer'
   | 'work_order'
+  | 'generic'
 
 export interface DatatruckNormalizedDocument {
   externalId: string
@@ -17,7 +18,7 @@ export interface DatatruckNormalizedDocument {
   storageKey: string | null
   mimeType: string | null
   fileSize: number | null
-  extractionStatus: 'pending' | 'unsupported' | 'extracted'
+  extractionStatus: 'pending' | 'unsupported' | 'extracted' | 'remote_link'
   externalLoadId: string | null
   sourceMessageId: string | null
   sourceExternalId: string
@@ -105,6 +106,18 @@ function nestedText(value: unknown): string | null {
   return null
 }
 
+function nestedRecord(value: unknown): DatatruckRecord | null {
+  return isPlainObject(value) ? value : null
+}
+
+function firstNestedText(record: DatatruckRecord | null | undefined, keys: string[]): string | null {
+  return record ? firstText(record, keys) : null
+}
+
+function firstNestedNumber(record: DatatruckRecord | null | undefined, keys: string[]): number | null {
+  return record ? firstNumber(record, keys) : null
+}
+
 function nestedArray(record: DatatruckRecord, keys: string[]): unknown[] {
   for (const key of keys) {
     const value = record[key]
@@ -113,9 +126,14 @@ function nestedArray(record: DatatruckRecord, keys: string[]): unknown[] {
   return []
 }
 
+function nestedObjectArray(record: DatatruckRecord, keys: string[]): DatatruckRecord[] {
+  return nestedArray(record, keys).filter((value): value is DatatruckRecord => isPlainObject(value))
+}
+
 function titleFromKind(kind: DatatruckEntityKind): string {
   if (kind === 'dispatcher_board') return 'Dispatcher board'
   if (kind === 'work_order') return 'Work order'
+  if (kind === 'generic') return 'Record'
   return kind.charAt(0).toUpperCase() + kind.slice(1)
 }
 
@@ -139,23 +157,94 @@ function addIfNumber(lines: string[], label: string, value: number | null | unde
   lines.push(`${label}: ${value}`)
 }
 
+function addIfBoolean(lines: string[], label: string, value: boolean | null | undefined) {
+  if (value === null || value === undefined) return
+  lines.push(`${label}: ${value ? 'yes' : 'no'}`)
+}
+
 function dateText(value: Date | null): string | null {
   return value ? value.toISOString() : null
+}
+
+function arrayText(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => nestedText(item)).filter((item): item is string => Boolean(item))
+}
+
+function fileNameFromUrl(url: string | null): string | null {
+  if (!url) return null
+  try {
+    const parsed = new URL(url)
+    const segment = parsed.pathname.split('/').filter(Boolean).at(-1)
+    return segment ? decodeURIComponent(segment).replace(/[^\w.\- ]+/g, '_') : null
+  } catch {
+    const segment = url.split('?')[0]?.split('/').filter(Boolean).at(-1)
+    return segment ? segment.replace(/[^\w.\- ]+/g, '_') : null
+  }
+}
+
+function shortStableHash(value: string): string {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0
+  }
+  return Math.abs(hash).toString(36)
+}
+
+function stopText(stop: DatatruckRecord, index: number): string {
+  const stopType = firstText(stop, ['type', 'stop_type', 'kind']) ?? `Stop ${index + 1}`
+  const locationRecord = nestedRecord(stop.location)
+  const company = firstText(stop, ['company', 'company_name']) ?? firstNestedText(locationRecord, ['company', 'company_name'])
+  const place = firstText(stop, ['place_name', 'place']) ?? firstNestedText(locationRecord, ['place_name', 'place', 'name'])
+  const address = firstText(stop, ['address', 'address1', 'street']) ?? firstNestedText(locationRecord, ['address', 'address1', 'street'])
+  const city = firstText(stop, ['city']) ?? firstNestedText(locationRecord, ['city'])
+  const state = firstText(stop, ['state']) ?? firstNestedText(locationRecord, ['state'])
+  const zip = firstText(stop, ['zip', 'zipcode', 'postal_code']) ?? firstNestedText(locationRecord, ['zip', 'zipcode', 'postal_code'])
+  const contact = firstText(stop, ['contact_name', 'contact', 'contact_full_name'])
+  const referenceId = firstText(stop, ['reference_id', 'reference', 'ref'])
+  const pod = firstText(stop, ['proof_of_delivery', 'pod'])
+  const note = firstText(stop, ['note', 'notes', 'comment'])
+  const latitude = firstText(stop, ['latitude', 'lat']) ?? firstNestedText(locationRecord, ['latitude', 'lat'])
+  const longitude = firstText(stop, ['longitude', 'lng', 'lon']) ?? firstNestedText(locationRecord, ['longitude', 'lng', 'lon'])
+  const appointmentStart = firstText(stop, [
+    'appointment_start',
+    'appointment_from',
+    'window_start',
+    'pickup_window_start',
+    'arrival_start',
+    'eta_start',
+  ])
+  const appointmentEnd = firstText(stop, [
+    'appointment_end',
+    'appointment_to',
+    'window_end',
+    'pickup_window_end',
+    'arrival_end',
+    'eta_end',
+  ])
+  const locationParts = [
+    company,
+    place && place !== company ? place : null,
+    address,
+    [city, state, zip].filter(Boolean).join(', '),
+  ].filter(Boolean)
+  const detailParts = [
+    locationParts.length ? locationParts.join(' · ') : null,
+    contact ? `Contact ${contact}` : null,
+    referenceId ? `Reference ${referenceId}` : null,
+    appointmentStart || appointmentEnd ? `Appointment ${[appointmentStart, appointmentEnd].filter(Boolean).join(' - ')}` : null,
+    pod ? `POD ${pod}` : null,
+    latitude && longitude ? `Coordinates ${latitude}, ${longitude}` : null,
+    note ? `Note ${note}` : null,
+  ].filter(Boolean)
+  return `${stopType}${detailParts.length ? `: ${detailParts.join(' · ')}` : ''}`
 }
 
 function summarizeStops(record: DatatruckRecord): string[] {
   const stops = nestedArray(record, ['stops', 'stop_list', 'route_stops', 'load_stops'])
   if (stops.length === 0) return []
 
-  return stops.slice(0, 10).map((stop, index) => {
-    if (!isPlainObject(stop)) return `Stop ${index + 1}`
-    const stopType = firstText(stop, ['type', 'stop_type', 'kind']) ?? `Stop ${index + 1}`
-    const location = nestedText(stop.location) ?? firstText(stop, ['location', 'address', 'city', 'state'])
-    const windowStart = firstText(stop, ['window_start', 'pickup_window_start', 'arrival_start', 'eta_start'])
-    const windowEnd = firstText(stop, ['window_end', 'pickup_window_end', 'arrival_end', 'eta_end'])
-    const parts = [location, windowStart && windowEnd ? `${windowStart} - ${windowEnd}` : windowStart ?? windowEnd].filter(Boolean)
-    return `${stopType}${parts.length ? `: ${parts.join(' · ')}` : ''}`
-  })
+  return stops.map((stop, index) => (isPlainObject(stop) ? stopText(stop, index) : `Stop ${index + 1}`))
 }
 
 function summarizeDocuments(
@@ -174,9 +263,9 @@ function summarizeDocuments(
   const documents: DatatruckNormalizedDocument[] = []
   for (const [index, raw] of rawDocuments.entries()) {
     const document = isPlainObject(raw) ? raw : { value: raw }
-    const fileName = firstText(document, ['file_name', 'filename', 'name', 'title']) ?? `Document ${index + 1}`
-    const documentType = firstText(document, ['document_type', 'type', 'kind', 'doc_type']) ?? 'OTHER'
-    const sourceUrl = firstText(document, ['document_url', 'file_url', 'url', 'source_url'])
+    const documentType = firstText(document, ['file_type', 'document_type', 'type', 'kind', 'doc_type']) ?? 'OTHER'
+    const sourceUrl = firstText(document, ['file_link', 'document_url', 'file_url', 'url', 'source_url'])
+    const fileName = firstText(document, ['file_name', 'filename', 'name', 'title']) ?? fileNameFromUrl(sourceUrl) ?? `${documentType} ${index + 1}`
     const storageUrl = firstText(document, ['storage_url', 'download_url'])
     const storageKey = firstText(document, ['storage_key', 'key'])
     const mimeType = firstText(document, ['mime_type', 'content_type'])
@@ -184,9 +273,18 @@ function summarizeDocuments(
     const externalLoadId = firstText(document, ['load_id', 'external_load_id', 'order_id', 'order_number', 'load_number']) ?? fallbackLoadId
     const sourceMessageId = firstText(document, ['message_id', 'source_message_id'])
     const extractionStatus: DatatruckNormalizedDocument['extractionStatus'] = storageUrl || sourceUrl
-      ? 'pending'
+      ? 'remote_link'
       : 'unsupported'
-    const externalId = firstText(document, ['id', 'uuid']) ?? `${documentType}:${index + 1}:${fileName}`
+    const stableBasis = [
+      fallbackLoadId,
+      firstText(document, ['id', 'uuid']),
+      documentType,
+      sourceUrl,
+      fileName,
+      index + 1,
+    ].filter(Boolean).join(':')
+    const externalId = firstText(document, ['sourceExternalId'])
+      ?? `datatruck:load:${fallbackLoadId ?? 'unknown'}:document:${shortStableHash(stableBasis)}`
     documents.push({
       externalId,
       documentType,
@@ -220,23 +318,80 @@ function summarizeDocuments(
 
 function commonLoadMetadata(record: DatatruckRecord, kind: DatatruckEntityKind) {
   const loadId = firstText(record, ['id', 'load_id', 'loadId', 'order_id', 'orderId', 'reference_number', 'referenceNumber'])
-  const loadNumber = firstText(record, ['load_number', 'loadNumber', 'order_number', 'orderNumber'])
+  const loadNumber = firstText(record, ['load_number', 'loadNumber', 'order_number', 'orderNumber', 'load_id'])
+  const shipmentId = firstText(record, ['shipment_id', 'shipmentId'])
   const status = firstText(record, ['status', 'load_status', 'dispatch_status'])
-  const customer = firstText(record, ['customer', 'customer_name', 'shipper', 'broker', 'carrier'])
-  const driver = nestedText(record.driver) ?? nestedText(record.assigned_driver) ?? firstText(record, ['driver', 'driver_name'])
-  const truck = nestedText(record.truck) ?? nestedText(record.assigned_truck) ?? firstText(record, ['truck', 'truck_number'])
+  const trip = nestedRecord(record.trip)
+  const etaDetail = nestedRecord(record.eta_detail)
+  const assignedDriverTruck = nestedRecord(record.assigned_driver_n_truck)
+  const assignedCarrier = nestedRecord(record.assigned_carrier)
+  const settlement = nestedRecord(trip?.settlement)
+  const customer = firstText(record, ['customer__company_name', 'customer', 'customer_name', 'shipper', 'broker'])
+  const carrier = firstText(record, ['mc_number__company_name'])
+    ?? nestedText(assignedCarrier)
+    ?? firstNestedText(trip, ['carrier_name', 'carrier__company_name', 'carrier'])
+    ?? firstText(record, ['carrier'])
+  const driver = firstNestedText(trip, ['driver__full_name', 'driver_full_name', 'driver_name'])
+    ?? nestedText(record.driver)
+    ?? nestedText(record.assigned_driver)
+    ?? firstNestedText(assignedDriverTruck, ['driver__full_name', 'driver_full_name', 'driver_name'])
+    ?? firstText(record, ['driver', 'driver_name'])
+  const teamDriver = firstNestedText(trip, ['team_driver__full_name', 'team_driver_full_name', 'team_driver_name'])
+    ?? firstText(record, ['team_driver__full_name', 'team_driver_full_name', 'team_driver'])
+  const truck = firstNestedText(trip, ['truck__unit_number', 'truck_unit_number', 'truck_number'])
+    ?? nestedText(record.truck)
+    ?? nestedText(record.assigned_truck)
+    ?? firstNestedText(assignedDriverTruck, ['truck__unit_number', 'truck_unit_number', 'truck_number'])
+    ?? firstText(record, ['truck', 'truck_number'])
   const trailer = nestedText(record.trailer) ?? nestedText(record.assigned_trailer) ?? firstText(record, ['trailer', 'trailer_number'])
-  const origin = firstText(record, ['origin', 'pickup', 'pickup_location', 'pickup_address', 'origin_location'])
-  const destination = firstText(record, ['destination', 'delivery', 'delivery_location', 'delivery_address', 'destination_location'])
-  const pickupAt = firstText(record, ['pickup_at', 'pickup_time', 'pickup_datetime', 'pickupDateTime'])
-  const deliveryAt = firstText(record, ['delivery_at', 'delivery_time', 'delivery_datetime', 'deliveryDateTime'])
-  const eta = firstText(record, ['eta', 'estimated_arrival', 'estimated_arrival_time', 'estimated_delivery'])
-  const rate = firstText(record, ['rate', 'gross_pay', 'load_pay', 'total_pay', 'price'])
-  const miles = firstNumber(record, ['miles', 'distance'])
-  const tags = nestedArray(record, ['tags', 'labels']).map((tag) => asText(tag)).filter((tag): tag is string => Boolean(tag))
+  const origin = firstNestedText(trip, ['pickup_location'])
+    ?? firstText(record, ['origin', 'pickup', 'pickup_location', 'pickup_address', 'origin_location'])
+  const destination = firstNestedText(trip, ['delivery_location'])
+    ?? firstText(record, ['destination', 'delivery', 'delivery_location', 'delivery_address', 'destination_location'])
+  const pickupAt = firstText(record, ['pickup_appointment_time', 'pickup_at', 'pickup_time', 'pickup_datetime', 'pickupDateTime'])
+  const deliveryAt = firstText(record, ['delivery_appointment_time', 'delivery_at', 'delivery_time', 'delivery_datetime', 'deliveryDateTime'])
+  const pickupTime = firstText(record, ['pickup_time'])
+  const deliveryTime = firstText(record, ['delivery_time'])
+  const eta = firstNestedText(etaDetail, ['eta_datetime'])
+    ?? firstText(record, ['eta', 'estimated_arrival', 'estimated_arrival_time', 'estimated_delivery'])
+  const etaOnTime = typeof etaDetail?.on_time === 'boolean' ? etaDetail.on_time : null
+  const loadPay = firstNumber(record, ['load_pay', 'gross_pay', 'rate', 'price'])
+  const totalOtherPay = firstNumber(record, ['total_other_pay'])
+  const totalPay = firstNumber(record, ['total_pay'])
+  const perMileRevenue = firstNumber(record, ['per_mile_revenue'])
+  const miles = firstNumber(record, ['total_miles', 'estimated_mile', 'miles', 'distance'])
+  const estimatedTime = firstText(record, ['estimated_time'])
+  const tags = nestedArray(record, ['tags', 'labels']).map((tag) => nestedText(tag)).filter((tag): tag is string => Boolean(tag))
   const notes = firstText(record, ['notes', 'note', 'comments', 'dispatcher_notes', 'dispatch_notes'])
-  const dispatcher = firstText(record, ['dispatcher', 'dispatcher_name', 'assigned_dispatcher'])
-  const createdAt = dateText(firstDate(record, ['created_at', 'createdAt', 'created_date']))
+  const dispatcher = firstText(record, ['dispatcher__full_name', 'dispatcher', 'dispatcher_name', 'assigned_dispatcher'])
+  const createdBy = firstText(record, ['created_by__full_name'])
+  const office = firstText(record, ['office__office_name'])
+  const transportationMode = firstText(record, ['transportation_mode'])
+  const equipmentType = nestedText(record.equipment_type) ?? firstText(record, ['equipment_type'])
+  const childEquipment = arrayText(record.equipment_type_child)
+  const additionalEquipment = arrayText(record.additional_equipments)
+  const driverRequirements = arrayText(record.driver_requirements)
+  const freightRequirements = arrayText(record.freight_requirements)
+  const minTemperature = firstText(record, ['min_temperature', 'temperature_min', 'temperature_minimum'])
+  const maxTemperature = firstText(record, ['max_temperature', 'temperature_max', 'temperature_maximum'])
+  const isFlagged = typeof record.is_flagged === 'boolean' ? record.is_flagged : null
+  const flaggingReason = firstText(record, ['flagging_reason'])
+  const tripId = firstNestedText(trip, ['trip_id', 'id'])
+  const tripStatus = firstNestedText(trip, ['status'])
+  const tripMiles = firstNestedNumber(trip, ['mile'])
+  const tripEmptyMiles = firstNestedNumber(trip, ['empty_mile'])
+  const tripTotalLoadPay = firstNestedNumber(trip, ['total_load_pay'])
+  const settlementStatus = firstNestedText(settlement, ['status', 'settlement_status'])
+  const settlementNumber = firstNestedText(settlement, ['settlement_number', 'number'])
+  const settlementSent = typeof settlement?.is_sent === 'boolean' ? settlement.is_sent : null
+  const batchOrders = nestedObjectArray(record, ['batch_orders'])
+  const firstBatchOrder = batchOrders[0]
+  const firstBatch = nestedRecord(firstBatchOrder?.batch)
+  const invoiceNumber = firstNestedText(firstBatchOrder, ['invoice_number'])
+  const invoiceSent = typeof firstBatchOrder?.is_sent === 'boolean' ? firstBatchOrder.is_sent : null
+  const batchNumber = firstNestedText(firstBatch, ['batch_number'])
+  const batchStatus = firstNestedText(firstBatch, ['status'])
+  const createdAt = dateText(firstDate(record, ['created_datetime', 'created_at', 'createdAt', 'created_date']))
   const updatedAt = dateText(firstDate(record, ['updated_at', 'updatedAt', 'modified_at']))
   const docs = summarizeDocuments(record, loadId)
   const stops = summarizeStops(record)
@@ -244,70 +399,182 @@ function commonLoadMetadata(record: DatatruckRecord, kind: DatatruckEntityKind) 
     ['recordType', kind],
     ['loadId', loadId],
     ['loadNumber', loadNumber],
+    ['shipmentId', shipmentId],
     ['status', status],
-    ['customer', customer],
+    ['customerCompanyName', customer],
+    ['carrierCompanyName', carrier],
     ['driver', driver],
+    ['teamDriver', teamDriver],
     ['truck', truck],
     ['trailer', trailer],
     ['origin', origin],
     ['destination', destination],
     ['pickupAt', pickupAt],
     ['deliveryAt', deliveryAt],
+    ['pickupTime', pickupTime],
+    ['deliveryTime', deliveryTime],
     ['eta', eta],
-    ['rate', rate],
+    ['etaOnTime', etaOnTime],
+    ['loadPay', loadPay],
+    ['totalOtherPay', totalOtherPay],
+    ['totalPay', totalPay],
+    ['perMileRevenue', perMileRevenue],
     ['miles', miles],
+    ['estimatedTime', estimatedTime],
     ['tags', tags],
     ['notes', notes],
     ['dispatcher', dispatcher],
+    ['createdBy', createdBy],
+    ['office', office],
+    ['transportationMode', transportationMode],
+    ['equipmentType', equipmentType],
+    ['equipmentTypeChild', childEquipment],
+    ['additionalEquipments', additionalEquipment],
+    ['driverRequirements', driverRequirements],
+    ['freightRequirements', freightRequirements],
+    ['minTemperature', minTemperature],
+    ['maxTemperature', maxTemperature],
+    ['isFlagged', isFlagged],
+    ['flaggingReason', flaggingReason],
+    ['tripId', tripId],
+    ['tripStatus', tripStatus],
+    ['tripMiles', tripMiles],
+    ['tripEmptyMiles', tripEmptyMiles],
+    ['tripTotalLoadPay', tripTotalLoadPay],
+    ['settlementStatus', settlementStatus],
+    ['settlementNumber', settlementNumber],
+    ['settlementSent', settlementSent],
+    ['invoiceNumber', invoiceNumber],
+    ['invoiceSent', invoiceSent],
+    ['batchNumber', batchNumber],
+    ['batchStatus', batchStatus],
     ['createdAt', createdAt],
     ['updatedAt', updatedAt],
     ['documentsCount', docs.documents.length],
     ['stopsCount', stops.length],
   ])
 
-  return { kind, loadId, loadNumber, status, customer, driver, truck, trailer, origin, destination, pickupAt, deliveryAt, eta, rate, miles, tags, notes, dispatcher, createdAt, updatedAt, docs, stops, summaryMetadata }
+  return {
+    kind,
+    loadId,
+    loadNumber,
+    shipmentId,
+    status,
+    customer,
+    carrier,
+    driver,
+    teamDriver,
+    truck,
+    trailer,
+    origin,
+    destination,
+    pickupAt,
+    deliveryAt,
+    pickupTime,
+    deliveryTime,
+    eta,
+    etaOnTime,
+    loadPay,
+    totalOtherPay,
+    totalPay,
+    perMileRevenue,
+    miles,
+    estimatedTime,
+    tags,
+    notes,
+    dispatcher,
+    createdBy,
+    office,
+    transportationMode,
+    equipmentType,
+    childEquipment,
+    additionalEquipment,
+    driverRequirements,
+    freightRequirements,
+    minTemperature,
+    maxTemperature,
+    isFlagged,
+    flaggingReason,
+    tripId,
+    tripStatus,
+    tripMiles,
+    tripEmptyMiles,
+    tripTotalLoadPay,
+    settlementStatus,
+    settlementNumber,
+    settlementSent,
+    invoiceNumber,
+    invoiceSent,
+    batchNumber,
+    batchStatus,
+    createdAt,
+    updatedAt,
+    docs,
+    stops,
+    summaryMetadata,
+  }
 }
 
 function buildSummaryLines({
   kind,
   loadId,
   loadNumber,
+  shipmentId,
   status,
   customer,
+  carrier,
   driver,
+  teamDriver,
   truck,
   trailer,
   origin,
   destination,
   pickupAt,
   deliveryAt,
+  pickupTime,
+  deliveryTime,
   eta,
-  rate,
+  etaOnTime,
+  loadPay,
+  totalPay,
+  perMileRevenue,
   miles,
   tags,
-  notes,
   dispatcher,
+  transportationMode,
+  isFlagged,
+  flaggingReason,
   createdAt,
   updatedAt,
 }: ReturnType<typeof commonLoadMetadata>) {
   const lines = [`Datatruck ${titleFromKind(kind)} summary`]
   addIfValue(lines, 'ID', loadId)
   addIfValue(lines, 'Load', loadNumber)
+  addIfValue(lines, 'Shipment ID', shipmentId)
   addIfValue(lines, 'Status', status)
+  addIfValue(lines, 'Transportation mode', transportationMode)
   addIfValue(lines, 'Customer', customer)
+  addIfValue(lines, 'Dispatcher', dispatcher)
   addIfValue(lines, 'Driver', driver)
+  addIfValue(lines, 'Team driver', teamDriver)
   addIfValue(lines, 'Truck', truck)
   addIfValue(lines, 'Trailer', trailer)
+  addIfValue(lines, 'Carrier', carrier)
   addIfValue(lines, 'Origin', origin)
   addIfValue(lines, 'Destination', destination)
-  addIfValue(lines, 'Pickup', pickupAt)
-  addIfValue(lines, 'Delivery', deliveryAt)
+  addIfValue(lines, 'Pickup appointment', pickupAt)
+  addIfValue(lines, 'Delivery appointment', deliveryAt)
+  addIfValue(lines, 'Pickup time', pickupTime)
+  addIfValue(lines, 'Delivery time', deliveryTime)
   addIfValue(lines, 'ETA', eta)
-  addIfValue(lines, 'Rate', rate)
-  addIfNumber(lines, 'Miles', miles)
+  addIfBoolean(lines, 'ETA on time', etaOnTime)
+  addIfNumber(lines, 'Total miles', miles)
+  addIfNumber(lines, 'Load pay', loadPay)
+  addIfNumber(lines, 'Total pay', totalPay)
+  addIfNumber(lines, 'RPM', perMileRevenue)
+  addIfBoolean(lines, 'Flagged', isFlagged)
+  addIfValue(lines, 'Flagging reason', flaggingReason)
   if (tags.length > 0) addIfValue(lines, 'Tags', tags.join(', '))
-  addIfValue(lines, 'Notes', notes)
-  addIfValue(lines, 'Dispatcher', dispatcher)
   addIfValue(lines, 'Created', createdAt)
   addIfValue(lines, 'Updated', updatedAt)
   return lines.join('\n')
@@ -315,6 +582,35 @@ function buildSummaryLines({
 
 function recordId(record: DatatruckRecord): string {
   return firstText(record, ['id', 'uuid', 'load_id', 'loadId', 'order_id', 'orderId', 'work_order_id', 'workOrderId']) ?? 'unknown'
+}
+
+function humanizeEndpointKey(endpointKey: string): string {
+  return endpointKey.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase()
+}
+
+function genericExternalIdPrefix(endpointKey: string): string {
+  if (endpointKey === 'invoices') return 'invoice-batch'
+  if (endpointKey === 'payroll') return 'driver-settlement'
+  if (endpointKey === 'fuel') return 'fuel'
+  if (endpointKey === 'toll') return 'toll'
+  if (endpointKey === 'ltlTrips') return 'ltl'
+  return endpointKey
+}
+
+function genericModuleName(endpointKey: string): string {
+  if (endpointKey === 'invoices') return 'invoice batch'
+  if (endpointKey === 'payroll') return 'driver settlement'
+  if (endpointKey === 'ltlTrips') return 'LTL trip'
+  return humanizeEndpointKey(endpointKey)
+}
+
+function primitiveMetadata(record: DatatruckRecord, keys: string[]): Record<string, unknown> {
+  const metadata: Record<string, unknown> = {}
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') metadata[key] = value
+  }
+  return metadata
 }
 
 function loadExternalId(record: DatatruckRecord): string {
@@ -325,19 +621,23 @@ export function normalizeDatatruckLoad(record: DatatruckRecord): DatatruckNormal
   const meta = commonLoadMetadata(record, 'load')
   const summary = buildSummaryLines(meta)
   const loadId = meta.loadId ?? loadExternalId(record)
+  const sourceUrl = firstText(record, ['url', 'source_url', 'sourceUrl', 'load_url']) ?? null
+  const sourceCreatedAt = firstDate(record, ['created_datetime', 'created_at', 'createdAt', 'created_date'])
+  const owner = meta.dispatcher ?? meta.customer ?? null
+  const baseMetadata = Object.entries(meta.summaryMetadata)
   const items: DatatruckNormalizedItem[] = [{
     externalId: `datatruck:load:${loadId}:summary`,
     kind: 'load',
     title: `Load ${meta.loadNumber ?? loadId}`,
     content: summary,
     sourceMetadata: omitEmptyFields([
-      ...Object.entries(meta.summaryMetadata),
+      ...baseMetadata,
       ['loadNumber', meta.loadNumber],
       ['summaryType', 'load'],
     ]),
-    sourceUrl: firstText(record, ['url', 'source_url', 'sourceUrl', 'load_url']) ?? null,
-    owner: meta.dispatcher ?? meta.customer ?? null,
-    sourceCreatedAt: firstDate(record, ['created_at', 'createdAt', 'created_date']),
+    sourceUrl,
+    owner,
+    sourceCreatedAt,
     relatedLoadId: loadId,
     documents: [],
   }]
@@ -351,13 +651,104 @@ export function normalizeDatatruckLoad(record: DatatruckRecord): DatatruckNormal
         ...meta.stops.map((stop, index) => `${index + 1}. ${stop}`),
       ].join('\n'),
       sourceMetadata: omitEmptyFields([
-        ...Object.entries(meta.summaryMetadata),
+        ...baseMetadata,
         ['summaryType', 'stops'],
         ['stops', meta.stops],
       ]),
-      sourceUrl: firstText(record, ['url', 'source_url', 'sourceUrl', 'load_url']) ?? null,
-      owner: meta.dispatcher ?? meta.customer ?? null,
-      sourceCreatedAt: firstDate(record, ['created_at', 'createdAt', 'created_date']),
+      sourceUrl,
+      owner,
+      sourceCreatedAt,
+      relatedLoadId: loadId,
+      documents: [],
+    })
+  }
+  const financialLines = [
+    `Datatruck load financials for ${meta.loadNumber ?? loadId}`,
+    'Invoice information associated with this load.',
+  ]
+  addIfNumber(financialLines, 'Load pay', meta.loadPay)
+  addIfNumber(financialLines, 'Other pay', meta.totalOtherPay)
+  addIfNumber(financialLines, 'Total pay', meta.totalPay)
+  addIfNumber(financialLines, 'Per-mile revenue', meta.perMileRevenue)
+  addIfNumber(financialLines, 'Trip total load pay', meta.tripTotalLoadPay)
+  addIfValue(financialLines, 'Settlement status', meta.settlementStatus)
+  addIfValue(financialLines, 'Settlement number', meta.settlementNumber)
+  addIfBoolean(financialLines, 'Settlement sent', meta.settlementSent)
+  addIfValue(financialLines, 'Invoice number', meta.invoiceNumber)
+  addIfBoolean(financialLines, 'Invoice sent', meta.invoiceSent)
+  addIfValue(financialLines, 'Batch number', meta.batchNumber)
+  addIfValue(financialLines, 'Batch status', meta.batchStatus)
+  if (financialLines.length > 2) {
+    items.push({
+      externalId: `datatruck:load:${loadId}:financials`,
+      kind: 'load',
+      title: `Load ${meta.loadNumber ?? loadId} financials`,
+      content: financialLines.join('\n'),
+      sourceMetadata: omitEmptyFields([
+        ...baseMetadata,
+        ['summaryType', 'financials'],
+      ]),
+      sourceUrl,
+      owner,
+      sourceCreatedAt,
+      relatedLoadId: loadId,
+      documents: [],
+    })
+  }
+  const assignmentLines = [
+    `Datatruck load assignment for ${meta.loadNumber ?? loadId}`,
+    meta.dispatcher ? `Dispatcher: ${meta.dispatcher}` : null,
+    meta.driver ? `Assigned driver: ${meta.driver}` : null,
+    meta.teamDriver ? `Team driver: ${meta.teamDriver}` : null,
+    meta.truck ? `Truck: ${meta.truck}` : null,
+    meta.trailer ? `Trailer: ${meta.trailer}` : null,
+    meta.carrier ? `Carrier: ${meta.carrier}` : null,
+    meta.tripId ? `Trip ID: ${meta.tripId}` : null,
+    meta.tripStatus ? `Trip status: ${meta.tripStatus}` : null,
+    meta.tripMiles !== null ? `Trip miles: ${meta.tripMiles}` : null,
+    meta.tripEmptyMiles !== null ? `Trip empty miles: ${meta.tripEmptyMiles}` : null,
+  ].filter(Boolean)
+  if (assignmentLines.length > 1) {
+    items.push({
+      externalId: `datatruck:load:${loadId}:assignment`,
+      kind: 'load',
+      title: `Load ${meta.loadNumber ?? loadId} assignment`,
+      content: assignmentLines.join('\n'),
+      sourceMetadata: omitEmptyFields([
+        ...baseMetadata,
+        ['summaryType', 'assignment'],
+      ]),
+      sourceUrl,
+      owner,
+      sourceCreatedAt,
+      relatedLoadId: loadId,
+      documents: [],
+    })
+  }
+  const requirementLines = [
+    `Datatruck load requirements for ${meta.loadNumber ?? loadId}`,
+    meta.equipmentType ? `Equipment type: ${meta.equipmentType}` : null,
+    meta.childEquipment.length > 0 ? `Child equipment: ${meta.childEquipment.join(', ')}` : null,
+    meta.additionalEquipment.length > 0 ? `Additional equipment: ${meta.additionalEquipment.join(', ')}` : null,
+    meta.driverRequirements.length > 0 ? `Driver requirements: ${meta.driverRequirements.join(', ')}` : null,
+    meta.freightRequirements.length > 0 ? `Freight requirements: ${meta.freightRequirements.join(', ')}` : null,
+    meta.minTemperature ? `Minimum temperature: ${meta.minTemperature}` : null,
+    meta.maxTemperature ? `Maximum temperature: ${meta.maxTemperature}` : null,
+    meta.estimatedTime ? `Estimated time: ${meta.estimatedTime}` : null,
+  ].filter(Boolean)
+  if (requirementLines.length > 1) {
+    items.push({
+      externalId: `datatruck:load:${loadId}:requirements`,
+      kind: 'load',
+      title: `Load ${meta.loadNumber ?? loadId} requirements`,
+      content: requirementLines.join('\n'),
+      sourceMetadata: omitEmptyFields([
+        ...baseMetadata,
+        ['summaryType', 'requirements'],
+      ]),
+      sourceUrl,
+      owner,
+      sourceCreatedAt,
       relatedLoadId: loadId,
       documents: [],
     })
@@ -372,8 +763,9 @@ export function normalizeDatatruckLoad(record: DatatruckRecord): DatatruckNormal
         meta.docs.content,
       ].join('\n'),
       sourceMetadata: omitEmptyFields([
-        ...Object.entries(meta.summaryMetadata),
+        ...baseMetadata,
         ['summaryType', 'documents'],
+        ['hasAttachment', true],
         ['documents', meta.docs.documents.map((document) => omitEmptyFields([
           ['externalId', document.externalId],
           ['documentType', document.documentType],
@@ -388,14 +780,14 @@ export function normalizeDatatruckLoad(record: DatatruckRecord): DatatruckNormal
           ['extractionStatus', document.extractionStatus],
         ]))],
       ]),
-      sourceUrl: firstText(record, ['url', 'source_url', 'sourceUrl', 'load_url']) ?? null,
-      owner: meta.dispatcher ?? meta.customer ?? null,
-      sourceCreatedAt: firstDate(record, ['created_at', 'createdAt', 'created_date']),
+      sourceUrl,
+      owner,
+      sourceCreatedAt,
       relatedLoadId: loadId,
       documents: meta.docs.documents,
     })
   }
-  if (meta.notes || meta.tags.length > 0 || meta.eta) {
+  if (meta.notes || meta.tags.length > 0 || meta.eta || meta.flaggingReason || meta.isFlagged) {
     items.push({
       externalId: `datatruck:load:${loadId}:notes`,
       kind: 'load',
@@ -405,39 +797,17 @@ export function normalizeDatatruckLoad(record: DatatruckRecord): DatatruckNormal
         meta.notes ? `Notes: ${meta.notes}` : null,
         meta.tags.length > 0 ? `Tags: ${meta.tags.join(', ')}` : null,
         meta.eta ? `ETA: ${meta.eta}` : null,
+        meta.etaOnTime !== null ? `ETA on time: ${meta.etaOnTime ? 'yes' : 'no'}` : null,
+        meta.isFlagged !== null ? `Flagged: ${meta.isFlagged ? 'yes' : 'no'}` : null,
+        meta.flaggingReason ? `Flagging reason: ${meta.flaggingReason}` : null,
       ].filter(Boolean).join('\n'),
       sourceMetadata: omitEmptyFields([
-        ...Object.entries(meta.summaryMetadata),
+        ...baseMetadata,
         ['summaryType', 'notes'],
       ]),
-      sourceUrl: firstText(record, ['url', 'source_url', 'sourceUrl', 'load_url']) ?? null,
-      owner: meta.dispatcher ?? meta.customer ?? null,
-      sourceCreatedAt: firstDate(record, ['created_at', 'createdAt', 'created_date']),
-      relatedLoadId: loadId,
-      documents: [],
-    })
-  }
-  if (meta.status || meta.driver || meta.truck || meta.trailer || meta.dispatcher || meta.eta) {
-    items.push({
-      externalId: `datatruck:load:${loadId}:dispatch`,
-      kind: 'load',
-      title: `Load ${meta.loadNumber ?? loadId} dispatch`,
-      content: [
-        `Datatruck load dispatch summary for ${meta.loadNumber ?? loadId}`,
-        meta.status ? `Status: ${meta.status}` : null,
-        meta.driver ? `Driver: ${meta.driver}` : null,
-        meta.truck ? `Truck: ${meta.truck}` : null,
-        meta.trailer ? `Trailer: ${meta.trailer}` : null,
-        meta.eta ? `ETA: ${meta.eta}` : null,
-        meta.dispatcher ? `Dispatcher: ${meta.dispatcher}` : null,
-      ].filter(Boolean).join('\n'),
-      sourceMetadata: omitEmptyFields([
-        ...Object.entries(meta.summaryMetadata),
-        ['summaryType', 'dispatch'],
-      ]),
-      sourceUrl: firstText(record, ['url', 'source_url', 'sourceUrl', 'load_url']) ?? null,
-      owner: meta.dispatcher ?? meta.customer ?? null,
-      sourceCreatedAt: firstDate(record, ['created_at', 'createdAt', 'created_date']),
+      sourceUrl,
+      owner,
+      sourceCreatedAt,
       relatedLoadId: loadId,
       documents: [],
     })
@@ -666,5 +1036,93 @@ export function normalizeDatatruckRecord(kind: DatatruckEntityKind, record: Data
   if (kind === 'driver') return [normalizeDatatruckDriver(record)]
   if (kind === 'truck') return [normalizeDatatruckTruck(record)]
   if (kind === 'trailer') return [normalizeDatatruckTrailer(record)]
+  if (kind === 'generic') return [genericDatatruckRecordNormalizer('record', record)]
   return [normalizeDatatruckWorkOrder(record)]
+}
+
+export function genericDatatruckRecordNormalizer(endpointKey: string, record: DatatruckRecord): DatatruckNormalizedItem {
+  const id = firstText(record, ['id', 'uuid', 'number', 'reference', 'reference_number', 'code']) ?? recordId(record)
+  const title = firstText(record, [
+    'title',
+    'name',
+    'full_name',
+    'display_name',
+    'number',
+    'invoice_number',
+    'bill_number',
+    'reference',
+    'reference_number',
+    'code',
+  ]) ?? `${humanizeEndpointKey(endpointKey)} ${id}`
+  const status = firstText(record, ['status', 'state', 'stage'])
+  const createdAt = firstDate(record, ['created_at', 'createdAt', 'created_date', 'date'])
+  const updatedAt = firstDate(record, ['updated_at', 'updatedAt', 'modified_at', 'modifiedAt'])
+  const amount = firstText(record, ['amount', 'total', 'pay', 'cost', 'price', 'rate', 'balance'])
+  const notes = firstText(record, ['notes', 'note', 'description', 'comments', 'memo'])
+  const owner = firstText(record, ['owner', 'assigned_to', 'dispatcher', 'driver', 'vendor', 'customer'])
+  const company = firstText(record, ['company', 'company_name', 'companyName'])
+  const customer = firstText(record, ['customer', 'customer_name', 'customerName', 'client'])
+  const driver = firstText(record, ['driver', 'driver_name', 'driverName'])
+  const moduleName = genericModuleName(endpointKey)
+  const externalIdPrefix = genericExternalIdPrefix(endpointKey)
+  const metadataKeys = [
+    'id',
+    'uuid',
+    'number',
+    'reference',
+    'reference_number',
+    'code',
+    'title',
+    'name',
+    'status',
+    'state',
+    'amount',
+    'total',
+    'pay',
+    'cost',
+    'price',
+    'rate',
+    'balance',
+    'created_at',
+    'createdAt',
+    'updated_at',
+    'updatedAt',
+    'modified_at',
+    'modifiedAt',
+  ]
+
+  return {
+    externalId: `datatruck:${externalIdPrefix}:${id}`,
+    kind: 'generic',
+    title,
+    content: [
+      `Datatruck ${moduleName}: ${title}`,
+      status ? `Status: ${status}` : null,
+      customer ? `Customer: ${customer}` : null,
+      company ? `Company: ${company}` : null,
+      driver ? `Driver: ${driver}` : null,
+      amount ? `Amount: ${amount}` : null,
+      updatedAt ? `Updated: ${updatedAt.toISOString()}` : null,
+      createdAt ? `Created: ${createdAt.toISOString()}` : null,
+      notes ? `Notes: ${notes}` : null,
+    ].filter(Boolean).join('\n'),
+    sourceMetadata: omitEmptyFields([
+      ['endpointKey', endpointKey],
+      ['recordType', endpointKey],
+      ['module', moduleName],
+      ['sourceExternalId', id],
+      ['title', title],
+      ['status', status],
+      ['amount', amount],
+      ['createdAt', dateText(createdAt)],
+      ['updatedAt', dateText(updatedAt)],
+      ['notes', notes],
+      ['fields', primitiveMetadata(record, metadataKeys)],
+    ]),
+    sourceUrl: firstText(record, ['url', 'source_url', 'sourceUrl']) ?? null,
+    owner,
+    sourceCreatedAt: createdAt,
+    relatedLoadId: firstText(record, ['load_id', 'loadId', 'order_id', 'orderId']),
+    documents: [],
+  }
 }

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { trackEvent } from '@/lib/activity'
 import { encodeTeamsToken, exchangeTeamsCode, getTeamsProfile } from '@/lib/teams/api'
-import { getTeamsConfig } from '@/lib/teams/config'
+import { getTeamsConfig, isTeamsAdminConsentError, type MicrosoftConnectionLevel } from '@/lib/teams/config'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 
@@ -21,10 +21,23 @@ export async function GET(req: Request) {
 
   const cookieStore = await cookies()
   const savedState = cookieStore.get('teams_oauth_state')?.value
+  const savedLevel = cookieStore.get('teams_oauth_level')?.value
+  const level: MicrosoftConnectionLevel = savedLevel === 'teams' ? 'teams' : 'basic'
   const searchParams = new URL(req.url).searchParams
   const returnedState = searchParams.get('state')
   const code = searchParams.get('code')
+  const oauthError = searchParams.get('error')
+  const oauthErrorDescription = searchParams.get('error_description')
   cookieStore.delete('teams_oauth_state')
+  cookieStore.delete('teams_oauth_level')
+
+  if (oauthError) {
+    if (isTeamsAdminConsentError(oauthError, oauthErrorDescription)) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_PRODUCT_URL ?? 'http://localhost:3000'
+      return NextResponse.redirect(new URL('/dashboard/integrations/microsoft/admin-required', appUrl))
+    }
+    return integrationsRedirect({ error: 'teams_failed', reason: 'oauth_error' })
+  }
 
   if (!savedState) return integrationsRedirect({ error: 'teams_failed', reason: 'state_expired' })
   if (!returnedState || returnedState !== savedState) {
@@ -72,6 +85,7 @@ export async function GET(req: Request) {
           tenantId: config.tenantId,
           accountId: profile?.id ?? null,
           accountDisplayName: profile?.displayName ?? null,
+          connectionLevel: level,
         },
         lastSyncAt: null,
       },
@@ -86,6 +100,7 @@ export async function GET(req: Request) {
           tenantId: config.tenantId,
           accountId: profile?.id ?? null,
           accountDisplayName: profile?.displayName ?? null,
+          connectionLevel: level,
         },
         lastSyncAt: null,
       },
@@ -118,5 +133,5 @@ export async function GET(req: Request) {
     return integrationsRedirect({ error: 'teams_failed', reason: 'db_error' })
   }
 
-  return integrationsRedirect({ connected: 'teams' })
+  return integrationsRedirect(level === 'teams' ? { connected: 'teams' } : { connected: 'microsoft' })
 }

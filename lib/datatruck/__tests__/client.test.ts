@@ -1,5 +1,7 @@
 import {
   DATATRUCK_ENDPOINTS,
+  getDatatruckEndpointConfigs,
+  parseDatatruckEndpointMapping,
   buildDatatruckApiBaseUrl,
   buildDatatruckUrl,
   datatruckAuthHeaders,
@@ -28,6 +30,8 @@ const DATATRUCK_ENV_KEYS = [
   'DATATRUCK_MAX_RECORDS_PER_ENDPOINT',
   'DATRUCK_MAX_PAGES',
   'DATRUCK_MAX_RECORDS_PER_ENDPOINT',
+  'DATATRUCK_INVOICES_ENDPOINT',
+  'DATATRUCK_CUSTOMERS_ENDPOINT',
 ] as const
 
 const savedEnv: Record<string, string | undefined> = {}
@@ -161,7 +165,7 @@ describe('Datatruck pagination helpers', () => {
 describe('safeDatatruckMetadata', () => {
   it('exposes only safe fields and the endpoint map', () => {
     const metadata = safeDatatruckMetadata('sflogistics')
-    expect(metadata).toEqual({
+    expect(metadata).toMatchObject({
       companyName: 'sflogistics',
       apiBaseUrlConfigured: true,
       apiTokenConfigured: true,
@@ -174,13 +178,50 @@ describe('safeDatatruckMetadata', () => {
         trailers: '/trailers/list/',
         workOrders: '/work-orders/',
         dispatcherBoard: '/orders/dispatcher-board/list/',
+        invoices: null,
       },
+      endpointMapping: {},
     })
     expect(JSON.stringify(metadata)).not.toContain('token-value')
   })
 })
 
 describe('env fallback', () => {
+  it('builds endpoint coverage from defaults and marks missing optional endpoints as unavailable', () => {
+    const endpoints = getDatatruckEndpointConfigs()
+
+    expect(endpoints.find((endpoint) => endpoint.key === 'loads')).toMatchObject({
+      path: '/orders/',
+      configuredBy: 'default',
+    })
+    expect(endpoints.find((endpoint) => endpoint.key === 'invoices')).toMatchObject({
+      path: null,
+      configuredBy: 'not_mapped',
+    })
+  })
+
+  it('reads optional endpoint env vars', () => {
+    process.env.DATATRUCK_INVOICES_ENDPOINT = '/confirmed/path/'
+
+    expect(getDatatruckEndpointConfigs().find((endpoint) => endpoint.key === 'invoices')).toMatchObject({
+      path: '/confirmed/path/',
+      configuredBy: 'env',
+    })
+  })
+
+  it('lets connector metadata endpointMapping override env paths', () => {
+    process.env.DATATRUCK_CUSTOMERS_ENDPOINT = '/confirmed/customers/'
+
+    const endpoints = getDatatruckEndpointConfigs({ endpointMapping: { customers: '/confirmed/metadata-customers/' } })
+
+    expect(endpoints.find((endpoint) => endpoint.key === 'customers')).toMatchObject({
+      path: '/confirmed/metadata-customers/',
+      configuredBy: 'metadata',
+    })
+    expect(parseDatatruckEndpointMapping({ endpointMapping: { customers: 'confirmed/customers', bad: '/ignored/' } }))
+      .toEqual({ customers: '/confirmed/customers' })
+  })
+
   it('does not require Datatruck env vars for app boot', () => {
     expect(isDatatruckEnvConfigured()).toBe(false)
     expect(getDatatruckEnvConfig()).toEqual({ companyName: undefined, apiBaseUrl: undefined, apiToken: undefined })

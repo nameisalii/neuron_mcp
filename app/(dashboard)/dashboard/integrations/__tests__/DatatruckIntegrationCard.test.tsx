@@ -19,30 +19,39 @@ describe('DatatruckIntegrationCard — not connected', () => {
     expect(screen.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument()
   })
 
-  it('shows Ready to connect when env fallback credentials exist without a connector', () => {
-    render(<DatatruckIntegrationCard status="ready" companyName={null} lastSyncAt={null} envCompanyName="sflogistics" />)
-
-    expect(screen.getByText('Ready to connect')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Connect Datatruck' })).toBeInTheDocument()
-  })
-
   it('opens the setup modal with company name and API token fields', () => {
     render(<DatatruckIntegrationCard status="not_connected" companyName={null} lastSyncAt={null} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect Datatruck' }))
 
     expect(screen.getByText('Connect Datatruck', { selector: 'h3' })).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('sflogistics')).toBeInTheDocument()
+    expect(screen.getByLabelText('Datatruck company name')).toHaveValue('')
+    expect(screen.getByPlaceholderText('Example: sflogistics')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Paste your Datatruck API token')).toHaveAttribute('type', 'password')
+    expect(screen.getByText('Connect your Datatruck workspace by entering your Datatruck company name and API token.')).toBeInTheDocument()
   })
 
-  it('prefills the company name from the env fallback but never a token', () => {
-    render(<DatatruckIntegrationCard status="ready" companyName={null} lastSyncAt={null} envCompanyName="sflogistics" />)
+  it('opens with empty company and token fields for every new workspace connection', () => {
+    render(<DatatruckIntegrationCard status="not_connected" companyName={null} lastSyncAt={null} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect Datatruck' }))
 
-    expect(screen.getByPlaceholderText('sflogistics')).toHaveValue('sflogistics')
+    expect(screen.getByLabelText('Datatruck company name')).toHaveValue('')
     expect(screen.getByPlaceholderText('Paste your Datatruck API token')).toHaveValue('')
+  })
+
+  it('shows a collapsible tutorial for finding the Datatruck API token', () => {
+    render(<DatatruckIntegrationCard status="not_connected" companyName={null} lastSyncAt={null} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect Datatruck' }))
+    fireEvent.click(screen.getByRole('button', { name: /How to find your Datatruck API token/ }))
+
+    expect(screen.getByText('Open Datatruck.')).toBeInTheDocument()
+    expect(screen.getByText('Click API Tokens.')).toBeInTheDocument()
+    expect(screen.getByText('Copy your Company name shown on the API Tokens page.')).toBeInTheDocument()
+    expect(screen.getByText('https://sflogistics.datatruck.io → company name is sflogistics')).toBeInTheDocument()
+    expect(screen.getByText('Neuron stores your token securely and never shows it again after connection.')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('raw-secret-token')
   })
 
   it('disables submit until both company name and API token are provided', () => {
@@ -52,7 +61,7 @@ describe('DatatruckIntegrationCard — not connected', () => {
     const submit = screen.getAllByRole('button', { name: 'Connect Datatruck' }).at(-1) as HTMLElement
 
     expect(submit).toBeDisabled()
-    fireEvent.change(screen.getByPlaceholderText('sflogistics'), { target: { value: 'sflogistics' } })
+    fireEvent.change(screen.getByLabelText('Datatruck company name'), { target: { value: 'sflogistics' } })
     expect(submit).toBeDisabled()
     fireEvent.change(screen.getByPlaceholderText('Paste your Datatruck API token'), { target: { value: 'tok-123' } })
     expect(submit).not.toBeDisabled()
@@ -67,7 +76,7 @@ describe('DatatruckIntegrationCard — not connected', () => {
     render(<DatatruckIntegrationCard status="not_connected" companyName={null} lastSyncAt={null} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect Datatruck' }))
-    fireEvent.change(screen.getByPlaceholderText('sflogistics'), { target: { value: 'https://SFLogistics.datatruck.io' } })
+    fireEvent.change(screen.getByLabelText('Datatruck company name'), { target: { value: 'https://SFLogistics.datatruck.io' } })
     fireEvent.change(screen.getByPlaceholderText('Paste your Datatruck API token'), { target: { value: 'tok-secret' } })
     fireEvent.click(screen.getAllByRole('button', { name: 'Connect Datatruck' }).at(-1) as HTMLElement)
 
@@ -87,7 +96,7 @@ describe('DatatruckIntegrationCard — not connected', () => {
     render(<DatatruckIntegrationCard status="not_connected" companyName={null} lastSyncAt={null} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect Datatruck' }))
-    fireEvent.change(screen.getByPlaceholderText('sflogistics'), { target: { value: 'sflogistics' } })
+    fireEvent.change(screen.getByLabelText('Datatruck company name'), { target: { value: 'sflogistics' } })
     fireEvent.change(screen.getByPlaceholderText('Paste your Datatruck API token'), { target: { value: 'tok-secret' } })
     fireEvent.click(screen.getAllByRole('button', { name: 'Connect Datatruck' }).at(-1) as HTMLElement)
 

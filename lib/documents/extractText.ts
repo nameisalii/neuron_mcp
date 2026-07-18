@@ -57,6 +57,23 @@ export async function extractDocumentText({ buffer, fileName, mimeType }: Extrac
     }
   }
 
+  if (extension === 'xlsx' || mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+    try {
+      const XLSX = await import('xlsx')
+      const workbook = XLSX.read(buffer, { type: 'buffer' })
+      const sheets = workbook.SheetNames.map((name) => {
+        const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name])
+        return csv.trim() ? `Sheet: ${name}\n${csv}` : null
+      }).filter(Boolean)
+      const text = capText(sheets.join('\n\n'))
+      return text
+        ? { text, status: 'extracted' }
+        : { text: null, status: 'failed', errorReason: 'Spreadsheet contains no readable data' }
+    } catch (err) {
+      return { text: null, status: 'failed', errorReason: err instanceof Error ? err.message.slice(0, 200) : 'XLSX parsing failed' }
+    }
+  }
+
   if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic'].includes(extension)) {
     return { text: null, status: 'needs_ocr', errorReason: 'Image files require OCR, which is not supported yet' }
   }

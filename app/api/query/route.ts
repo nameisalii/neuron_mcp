@@ -8,17 +8,18 @@ import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { trackEvent } from '@/lib/activity'
 import { buildQuerySystemPrompt } from '@/lib/extraction/prompts'
 import { splitRankedSources, type QuerySource } from '@/lib/query/source-ranking'
+import { detectQueryIntent, type QueryIntent } from '@/lib/query/intent'
 import { gmailThreadUrl } from '@/lib/gmail/api'
 import { escapeXml } from '@/lib/utils'
 import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/persistence'
 import { searchDocumentAttachments, type DocumentResult } from '@/lib/documents/search'
+import { answerTtEldLocationQuestion, isTtEldLiveQuestion } from '@/lib/tteld/query'
 import {
   applyDocumentAssignment,
   attachedDocumentContext,
   loadWorkspaceDocuments,
   toDocumentResults,
 } from '@/lib/documents/queryAttachments'
-import type { LabeledByEntry } from '@/types'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 
@@ -50,6 +51,39 @@ function makeEmptyStream(answer: string, conversationId: string | null, confiden
   })
 }
 
+function makeStaticAnswerStream(params: {
+  answer: string
+  ranked: ReturnType<typeof splitRankedSources>
+  documents: DocumentResult[]
+  conversationId: string | null
+  confidence: number
+  retrievalDebug?: Record<string, unknown>
+}): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      sendSSE(controller, {
+        type: 'sources',
+        ...params.ranked,
+        documents: params.documents,
+        conversationId: params.conversationId,
+        confidence: params.confidence,
+        ...(params.retrievalDebug ? { retrievalDebug: params.retrievalDebug } : {}),
+      })
+      sendSSE(controller, { type: 'delta', content: params.answer })
+      sendSSE(controller, {
+        type: 'done',
+        answer: params.answer,
+        ...params.ranked,
+        documents: params.documents,
+        conversationId: params.conversationId,
+        confidence: params.confidence,
+        ...(params.retrievalDebug ? { retrievalDebug: params.retrievalDebug } : {}),
+      })
+      controller.close()
+    },
+  })
+}
+
 function documentContext(documents: DocumentResult[]): string {
   if (documents.length === 0) return ''
   return documents.map((document, i) => {
@@ -68,6 +102,17 @@ function documentContext(documents: DocumentResult[]): string {
 
 function dateToIso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null
+}
+
+function metadataDateToIso(metadata: Record<string, unknown> | null, keys = ['messageDate', 'sentAt', 'createdAt', 'updatedAt']): string | null {
+  if (!metadata) return null
+  for (const key of keys) {
+    const value = metadata[key]
+    if (typeof value !== 'string' && typeof value !== 'number') continue
+    const date = new Date(value)
+    if (!Number.isNaN(date.getTime())) return date.toISOString()
+  }
+  return null
 }
 
 type KnowledgeItemResult = {
@@ -92,7 +137,11 @@ function isMissingColumnError(err: unknown) {
   return message.includes('column') && message.includes('does not exist')
 }
 
-async function findKnowledgeItems(where: Prisma.KnowledgeItemWhereInput, take?: number): Promise<KnowledgeItemResult[]> {
+async function findKnowledgeItems(
+  where: Prisma.KnowledgeItemWhereInput,
+  take?: number,
+  orderBy?: Prisma.KnowledgeItemOrderByWithRelationInput | Prisma.KnowledgeItemOrderByWithRelationInput[],
+): Promise<KnowledgeItemResult[]> {
   const baseSelect = {
     id: true,
     content: true,
@@ -114,6 +163,7 @@ async function findKnowledgeItems(where: Prisma.KnowledgeItemWhereInput, take?: 
       where,
       select: { ...baseSelect, sourceMetadata: true },
       ...(take ? { take } : {}),
+      ...(orderBy ? { orderBy } : {}),
     }) as KnowledgeItemResult[]
   } catch (err) {
     if (!isMissingColumnError(err)) throw err
@@ -122,8 +172,155 @@ async function findKnowledgeItems(where: Prisma.KnowledgeItemWhereInput, take?: 
       where,
       select: baseSelect,
       ...(take ? { take } : {}),
+      ...(orderBy ? { orderBy } : {}),
     })
     return rows.map((row) => ({ ...row, sourceMetadata: null }))
+  }
+}
+
+function isMeaningfulText(value: string): boolean {
+  const cleaned = value.replace(/\s+/g, ' ').trim()
+  return cleaned.length >= 12 && !/^(fact|update|message|note)$/i.test(cleaned)
+}
+
+function visibilityWhere(workspaceId: string, userId: string): Prisma.KnowledgeItemWhereInput {
+  return {
+    workspaceId,
+    OR: [
+      { visibility: 'team' },
+      { visibility: 'personal', visibilitySetBy: userId },
+    ],
+  }
+}
+
+function temporalWhere(intent: QueryIntent): Prisma.KnowledgeItemWhereInput | null {
+  const { since, until, type } = intent.temporalIntent
+  if (!since || type === 'latest') return null
+  const range: Prisma.DateTimeFilter = { gte: since, ...(until ? { lt: until } : {}) }
+  return {
+    OR: [
+      { sourceCreatedAt: range },
+      { updatedAt: range },
+    ],
+  }
+}
+
+async function findIntentKnowledgeItems(params: {
+  workspaceId: string
+  userId: string
+  intent: QueryIntent
+}): Promise<KnowledgeItemResult[]> {
+  if (params.intent.requestedSources.length === 0 && params.intent.temporalIntent.type === 'all_time') return []
+  const base: Prisma.KnowledgeItemWhereInput = {
+    ...visibilityWhere(params.workspaceId, params.userId),
+    ...(params.intent.requestedSources.length > 0 ? { source: { in: params.intent.requestedSources } } : {}),
+    ...(temporalWhere(params.intent) ?? {}),
+  }
+  let rows = await findKnowledgeItems(base, 20, [
+    { sourceCreatedAt: 'desc' },
+    { updatedAt: 'desc' },
+  ])
+  if (rows.length === 0 && params.intent.temporalIntent.type !== 'all_time') {
+    rows = await findKnowledgeItems({
+      ...visibilityWhere(params.workspaceId, params.userId),
+      ...(params.intent.requestedSources.length > 0 ? { source: { in: params.intent.requestedSources } } : {}),
+    }, 20, [
+      { sourceCreatedAt: 'desc' },
+      { updatedAt: 'desc' },
+    ])
+  }
+  return rows.filter((item) => isMeaningfulText(item.content))
+}
+
+function formatSourceForModel(source: QuerySource, index: number): string {
+  const sourceLabel = source.source.charAt(0).toUpperCase() + source.source.slice(1)
+  const metadata = source.sourceMetadata ?? {}
+  const title = source.pageTitle && source.pageTitle !== 'fact' ? source.pageTitle : null
+  const date = source.sourceCreatedAt ?? source.updatedAt
+  const meta = [
+    title ? `Title: ${title}` : null,
+    source.owner ? `Author/owner: ${source.owner}` : null,
+    date ? `Date: ${date}` : null,
+    typeof metadata.channelName === 'string' ? `Channel: ${metadata.channelName}` : null,
+    typeof metadata.loadNumber === 'string' ? `Load: ${metadata.loadNumber}` : null,
+  ].filter(Boolean).join(' · ')
+  return `[${index + 1}] [${sourceLabel}]${meta ? ` ${meta}` : ''}\n${source.content}`
+}
+
+function sourceDisplayName(source: string): string {
+  if (source === 'five_eld') return 'Five ELD'
+  if (source === 'gmail') return 'Gmail'
+  if (source === 'datatruck') return 'Datatruck'
+  if (source === 'teams') return 'Microsoft Teams'
+  return source.charAt(0).toUpperCase() + source.slice(1)
+}
+
+function summarizeSourceUpdates(sources: QuerySource[], intent: QueryIntent): string {
+  const requested = intent.requestedSources[0] ?? sources[0]?.source ?? 'workspace'
+  const display = sourceDisplayName(requested)
+  const lines = [`## Recent ${display} updates`]
+  const selected = sources.filter((source) => !intent.requestedSources.length || intent.requestedSources.includes(source.source)).slice(0, 8)
+  if (selected.length === 0) {
+    return `I couldn’t find ${display} updates matching that request in your connected workspace.`
+  }
+  selected.forEach((source, index) => {
+    const metadata = source.sourceMetadata ?? {}
+    const title = source.pageTitle && source.pageTitle !== 'fact'
+      ? source.pageTitle
+      : typeof metadata.channelName === 'string'
+        ? metadata.channelName
+        : `${display} item ${index + 1}`
+    const date = source.sourceCreatedAt ?? source.updatedAt
+    const text = source.content.replace(/\s+/g, ' ').trim()
+    const summary = text.length > 240 ? `${text.slice(0, 237)}...` : text
+    lines.push(`\n${index + 1}. **${title}**${date ? ` — ${new Date(date).toLocaleString()}` : ''}\n${summary}`)
+  })
+  const dates = selected
+    .map((source) => source.sourceCreatedAt ?? source.updatedAt)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime())
+  const dateSummary = dates.length
+    ? ` from ${dates[0].toLocaleDateString()}${dates.length > 1 ? `–${dates[dates.length - 1].toLocaleDateString()}` : ''}`
+    : ''
+  lines.push(`\nBased on ${selected.length} ${display} source${selected.length === 1 ? '' : 's'}${dateSummary}.`)
+  if (intent.temporalIntent.type === 'today' && dates.length > 0) {
+    const today = new Date().toDateString()
+    const hasToday = dates.some((date) => date.toDateString() === today)
+    if (!hasToday) lines.push(`\nI couldn’t find ${display} updates from today. These are the most recent available items in Neuron.`)
+  }
+  return lines.join('\n')
+}
+
+function retrievalDebugPayload(params: {
+  query: string
+  intent: QueryIntent
+  sources: QuerySource[]
+  passedToModelCount: number
+}) {
+  if (process.env.DEBUG_QUERY_RETRIEVAL !== 'true') return undefined
+  return {
+    query: params.query,
+    requestedSources: params.intent.requestedSources,
+    temporalIntent: params.intent.temporalIntent.type,
+    retrievedCount: params.sources.length,
+    passedToModelCount: params.passedToModelCount,
+    sourceTypes: [...new Set(params.sources.map((source) => source.source))],
+    sourceIds: params.sources.map((source) => source.chunkId),
+    sourceDates: params.sources.map((source) => source.sourceCreatedAt ?? source.updatedAt).filter(Boolean),
+  }
+}
+
+function intentMetadata(intent: QueryIntent): Prisma.InputJsonObject {
+  return {
+    requestedSources: intent.requestedSources,
+    temporalIntent: {
+      type: intent.temporalIntent.type,
+      since: intent.temporalIntent.since?.toISOString() ?? null,
+      until: intent.temporalIntent.until?.toISOString() ?? null,
+    },
+    queryType: intent.queryType,
   }
 }
 
@@ -187,6 +384,7 @@ export async function POST(req: Request) {
 
     const { question, conversationId: requestedConversationId, documentIds } = parsed.data
     const escapedQuestion = escapeXml(question)
+    const intent = detectQueryIntent(question)
     let conversationId: string | null = null
     let relatedLoadId: string | null = null
 
@@ -218,11 +416,35 @@ export async function POST(req: Request) {
     })
     const workspaceName = workspace?.name ?? 'your workspace'
 
+    if (isTtEldLiveQuestion(question)) {
+      const live = await answerTtEldLocationQuestion(workspaceId, question)
+      if (live) {
+        const ranked = splitRankedSources(live.sources, 3, { requestedSources: ['five_eld'], query: question })
+        void safeSaveQueryLog(workspaceId, userId, displayName, question, live.answer, live.sources.map((source) => source.chunkId))
+        if (conversationId) {
+          void storeAssistantMessage({
+            workspaceId,
+            userId,
+            conversationId,
+            answer: live.answer,
+            sourceReferences: live.sources as unknown as Prisma.InputJsonValue,
+            documentReferences: [],
+            relatedLoadId,
+            metadata: { confidence: live.sources.length ? 100 : 0, liveSource: 'five_eld' },
+          }).catch(() => null)
+        }
+        void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked a live Five ELD question`, { conversationId, integration: 'five_eld' })
+        return new Response(makeStaticAnswerStream({ answer: live.answer, ranked, documents: [], conversationId, confidence: live.sources.length ? 100 : 0 }), {
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      }
+    }
+
     const embedding = await generateEmbedding(question)
     const personalNamespace = `${workspaceId}:${userId}`
 
     const [teamMatches, personalMatches] = await Promise.all([
-      searchSimilar(embedding, workspaceId, 10, 0.3),
+      searchSimilar(embedding, workspaceId, intent.requestedSources.length > 0 ? 20 : 10, 0.3),
       searchInNamespace(embedding, personalNamespace, 25, 0.3),
     ])
 
@@ -257,17 +479,26 @@ export async function POST(req: Request) {
           include: chunkInclude,
         }),
           findKnowledgeItems({
-              workspaceId,
+              ...visibilityWhere(workspaceId, userId),
               id: { in: allPineconeIds },
-              OR: [
-                { visibility: 'team' },
-                { visibility: 'personal', visibilitySetBy: userId },
-              ],
           }),
         ])
       : [[], []]
 
     knowledgeItems = knowledgeItems as KnowledgeItemResult[]
+
+    const intentKnowledgeItems = await findIntentKnowledgeItems({ workspaceId, userId, intent })
+    if (intentKnowledgeItems.length > 0) {
+      const byId = new Map(knowledgeItems.map((item) => [item.id, item]))
+      for (const item of intentKnowledgeItems) {
+        if (!byId.has(item.id)) {
+          knowledgeItems.push(item)
+          scoreMap.set(item.id, Math.max(scoreMap.get(item.id) ?? 0, 0.7))
+        } else {
+          scoreMap.set(item.id, Math.max(scoreMap.get(item.id) ?? 0, 0.7))
+        }
+      }
+    }
 
     if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0) {
       // Pinecone returned nothing — fall back to Postgres keyword search
@@ -282,14 +513,8 @@ export async function POST(req: Request) {
             orderBy: { position: 'asc' },
           }),
           findKnowledgeItems({
-              workspaceId,
+              ...visibilityWhere(workspaceId, userId),
               AND: [
-                {
-                  OR: [
-                    { visibility: 'team' },
-                    { visibility: 'personal', visibilitySetBy: userId },
-                  ],
-                },
                 { OR: keywordFilter },
               ],
             }, 10),
@@ -315,15 +540,6 @@ export async function POST(req: Request) {
       void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, conversationId ? { conversationId, relatedLoadId } : {})
       return new Response(makeEmptyStream(noInfoAnswer, conversationId), { headers: { 'Content-Type': 'text/event-stream' } })
     }
-
-    const chunkContext = chunks.map((chunk, i) => {
-      const attribution = (chunk.labeledBy as unknown as LabeledByEntry[])
-        .map((l) => `${l.displayName} as "${l.label}"`)
-        .join(', ')
-      const pageRef = `[Notion: ${chunk.page.title}]`
-      const labelNote = attribution ? `\n   Labeled by: ${attribution}` : ''
-      return `[${i + 1}] ${pageRef} ${chunk.content}${labelNote}`
-    })
 
     const gmailThreadIds = [...new Set(knowledgeItems.filter((item) => item.source === 'gmail' && item.sourceExternalId).map((item) => item.sourceExternalId!))]
     const gmailThreads = gmailThreadIds.length > 0
@@ -355,30 +571,6 @@ export async function POST(req: Request) {
       }] as const
     }))
 
-    const knowledgeContext = knowledgeItems.map((item, i) => {
-      if (item.source === 'gmail') {
-        const gmail = item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId) : null
-        const meta = [
-          gmail?.subject ? `Subject: ${gmail.subject}` : null,
-          gmail?.sender ? `Sender: ${gmail.sender}` : null,
-          gmail?.labelNames?.length ? `Labels: ${gmail.labelNames.join(', ')}` : null,
-          gmail?.lastMessageAt ? `Date: ${gmail.lastMessageAt.toISOString()}` : null,
-        ].filter(Boolean).join(' · ')
-        const ref = `[Gmail: ${gmail?.subject ?? item.notionPageTitle ?? item.sourceExternalId ?? 'Email'}]`
-        return `[${chunks.length + i + 1}] ${ref} ${meta}\n${item.content}`
-      }
-      const sourceLabel = item.source.charAt(0).toUpperCase() + item.source.slice(1)
-      const ref = `[${sourceLabel}: ${item.category}]`
-      return `[${chunks.length + i + 1}] ${ref} ${item.content}`
-    })
-
-    const context = [
-      attachedDocumentContext(attachedDocuments),
-      ...chunkContext,
-      ...knowledgeContext,
-      documentContext(documentResults),
-    ].filter(Boolean).join('\n\n')
-
     const systemPrompt = buildQuerySystemPrompt({
       workspaceName,
       displayName,
@@ -407,7 +599,11 @@ export async function POST(req: Request) {
       relevanceScore: scoreMap.get(c.pineconeId ?? '') ?? 0,
     }))
 
-    const knowledgeSources: QuerySource[] = knowledgeItems.map((item) => ({
+    const knowledgeSources: QuerySource[] = knowledgeItems.map((item) => {
+      const sourceMetadata = item.sourceMetadata && typeof item.sourceMetadata === 'object' && !Array.isArray(item.sourceMetadata)
+        ? item.sourceMetadata as Record<string, unknown>
+        : null
+      return {
       chunkId: item.id,
       pageId: null,
       pageTitle: item.source === 'gmail'
@@ -430,19 +626,69 @@ export async function POST(req: Request) {
       owner: item.source === 'gmail'
         ? (item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.sender : null) ?? item.owner ?? null
         : item.owner ?? null,
-      sourceMetadata: item.sourceMetadata && typeof item.sourceMetadata === 'object' && !Array.isArray(item.sourceMetadata)
-        ? item.sourceMetadata as Record<string, unknown>
-        : null,
+      sourceMetadata,
       sourceCreatedAt: item.source === 'gmail'
         ? dateToIso(item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.lastMessageAt ?? null : null)
           ?? item.sourceCreatedAt?.toISOString()
+          ?? metadataDateToIso(sourceMetadata)
           ?? null
-        : item.sourceCreatedAt?.toISOString() ?? null,
+        : item.sourceCreatedAt?.toISOString() ?? metadataDateToIso(sourceMetadata) ?? null,
       updatedAt: item.updatedAt?.toISOString() ?? null,
       relevanceScore: scoreMap.get(item.id) ?? 0,
-    }))
+    }})
 
-    const ranked = splitRankedSources([...chunkSources, ...knowledgeSources])
+    const ranked = splitRankedSources([...chunkSources, ...knowledgeSources], 3, {
+      requestedSources: intent.requestedSources,
+      temporalType: intent.temporalIntent.type,
+      query: question,
+    })
+    const answerContextSources = ranked.sources.slice(0, intent.queryType === 'summary' ? 12 : 8)
+    const context = [
+      attachedDocumentContext(attachedDocuments),
+      ...answerContextSources.map((source, index) => formatSourceForModel(source, index)),
+      documentContext(documentResults),
+    ].filter(Boolean).join('\n\n')
+    const retrievalDebug = retrievalDebugPayload({
+      query: question,
+      intent,
+      sources: ranked.sources,
+      passedToModelCount: answerContextSources.length,
+    })
+
+    if (process.env.DEBUG_QUERY_RETRIEVAL === 'true') {
+      console.info('[query/retrieval]', retrievalDebug ?? null)
+    }
+
+    if (intent.queryType === 'summary' && intent.requestedSources.length > 0 && answerContextSources.length > 0) {
+      const answer = summarizeSourceUpdates(answerContextSources, intent)
+      void safeSaveQueryLog(workspaceId, userId, displayName, question, answer, answerContextSources.map((source) => source.chunkId))
+      if (conversationId) {
+        void storeAssistantMessage({
+          workspaceId,
+          userId,
+          conversationId,
+          answer,
+          sourceReferences: ranked.sources as unknown as Prisma.InputJsonValue,
+          documentReferences: documentResults as unknown as Prisma.InputJsonValue,
+          relatedLoadId,
+          metadata: {
+            confidence,
+            totalSources: ranked.totalSources,
+            documentCount: documentResults.length,
+            queryIntent: intentMetadata(intent),
+            ...(documentIds.length > 0 ? { uploadedDocumentIds: documentIds } : {}),
+          },
+        }).catch((err) => console.error('[query] assistant persistence failed', err))
+      }
+      void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, {
+        conversationId,
+        relatedLoadId,
+        documentCount: documentResults.length,
+      })
+      return new Response(makeStaticAnswerStream({ answer, ranked, documents: documentResults, conversationId, confidence, retrievalDebug }), {
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
 
     const openaiStream = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -451,7 +697,13 @@ export async function POST(req: Request) {
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `<question>${escapedQuestion}</question>\n\n<knowledge_items>\n${context}\n</knowledge_items>`,
+          content: `<question>${escapedQuestion}</question>\n\n<intent>${escapeXml(JSON.stringify({
+            requestedSources: intent.requestedSources,
+            temporalIntent: intent.temporalIntent.type,
+            queryType: intent.queryType,
+          }))}</intent>\n\n<answer_rules>
+Use the provided workspace knowledge. If sources are present, summarize or explain those sources; do not claim there is no information unless the provided sources are genuinely irrelevant. Do not recommend public official channels for workspace questions.
+</answer_rules>\n\n<knowledge_items>\n${context}\n</knowledge_items>`,
         },
       ],
       temperature: 0.2,
@@ -459,7 +711,7 @@ export async function POST(req: Request) {
 
     const readable = new ReadableStream({
       async start(controller) {
-        sendSSE(controller, { type: 'sources', ...ranked, documents: documentResults, conversationId, confidence })
+        sendSSE(controller, { type: 'sources', ...ranked, documents: documentResults, conversationId, confidence, ...(retrievalDebug ? { retrievalDebug } : {}) })
         let fullAnswer = ''
         try {
           for await (const chunk of openaiStream as AsyncIterable<{ choices: Array<{ delta?: { content?: string }; finish_reason?: string | null }> }>) {
@@ -496,7 +748,7 @@ export async function POST(req: Request) {
             documentCount: documentResults.length,
           })
           const answer = fullAnswer.trim() || 'I could not find enough information to answer confidently, but these are the closest sources I found.'
-          sendSSE(controller, { type: 'done', answer, ...ranked, documents: documentResults, conversationId, confidence })
+          sendSSE(controller, { type: 'done', answer, ...ranked, documents: documentResults, conversationId, confidence, ...(retrievalDebug ? { retrievalDebug } : {}) })
         } finally {
           controller.close()
         }

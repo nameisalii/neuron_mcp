@@ -12,6 +12,7 @@ interface Props {
 }
 
 function titleCase(value: string) {
+  if (value.toLowerCase() === 'five_eld') return 'Five ELD'
   return value
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -28,6 +29,17 @@ function getMetadataValue(source: SourceItem, keys: string[]) {
   return null
 }
 
+function isGenericTitle(value: string | null | undefined) {
+  if (!value) return true
+  return /^(fact|reference|update|message|note|status update|status_update)$/i.test(value.trim())
+}
+
+function previewTitle(content: string) {
+  const firstLine = content.replace(/\s+/g, ' ').trim()
+  if (!firstLine || isGenericTitle(firstLine)) return null
+  return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine
+}
+
 function formatDate(value: string | null) {
   if (!value) return null
   const date = new Date(value)
@@ -42,10 +54,27 @@ function formatDate(value: string | null) {
 }
 
 export function getSourceTitle(source: SourceItem) {
-  return source.pageTitle || getMetadataValue(source, ['title', 'subject', 'fileName']) || titleCase(source.labels[0] ?? source.source)
+  const primaryMetadataTitle = getMetadataValue(source, [
+    'title',
+    'subject',
+    'fileName',
+    'threadTitle',
+    'loadNumber',
+    'externalLoadId',
+  ])
+  if (source.source === 'datatruck') {
+    const loadNumber = getMetadataValue(source, ['loadNumber', 'externalLoadId'])
+    if (loadNumber) return `Load ${loadNumber}`
+  }
+  if (primaryMetadataTitle && !isGenericTitle(primaryMetadataTitle)) return primaryMetadataTitle
+  if (!isGenericTitle(source.pageTitle)) return source.pageTitle
+  const conversationTitle = getMetadataValue(source, ['channelName', 'chatTitle', 'groupName'])
+  if (conversationTitle && !isGenericTitle(conversationTitle)) return conversationTitle
+  return previewTitle(source.content) || titleCase(source.labels.find((label) => !isGenericTitle(label)) ?? source.source)
 }
 
 export function getSourceSubtitle(source: SourceItem) {
+  if (source.source === 'five_eld' && source.sourceMetadata?.live === true) return 'Live Five ELD API'
   const manualMetadata = source.sourceMetadata ?? {}
   if (manualMetadata.manual === true) {
     const creator = getMetadataValue(source, ['createdByName']) ?? source.owner
@@ -82,7 +111,10 @@ export function getSourceSubtitle(source: SourceItem) {
   const account = getMetadataValue(source, [
     'channelName',
     'channel',
+    'chatTitle',
+    'groupName',
     'authorName',
+    'username',
     'fromDisplayName',
     'senderName',
     'accountName',

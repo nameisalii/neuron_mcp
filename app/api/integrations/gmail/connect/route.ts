@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { randomBytes } from 'crypto'
-import { getGmailRedirectUri, getGmailClientId, getGmailScopes } from '@/lib/gmail/config'
+import { getGmailRedirectUri, getGmailClientId, getGmailScopes, GMAIL_SCOPES, safeGoogleOAuthDebug } from '@/lib/gmail/config'
 
 export async function GET() {
   const { userId } = await auth()
@@ -35,6 +35,8 @@ export async function GET() {
     prompt: 'consent', // force consent so Google always returns a refresh token
     state,
   })
+
+  safeGoogleOAuthDebug({ flow: 'gmail', clientId, redirectUri: getGmailRedirectUri(), scopes: GMAIL_SCOPES })
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
 }

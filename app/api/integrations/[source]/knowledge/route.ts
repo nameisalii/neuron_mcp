@@ -4,14 +4,15 @@ import { z } from 'zod'
 import { requireWorkspaceMember } from '@/lib/api/workspace-auth'
 import { trackEvent } from '@/lib/activity'
 import { KNOWLEDGE_CATEGORY_OPTIONS } from '@/lib/knowledge/categories'
+import { DATATRUCK_ENDPOINT_LABELS } from '@/lib/datatruck/client'
 import { createManualKnowledgeItemWithOptionalDocument, type ManualKnowledgeFile } from '@/lib/knowledge/manual'
 
 export const runtime = 'nodejs'
 
-const ALLOWED_SOURCES = new Set(['slack', 'notion', 'linear', 'gmail', 'granola', 'discord', 'telegram', 'teams', 'jira', 'whatsapp', 'datatruck'])
+const ALLOWED_SOURCES = new Set(['slack', 'notion', 'linear', 'gmail', 'granola', 'discord', 'telegram', 'teams', 'jira', 'whatsapp', 'datatruck', 'five_eld'])
 const ALLOWED_CATEGORIES = new Set<string>(KNOWLEDGE_CATEGORY_OPTIONS.map((option) => option.value))
 const ALLOWED_DOCUMENT_TYPES = new Set(['BOL', 'POD', 'RATE_CONFIRMATION', 'INVOICE', 'LUMPER_RECEIPT', 'OTHER'])
-const ALLOWED_FILE_EXTENSIONS = new Set(['pdf', 'txt', 'md', 'markdown', 'csv', 'log', 'docx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic'])
+const ALLOWED_FILE_EXTENSIONS = new Set(['pdf', 'txt', 'md', 'markdown', 'csv', 'xlsx', 'log', 'docx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic'])
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 
 const FieldsSchema = z.object({
@@ -20,6 +21,7 @@ const FieldsSchema = z.object({
   category: z.string().trim().toLowerCase().default('fact'),
   externalLoadId: z.string().trim().max(60).optional().nullable(),
   documentType: z.string().trim().toUpperCase().optional().nullable(),
+  moduleKey: z.string().trim().max(60).optional().nullable(),
 })
 
 interface ParsedBody {
@@ -43,6 +45,7 @@ async function parseBody(req: Request): Promise<ParsedBody | { error: string }> 
       category: String(form.get('category') ?? 'fact'),
       externalLoadId: form.get('externalLoadId') ? String(form.get('externalLoadId')) : null,
       documentType: form.get('documentType') ? String(form.get('documentType')) : null,
+      moduleKey: form.get('moduleKey') ? String(form.get('moduleKey')) : null,
     }
     const parsed = FieldsSchema.safeParse(raw)
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid fields' }
@@ -99,6 +102,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ source:
     if (fields.documentType && !ALLOWED_DOCUMENT_TYPES.has(fields.documentType)) {
       return NextResponse.json({ error: 'Choose a valid document type.' }, { status: 400 })
     }
+    if (fields.moduleKey && (source !== 'datatruck' || !Object.prototype.hasOwnProperty.call(DATATRUCK_ENDPOINT_LABELS, fields.moduleKey))) {
+      return NextResponse.json({ error: 'Unknown Datatruck module.' }, { status: 400 })
+    }
 
     const result = await createManualKnowledgeItemWithOptionalDocument({
       workspaceId: workspace.workspaceId,
@@ -110,6 +116,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ source:
       createdByName: workspace.member.displayName,
       externalLoadId: fields.externalLoadId ?? null,
       documentType: fields.documentType ?? null,
+      moduleKey: fields.moduleKey ?? null,
       file,
     })
 

@@ -30,7 +30,7 @@ const connector = {
   id: 'connector-1',
   apiBaseUrl: 'https://sflogistics.datatruck.io/api/v1/openapi',
   encryptedCredential: 'ciphertext',
-  metadata: { companyName: 'sflogistics' },
+  metadata: { companyName: 'sflogistics', endpointMapping: { invoices: '/confirmed/path/' } },
 }
 
 beforeEach(() => {
@@ -53,7 +53,10 @@ beforeEach(() => {
     endpoints: {
       loads: {
         endpointKey: 'loads',
+        label: 'Loads',
         path: '/orders/',
+        configuredBy: 'default',
+        status: 'synced',
         fetched: 4,
         created: 4,
         updated: 0,
@@ -65,7 +68,10 @@ beforeEach(() => {
       },
       dispatcherBoard: {
         endpointKey: 'dispatcherBoard',
+        label: 'Dispatcher board',
         path: '/orders/dispatcher-board/list/',
+        configuredBy: 'default',
+        status: 'synced',
         fetched: 2,
         created: 2,
         updated: 0,
@@ -77,7 +83,10 @@ beforeEach(() => {
       },
       drivers: {
         endpointKey: 'drivers',
+        label: 'Drivers',
         path: '/drivers/list/',
+        configuredBy: 'default',
+        status: 'synced',
         fetched: 2,
         created: 2,
         updated: 0,
@@ -89,7 +98,10 @@ beforeEach(() => {
       },
       trucks: {
         endpointKey: 'trucks',
+        label: 'Trucks',
         path: '/trucks/list/',
+        configuredBy: 'default',
+        status: 'synced',
         fetched: 2,
         created: 1,
         updated: 1,
@@ -101,7 +113,10 @@ beforeEach(() => {
       },
       trailers: {
         endpointKey: 'trailers',
+        label: 'Trailers',
         path: '/trailers/list/',
+        configuredBy: 'default',
+        status: 'synced',
         fetched: 1,
         created: 1,
         updated: 0,
@@ -113,7 +128,10 @@ beforeEach(() => {
       },
       workOrders: {
         endpointKey: 'workOrders',
+        label: 'Work orders',
         path: '/work-orders/',
+        configuredBy: 'default',
+        status: 'synced',
         fetched: 1,
         created: 1,
         updated: 0,
@@ -123,7 +141,7 @@ beforeEach(() => {
         nextStoppedReason: 'complete',
         error: null,
       },
-    },
+    } as never,
     totalFetched: 12,
     totalCreated: 10,
     totalUpdated: 2,
@@ -161,19 +179,23 @@ it('syncs knowledge using the stored connector credentials and saved cursors', a
   expect(mockDecrypt).toHaveBeenCalledWith('ciphertext')
   expect(mockSync).toHaveBeenCalledWith(
     'workspace-1',
-    {
-      apiBaseUrl: 'https://sflogistics.datatruck.io/api/v1/openapi',
-      apiToken: 'decrypted-token',
-    },
-  )
+      {
+        apiBaseUrl: 'https://sflogistics.datatruck.io/api/v1/openapi',
+        apiToken: 'decrypted-token',
+      },
+      {},
+      undefined,
+      { companyName: 'sflogistics', endpointMapping: { invoices: '/confirmed/path/' } },
+    )
   expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
     where: { id: 'connector-1' },
     data: expect.objectContaining({
       status: 'connected',
       lastSyncAt: expect.any(Date),
       metadata: expect.objectContaining({
-        companyName: 'sflogistics',
-        lastSyncSummary: expect.objectContaining({
+          companyName: 'sflogistics',
+          endpointMapping: { invoices: '/confirmed/path/' },
+          lastSyncSummary: expect.objectContaining({
           fetched: 12,
           created: 10,
           updated: 2,

@@ -10,6 +10,16 @@ describe('GmailIntegrationCard', () => {
     expect(screen.getByText('Not connected')).toBeInTheDocument()
     expect(screen.queryByText('Sync Now')).not.toBeInTheDocument()
     expect(screen.queryByText('Nuclear Reset')).not.toBeInTheDocument()
+    expect(screen.getByText(/Ready for test users/)).toBeInTheDocument()
+  })
+
+  it('shows Gmail verification help only on the Gmail integration', () => {
+    render(<GmailIntegrationCard metadata={null} oauthBlocked />)
+    expect(screen.getByText(/Google blocked Gmail connection/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    expect(screen.getByText('Gmail requires Google data-access verification')).toBeInTheDocument()
+    expect(screen.getByText(/Google Auth Platform → Audience → Test users/)).toBeInTheDocument()
+    expect(screen.getByText('https://www.googleapis.com/auth/gmail.readonly')).toBeInTheDocument()
   })
 
   it('shows sync controls when Gmail is configured', () => {

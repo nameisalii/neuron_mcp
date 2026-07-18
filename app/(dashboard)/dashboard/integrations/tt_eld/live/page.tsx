@@ -1,0 +1,12 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import TruckIntegrationLogo from '@/components/TruckIntegrationLogo'
+
+type Unit = { truckNumber: string; driver: string | null; vin: string; coordinates: { lat: number; lng: number } | null; speed: number | null; rotation: number | null; timestamp: string | null; stale: boolean }
+export default function TtEldLiveFleetPage() {
+  const [units, setUnits] = useState<Unit[]>([]); const [error, setError] = useState<string | null>(null)
+  useEffect(() => { fetch('/api/integrations/tt-eld/live').then(async (response) => { const data = await response.json() as { units?: Unit[]; error?: string }; if (!response.ok) throw new Error(data.error); setUnits(data.units ?? []) }).catch(() => setError('TT ELD live fleet is temporarily unavailable.')) }, [])
+  return <div className="mx-auto max-w-6xl space-y-6"><div><Link href="/dashboard/integrations" className="text-sm text-muted">← Back to Integrations</Link><h1 className="mt-2 flex items-center gap-2 text-3xl font-display font-semibold"><TruckIntegrationLogo provider="five_eld" size={28} />TT ELD live fleet</h1></div>{error ? <p className="rounded-xl bg-red-50 p-4 text-red-700">{error}</p> : <div className="overflow-x-auto rounded-xl border border-warm"><table className="min-w-full text-sm"><thead className="bg-cream text-left"><tr>{['Truck number', 'Driver', 'VIN', 'Last coordinates', 'Speed', 'Heading', 'Last update', 'Status'].map((title) => <th key={title} className="px-4 py-3">{title}</th>)}</tr></thead><tbody>{units.map((unit) => <tr key={unit.vin} className="border-t border-warm"><td className="px-4 py-3 font-medium">{unit.truckNumber}</td><td className="px-4 py-3">{unit.driver ?? 'Unassigned'}</td><td className="px-4 py-3 font-mono text-xs">{unit.vin}</td><td className="px-4 py-3">{unit.coordinates ? `${unit.coordinates.lat.toFixed(6)}, ${unit.coordinates.lng.toFixed(6)}` : 'Unavailable'}</td><td className="px-4 py-3">{unit.speed === null ? '—' : `${unit.speed} mph`}</td><td className="px-4 py-3">{unit.rotation === null ? '—' : `${unit.rotation}°`}</td><td className="px-4 py-3">{unit.timestamp ? new Date(unit.timestamp).toLocaleString() : 'Unavailable'}</td><td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-xs ${unit.stale ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>{unit.stale ? 'Stale' : 'Fresh'}</span></td></tr>)}</tbody></table>{units.length === 0 && <p className="p-6 text-center text-muted">No active TT ELD units found.</p>}</div>}</div>
+}
