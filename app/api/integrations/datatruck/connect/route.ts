@@ -2,7 +2,6 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireWorkspaceMember } from '@/lib/api/workspace-auth'
-import { getDatatruckEnvConfig, isDatatruckEnvConfigured } from '@/lib/datatruck/client'
 
 /**
  * Read-only connection status for the Datatruck integration.
@@ -23,15 +22,12 @@ export async function GET() {
   const metadata = connector?.metadata && typeof connector.metadata === 'object' && !Array.isArray(connector.metadata)
     ? connector.metadata as Record<string, unknown>
     : {}
-  const envConfig = getDatatruckEnvConfig()
-
   return NextResponse.json({
     success: true,
     connected: connector?.status === 'connected',
-    status: connector?.status ?? (isDatatruckEnvConfigured(envConfig) ? 'ready_to_connect' : 'not_connected'),
+    status: connector?.status ?? 'not_connected',
     companyName: typeof metadata.companyName === 'string' ? metadata.companyName : null,
     lastSyncAt: connector?.lastSyncAt?.toISOString() ?? null,
     createdAt: connector?.createdAt.toISOString() ?? null,
-    envFallbackAvailable: isDatatruckEnvConfigured(envConfig),
   })
 }

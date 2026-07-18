@@ -1,0 +1,14 @@
+'use client'
+
+import Link from 'next/link'
+import { MapPin, Navigation, Route, Truck } from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import TruckIntegrationLogo from '@/components/TruckIntegrationLogo'
+
+export default function TtEldIntegrationCard({ status, usdot, lastSyncAt, counts }: { status: string; usdot: string | null; lastSyncAt: string | null; counts: Record<string, number> }) {
+  const connected = status === 'connected'
+  return <Card padding="md"><div className="flex items-start justify-between gap-3"><div className="flex gap-3"><TruckIntegrationLogo provider="five_eld" size={32} /><div><h3 className="text-lg font-display font-semibold">Five ELD</h3><p className="text-xs text-muted">Connect live truck locations, drivers, units, VINs, speed, odometer, and route history from Five ELD.</p></div></div><span className={`rounded-full px-3 py-1 text-sm ${connected ? 'bg-[#E6F2EC] text-positive' : status === 'sync_error' ? 'bg-red-50 text-red-700' : 'bg-cream text-muted'}`}>{connected ? 'Connected' : status === 'sync_error' ? 'Error' : 'Not connected'}</span></div>
+    <div className="mt-4 flex flex-wrap gap-2">{['Live truck GPS', 'Driver assignments', 'Active units', 'Truck/VIN lookup', 'Route history', 'Stale GPS detection'].map((item) => <span key={item} className="rounded-full bg-cream px-2.5 py-1 text-xs text-muted">{item}</span>)}</div>
+    {connected ? <div className="mt-5 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">{[['USDOT', usdot ?? '—'], ['Live units', counts.realtimeUnits ?? 0], ['Assignments', counts.currentAssignments ?? 0], ['Active drivers', counts.activeDrivers ?? 0], ['Active 72h', counts.activeUnits72h ?? 0], ['Last sync', lastSyncAt ? new Date(lastSyncAt).toLocaleString() : 'Never']].map(([label, value]) => <div key={label as string} className="rounded-xl border border-warm bg-cream p-3"><p className="text-xs text-muted">{label as string}</p><p className="font-medium text-ink">{String(value)}</p></div>)}</div> : <p className="mt-5 text-sm text-muted">Connect your workspace to answer live truck, driver, VIN, GPS, and route questions.</p>}
+    <div className="mt-5 flex flex-wrap gap-3 border-t border-warm pt-4"><Link href="/dashboard/integrations/five-eld" className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm text-white">{connected ? <Navigation className="h-4 w-4" /> : <Truck className="h-4 w-4" />}{connected ? 'Manage connection' : 'Connect'}</Link><Link href="/dashboard/integrations/five-eld" className="inline-flex items-center gap-2 rounded-lg border border-warm px-4 py-2 text-sm"><Route className="h-4 w-4" />View setup guide</Link>{connected && <Link href="/dashboard/integrations/five-eld" className="inline-flex items-center gap-2 rounded-lg border border-warm px-4 py-2 text-sm"><MapPin className="h-4 w-4" />View live fleet</Link>}</div></Card>
+}

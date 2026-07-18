@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import clsx from 'clsx'
+import TruckIntegrationLogo from './TruckIntegrationLogo'
 
 interface SourceIconProps {
   source: string
@@ -24,6 +25,10 @@ const SOURCE_ASSET: Record<string, { alt: string; src: string }> = {
 export default function SourceIcon({ source, className, size = 20 }: SourceIconProps) {
   const normalized = source.toLowerCase()
   const asset = SOURCE_ASSET[normalized]
+
+  if (normalized === 'five_eld' || normalized === 'datatruck') {
+    return <TruckIntegrationLogo provider={normalized} size={size} className={className} />
+  }
 
   if (asset) {
     return (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { ChevronDown, Copy, ExternalLink, FileText } from 'lucide-react'
 import CitationText from './CitationText'
@@ -28,6 +28,153 @@ interface Props {
 }
 
 const WEAK_ANSWER = 'I could not find enough information to answer confidently, but these are the closest sources I found.'
+
+function safeHref(value: string): string | null {
+  try {
+    const url = new URL(value, 'https://app.tryneuron.net')
+    if (url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'mailto:') return value
+  } catch {
+    if (value.startsWith('/')) return value
+  }
+  return null
+}
+
+function InlineMarkdown({ text, sources }: { text: string; sources: SourceItem[] }) {
+  const nodes: ReactNode[] = []
+  const pattern = /(`[^`]+`|\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*]+\*)/g
+  let last = 0
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) nodes.push(<CitationText key={`t-${last}`} text={text.slice(last, match.index)} sources={sources} />)
+    const token = match[0]
+    const key = `${match.index}-${token}`
+    if (token.startsWith('`')) {
+      nodes.push(<code key={key} className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[0.92em] text-gray-800">{token.slice(1, -1)}</code>)
+    } else if (token.startsWith('[')) {
+      const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token)
+      const href = link ? safeHref(link[2]) : null
+      nodes.push(href
+        ? <a key={key} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="font-medium text-indigo-600 hover:text-indigo-700">{link?.[1]}</a>
+        : <span key={key}>{token}</span>)
+    } else if (token.startsWith('**')) {
+      nodes.push(<strong key={key} className="font-semibold text-gray-950">{token.slice(2, -2)}</strong>)
+    } else {
+      nodes.push(<em key={key} className="italic">{token.slice(1, -1)}</em>)
+    }
+    last = match.index + token.length
+  }
+  if (last < text.length) nodes.push(<CitationText key={`t-${last}`} text={text.slice(last)} sources={sources} />)
+  return <>{nodes}</>
+}
+
+function isTableBlock(lines: string[]): boolean {
+  return lines.length >= 2 && /^\s*\|.+\|\s*$/.test(lines[0]) && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[1])
+}
+
+function MarkdownAnswer({ answer, sources }: { answer: string; sources: SourceItem[] }) {
+  const lines = answer.replace(/\r\n/g, '\n').split('\n')
+  const blocks: ReactNode[] = []
+  let index = 0
+
+  while (index < lines.length) {
+    const line = lines[index]
+    if (!line.trim()) {
+      index += 1
+      continue
+    }
+
+    if (isTableBlock(lines.slice(index, index + 2))) {
+      const tableLines: string[] = []
+      while (index < lines.length && /^\s*\|.+\|\s*$/.test(lines[index])) {
+        tableLines.push(lines[index])
+        index += 1
+      }
+      const rows = tableLines
+        .filter((_, rowIndex) => rowIndex !== 1)
+        .map((row) => row.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()))
+      const [head, ...body] = rows
+      blocks.push(
+        <div key={`table-${index}`} className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>{head.map((cell, cellIndex) => <th key={cellIndex} className="px-3 py-2 text-left font-semibold text-gray-700"><InlineMarkdown text={cell} sources={sources} /></th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white">
+              {body.map((row, rowIndex) => (
+                <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="px-3 py-2 text-gray-700"><InlineMarkdown text={cell} sources={sources} /></td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      )
+      continue
+    }
+
+    const heading = /^(#{1,3})\s+(.+)$/.exec(line)
+    if (heading) {
+      const level = heading[1].length
+      const className = level === 1 ? 'text-xl font-semibold' : level === 2 ? 'text-lg font-semibold' : 'text-base font-semibold'
+      blocks.push(<h3 key={`h-${index}`} className={`${className} text-gray-950`}><InlineMarkdown text={heading[2]} sources={sources} /></h3>)
+      index += 1
+      continue
+    }
+
+    if (/^\s*---+\s*$/.test(line)) {
+      blocks.push(<hr key={`hr-${index}`} className="border-gray-200" />)
+      index += 1
+      continue
+    }
+
+    if (/^>\s?/.test(line)) {
+      const quote: string[] = []
+      while (index < lines.length && /^>\s?/.test(lines[index])) {
+        quote.push(lines[index].replace(/^>\s?/, ''))
+        index += 1
+      }
+      blocks.push(<blockquote key={`q-${index}`} className="border-l-2 border-gray-300 pl-3 text-gray-600"><InlineMarkdown text={quote.join(' ')} sources={sources} /></blockquote>)
+      continue
+    }
+
+    if (/^\s*[-*]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)) {
+      const ordered = /^\s*\d+\.\s+/.test(line)
+      const items: string[] = []
+      const itemPattern = ordered ? /^\s*\d+\.\s+/ : /^\s*[-*]\s+/
+      while (index < lines.length && itemPattern.test(lines[index])) {
+        items.push(lines[index].replace(itemPattern, ''))
+        index += 1
+      }
+      const Tag = ordered ? 'ol' : 'ul'
+      blocks.push(
+        <Tag key={`list-${index}`} className={`${ordered ? 'list-decimal' : 'list-disc'} space-y-1 pl-5`}>
+          {items.map((item, itemIndex) => <li key={itemIndex}><InlineMarkdown text={item} sources={sources} /></li>)}
+        </Tag>,
+      )
+      continue
+    }
+
+    if (/^```/.test(line)) {
+      const code: string[] = []
+      index += 1
+      while (index < lines.length && !/^```/.test(lines[index])) {
+        code.push(lines[index])
+        index += 1
+      }
+      index += 1
+      blocks.push(<pre key={`code-${index}`} className="overflow-x-auto rounded-xl bg-gray-950 p-3 text-xs text-gray-100"><code>{code.join('\n')}</code></pre>)
+      continue
+    }
+
+    const paragraph: string[] = [line]
+    index += 1
+    while (index < lines.length && lines[index].trim() && !/^(#{1,3})\s+|^\s*[-*]\s+|^\s*\d+\.\s+|^>\s?|^```|^\s*---+\s*$/.test(lines[index])) {
+      paragraph.push(lines[index])
+      index += 1
+    }
+    blocks.push(<p key={`p-${index}`} className="leading-7"><InlineMarkdown text={paragraph.join(' ')} sources={sources} /></p>)
+  }
+
+  return <div className="space-y-4 text-sm text-gray-900">{blocks}</div>
+}
 
 export default function QueryResults({ answer, sources, documents = [], complete, copied, onCopy }: Props) {
   const [sourcesExpanded, setSourcesExpanded] = useState(false)
@@ -62,13 +209,7 @@ export default function QueryResults({ answer, sources, documents = [], complete
               Conflict detected in your knowledge base. Review sources for inconsistencies.
             </div>
           )}
-          <div className="space-y-3 text-sm leading-7 text-gray-900">
-            {displayAnswer.split(/\n{2,}/).map((paragraph, index) => (
-              <p key={index} className="whitespace-pre-wrap">
-                <CitationText text={paragraph} sources={sources} />
-              </p>
-            ))}
-          </div>
+          <MarkdownAnswer answer={displayAnswer} sources={sources} />
         </section>
       )}
 

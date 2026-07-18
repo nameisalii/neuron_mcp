@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import IntegrationOverviewView from '../IntegrationOverviewView'
 import type { IntegrationOverviewData } from '@/lib/integrations/overview'
 
@@ -77,6 +77,11 @@ function makeData(overrides: Partial<IntegrationOverviewData> = {}): Integration
 }
 
 describe('IntegrationOverviewView', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    global.fetch = jest.fn()
+  })
+
   it('renders source filters and privacy note', () => {
     render(<IntegrationOverviewView data={makeData()} />)
 
@@ -130,6 +135,144 @@ describe('IntegrationOverviewView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect Datatruck' }))
 
     expect(screen.getByRole('heading', { name: 'Connect Datatruck' })).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('sflogistics')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Example: sflogistics')).toBeInTheDocument()
+    expect(screen.getByLabelText('Datatruck company name')).toHaveValue('')
+  })
+
+  it('renders Datatruck endpoint coverage with official and unavailable modules', () => {
+    render(<IntegrationOverviewView data={makeData({
+      source: 'datatruck',
+      title: 'Datatruck Overview',
+      connected: true,
+      datatruckCoverage: [
+        { key: 'loads', label: 'Loads', path: '/orders/', status: 'synced', fetched: 4, created: 2, updated: 1, skipped: 1, lastError: null, configuredBy: 'default', coverageStatus: 'official_api', sourceLabel: 'Official API', fileImported: 0 },
+        { key: 'invoices', label: 'Invoices', path: null, status: 'not_mapped', fetched: null, created: null, updated: null, skipped: null, lastError: null, configuredBy: 'not_mapped', coverageStatus: 'not_connected', sourceLabel: 'No source connected', fileImported: 0 },
+      ],
+      datatruckWarnings: ['Invoices is not available via the current Datatruck API configuration'],
+    })} />)
+
+    expect(screen.getByText('Datatruck coverage')).toBeInTheDocument()
+    expect(screen.getByText('1 official modules connected')).toBeInTheDocument()
+    expect(screen.getByText('Core Datatruck data')).toBeInTheDocument()
+    expect(screen.getByText('Additional modules')).toBeInTheDocument()
+    expect(screen.getByText('4 records')).toBeInTheDocument()
+    expect(screen.getByText('No source connected')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Connect source' })).toBeInTheDocument()
+    expect(screen.queryByText('Not available via current API')).not.toBeInTheDocument()
+    expect(screen.queryByText(/0 created, 0 updated, 0 skipped/)).not.toBeInTheDocument()
+  })
+
+  it('keeps advanced endpoint mapping collapsed until requested', () => {
+    render(<IntegrationOverviewView data={makeData({
+      source: 'datatruck',
+      title: 'Datatruck Overview',
+      connected: true,
+      datatruckCoverage: [
+        { key: 'loads', label: 'Loads', path: '/orders/', status: 'synced', fetched: 4, created: 2, updated: 1, skipped: 1, lastError: null, configuredBy: 'default', coverageStatus: 'official_api', sourceLabel: 'Official API', fileImported: 0 },
+        { key: 'invoices', label: 'Invoices', path: null, status: 'not_mapped', fetched: null, created: null, updated: null, skipped: null, lastError: null, configuredBy: 'not_mapped', coverageStatus: 'not_connected', sourceLabel: 'No source connected', fileImported: 0 },
+      ],
+    })} />)
+
+    expect(screen.getByText('Advanced endpoint mapping')).toBeInTheDocument()
+    expect(screen.getByText('Company name and API token are enough for the default Datatruck sync. Use advanced mapping only to add confirmed paths for extra modules.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Invoices')).not.toBeInTheDocument()
+    expect(screen.queryByText('/example/list/')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show advanced mapping' }))
+
+    expect(screen.getByLabelText('Invoices')).toBeInTheDocument()
+    expect(screen.getByText('Core endpoints')).toBeInTheDocument()
+    expect(screen.getByText('Optional modules')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit core endpoints' })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Paste confirmed endpoint path after /api/v1/openapi')).toBeInTheDocument()
+    expect(screen.queryByText('/example/list/')).not.toBeInTheDocument()
+  })
+
+  it('renders the endpoint discovery tutorial inside advanced mapping', () => {
+    render(<IntegrationOverviewView data={makeData({
+      source: 'datatruck',
+      title: 'Datatruck Overview',
+      connected: true,
+      datatruckCoverage: [
+        { key: 'invoices', label: 'Invoices', path: null, status: 'not_mapped', fetched: null, created: null, updated: null, skipped: null, lastError: null, configuredBy: 'not_mapped', coverageStatus: 'not_connected', sourceLabel: 'No source connected', fileImported: 0 },
+      ],
+    })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show advanced mapping' }))
+    fireEvent.click(screen.getByRole('button', { name: /How to find Datatruck endpoint paths/ }))
+
+    expect(screen.getByText('Open Chrome DevTools.')).toBeInTheDocument()
+    expect(screen.getByText('Copy the path after /api/v1/openapi.')).toBeInTheDocument()
+    expect(screen.getByText('Endpoint path: /confirmed/path/')).toBeInTheDocument()
+    expect(screen.getByText('Never paste your API token into endpoint fields.')).toBeInTheDocument()
+  })
+
+  it('saves trimmed normalized Datatruck endpoint mapping without empty optional endpoints or tokens', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
+    global.fetch = fetchMock as never
+
+    render(<IntegrationOverviewView data={makeData({
+      source: 'datatruck',
+      title: 'Datatruck Overview',
+      connected: true,
+      datatruckCoverage: [
+        { key: 'loads', label: 'Loads', path: '/orders/', status: 'synced', fetched: 4, created: 2, updated: 1, skipped: 1, lastError: null, configuredBy: 'default', coverageStatus: 'official_api', sourceLabel: 'Official API', fileImported: 0 },
+        { key: 'invoices', label: 'Invoices', path: null, status: 'not_mapped', fetched: null, created: null, updated: null, skipped: null, lastError: null, configuredBy: 'not_mapped', coverageStatus: 'not_connected', sourceLabel: 'No source connected', fileImported: 0 },
+        { key: 'fuel', label: 'Fuel', path: null, status: 'not_mapped', fetched: null, created: null, updated: null, skipped: null, lastError: null, configuredBy: 'not_mapped', coverageStatus: 'not_connected', sourceLabel: 'No source connected', fileImported: 0 },
+      ],
+    })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show advanced mapping' }))
+    expect(screen.getByRole('button', { name: 'Save mapping' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Invoices'), { target: { value: ' confirmed/path/ ' } })
+    fireEvent.change(screen.getByLabelText('Fuel'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/integrations/datatruck/configure', expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({ endpointMapping: { invoices: '/confirmed/path/' } }),
+    })))
+    await screen.findByText('Endpoint mapping saved.')
+    expect(JSON.stringify(document.body.textContent)).not.toContain('token')
+  })
+
+  it('shows Test only when an endpoint value exists and renders safe test results', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        httpStatus: 200,
+        shape: 'results',
+        recordCount: 1,
+        fieldNames: ['id', 'status'],
+        pagination: { detected: true },
+      }),
+    })
+    global.fetch = fetchMock as never
+
+    render(<IntegrationOverviewView data={makeData({
+      source: 'datatruck',
+      title: 'Datatruck Overview',
+      connected: true,
+      datatruckCoverage: [
+        { key: 'invoices', label: 'Invoices', path: null, status: 'not_mapped', fetched: null, created: null, updated: null, skipped: null, lastError: null, configuredBy: 'not_mapped', coverageStatus: 'not_connected', sourceLabel: 'No source connected', fileImported: 0 },
+      ],
+    })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show advanced mapping' }))
+    expect(screen.queryByRole('button', { name: 'Test' })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Invoices'), { target: { value: '/confirmed/path/' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/integrations/datatruck/test-endpoint', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ path: '/confirmed/path/' }),
+    })))
+    expect(await screen.findByText('Success. HTTP 200. 1 result (results shape).')).toBeInTheDocument()
+    expect(screen.getByText('Fields: id, status Pagination detected.')).toBeInTheDocument()
+    expect(JSON.stringify(document.body.textContent)).not.toContain('secret-token')
   })
 })

@@ -71,3 +71,73 @@ it('shows source account metadata in the subtitle without empty placeholders', (
   expect(screen.getByText(/@dispatch_updates · Telegram ·/)).toBeInTheDocument()
   expect(screen.queryByText(/undefined|null/)).not.toBeInTheDocument()
 })
+
+it('renders markdown formatting instead of raw tokens', () => {
+  render(
+    <QueryResults
+      answer={'## Load 2543\n\n**Status:** In transit\n\n- Driver: John Doe\n- ETA: 3:30 PM'}
+      sources={[]}
+      complete
+      copied={false}
+      onCopy={jest.fn()}
+    />,
+  )
+
+  expect(screen.getByRole('heading', { name: 'Load 2543' })).toBeInTheDocument()
+  expect(screen.getByText('Status:').tagName).toBe('STRONG')
+  expect(screen.getByText('Driver: John Doe')).toBeInTheDocument()
+  expect(screen.queryByText(/\*\*Status:\*\*/)).not.toBeInTheDocument()
+})
+
+it('renders markdown tables', () => {
+  render(
+    <QueryResults
+      answer={'| Field | Value |\n| --- | --- |\n| Status | In transit |'}
+      sources={[]}
+      complete
+      copied={false}
+      onCopy={jest.fn()}
+    />,
+  )
+
+  expect(screen.getByRole('table')).toBeInTheDocument()
+  expect(screen.getByRole('columnheader', { name: 'Field' })).toBeInTheDocument()
+  expect(screen.getByRole('cell', { name: 'In transit' })).toBeInTheDocument()
+})
+
+it('does not render unsafe raw HTML', () => {
+  const { container } = render(
+    <QueryResults
+      answer={'<script>alert("x")</script>\n\n[unsafe](javascript:alert(1))'}
+      sources={[]}
+      complete
+      copied={false}
+      onCopy={jest.fn()}
+    />,
+  )
+
+  expect(container.querySelector('script')).toBeNull()
+  expect(screen.getByText('<script>alert("x")</script>')).toBeInTheDocument()
+  expect(container.textContent).toContain('[unsafe](javascript:alert(1))')
+  expect(container.querySelector('a[href^="javascript:"]')).toBeNull()
+})
+
+it('uses content previews instead of generic source titles', () => {
+  render(
+    <QueryResults
+      answer="Answer"
+      sources={[source(1, {
+        pageTitle: 'fact',
+        source: 'telegram',
+        content: 'Load 2543 ETA moved to 3:30 PM after the dispatcher update.',
+        labels: ['fact'],
+      })]}
+      complete
+      copied={false}
+      onCopy={jest.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Sources (1)' }))
+  expect(screen.getAllByText('Load 2543 ETA moved to 3:30 PM after the dispatcher update.')).toHaveLength(2)
+  expect(screen.queryByRole('heading', { name: 'fact' })).not.toBeInTheDocument()
+})

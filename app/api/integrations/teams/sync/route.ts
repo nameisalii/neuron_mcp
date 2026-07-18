@@ -33,6 +33,17 @@ export async function POST() {
     return NextResponse.json({ success: false, error: 'Microsoft Teams is not connected' }, { status: 404 })
   }
 
+  const metadata = integration.metadata && typeof integration.metadata === 'object' && !Array.isArray(integration.metadata)
+    ? integration.metadata as Record<string, unknown>
+    : {}
+  if (metadata.connectionLevel !== 'teams') {
+    return NextResponse.json({
+      success: false,
+      error: 'Teams message sync requires administrator approval from your Microsoft 365 organization.',
+      adminConsentRequired: true,
+    }, { status: 403 })
+  }
+
   const secondsSinceSync = integration.lastSyncAt
     ? (Date.now() - integration.lastSyncAt.getTime()) / 1000
     : Infinity
@@ -55,9 +66,7 @@ export async function POST() {
         where: { id: integration.id },
         data: {
           metadata: {
-            ...(integration.metadata && typeof integration.metadata === 'object' && !Array.isArray(integration.metadata)
-              ? integration.metadata as Record<string, unknown>
-              : {}),
+            ...metadata,
             status: result.reconnectNeeded
               ? 'needs_reconnect'
               : result.adminConsentRequired

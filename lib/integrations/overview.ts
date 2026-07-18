@@ -5,8 +5,10 @@ import type { GmailSyncMetadata, KnowledgeCategory } from '@/types'
 import { isIntegrationConnected } from './connection'
 import { getConnectedIntegrationToken } from './connection-server'
 import { isTelegramConfigured } from '@/lib/telegram/config'
+import { getDatatruckEndpointConfigs, type DatatruckEndpointKey } from '@/lib/datatruck/client'
+import { datatruckCoverageStatus, datatruckCoverageSourceLabel, type DatatruckCoverageStatus } from '@/lib/datatruck/coverage'
 
-export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'teams' | 'jira' | 'whatsapp' | 'datatruck'
+export type IntegrationSource = 'slack' | 'notion' | 'linear' | 'gmail' | 'granola' | 'discord' | 'telegram' | 'teams' | 'jira' | 'whatsapp' | 'datatruck' | 'five_eld'
 
 export type IntegrationFilter =
   | 'all'
@@ -64,6 +66,22 @@ export interface NotionProject {
   knowledgeCount: number
 }
 
+export interface DatatruckEndpointCoverage {
+  key: DatatruckEndpointKey
+  label: string
+  path: string | null
+  status: 'synced' | 'failed' | 'not_mapped'
+  fetched: number | null
+  created: number | null
+  updated: number | null
+  skipped: number | null
+  lastError: string | null
+  configuredBy: 'metadata' | 'env' | 'default' | 'not_mapped'
+  coverageStatus: DatatruckCoverageStatus
+  sourceLabel: string
+  fileImported: number
+}
+
 export interface IntegrationOverviewData {
   source: IntegrationSource
   title: string
@@ -79,6 +97,8 @@ export interface IntegrationOverviewData {
   filters: Array<{ key: IntegrationFilter; label: string; count: number }>
   items: IntegrationOverviewItem[]
   notionProjects?: NotionProject[]
+  datatruckCoverage?: DatatruckEndpointCoverage[]
+  datatruckWarnings?: string[]
   emptyState: IntegrationOverviewEmptyState
 }
 
@@ -102,6 +122,7 @@ function visibleKnowledgeWhere(source: IntegrationSource, workspaceId: string, u
 }
 
 function sourceTitle(source: IntegrationSource): string {
+  if (source === 'five_eld') return 'Five ELD Overview'
   if (source === 'whatsapp') return 'WhatsApp Business Overview'
   if (source === 'datatruck') return 'Datatruck Overview'
   return `${source.charAt(0).toUpperCase()}${source.slice(1)} Overview`
@@ -131,6 +152,8 @@ function sourceSubtitle(source: IntegrationSource): string {
       return 'Knowledge extracted from inbound WhatsApp Business messages.'
     case 'datatruck':
       return 'Knowledge extracted from Datatruck loads, documents, carriers, and dispatch context.'
+    case 'five_eld':
+      return 'Real-time ELD, GPS tracking, drivers, units, and route history.'
     default:
       return `${source} overview`
   }
@@ -138,7 +161,7 @@ function sourceSubtitle(source: IntegrationSource): string {
 
 function emptyState(source: IntegrationSource, connected: boolean): IntegrationOverviewEmptyState {
   const label = source.charAt(0).toUpperCase() + source.slice(1)
-  const displayLabel = source === 'whatsapp' ? 'WhatsApp Business' : label
+  const displayLabel = source === 'whatsapp' ? 'WhatsApp Business' : source === 'five_eld' ? 'Five ELD' : label
   if (!connected) {
     return {
       title: `${displayLabel} is not connected yet.`,
@@ -214,6 +237,12 @@ export async function loadIntegrationOverview(
       select: { id: true, lastSyncAt: true, metadata: true },
     })
     : null
+  const ttEldConnector = source === 'five_eld'
+    ? await prisma.apiConnector.findUnique({
+      where: { workspaceId_sourceKey: { workspaceId, sourceKey: 'five_eld' } },
+      select: { id: true, lastSyncAt: true, metadata: true, status: true },
+    })
+    : null
 
   const connected = source === 'notion'
     ? Boolean(getConnectedIntegrationToken(integration, {
@@ -225,6 +254,8 @@ export async function loadIntegrationOverview(
       ? isTelegramConfigured() && Boolean(integration?.channels.length)
       : source === 'datatruck'
         ? Boolean(datatruckConnector)
+      : source === 'five_eld'
+        ? ttEldConnector?.status === 'connected' || ttEldConnector?.status === 'sync_error'
       : isIntegrationConnected(integration)
   const where = visibleKnowledgeWhere(source, workspaceId, userId)
   const activeCategory = FILTER_LOOKUP.get(filter)?.category
@@ -280,6 +311,8 @@ export async function loadIntegrationOverview(
 
   const lastSyncAt = source === 'datatruck'
     ? datatruckConnector?.lastSyncAt?.toISOString() ?? null
+    : source === 'five_eld'
+      ? ttEldConnector?.lastSyncAt?.toISOString() ?? null
     : integration?.lastSyncAt?.toISOString() ?? null
   let summaryCards: IntegrationSummaryCard[] = [
     { label: 'Knowledge items', value: formatCount(totalCount) },
@@ -293,6 +326,21 @@ export async function loadIntegrationOverview(
 
   const details: IntegrationDetail[] = []
 
+  if (source === 'five_eld') {
+    const metadata = ttEldConnector?.metadata && typeof ttEldConnector.metadata === 'object' && !Array.isArray(ttEldConnector.metadata) ? ttEldConnector.metadata as Record<string, unknown> : {}
+    const counts = metadata.counts && typeof metadata.counts === 'object' && !Array.isArray(metadata.counts) ? metadata.counts as Record<string, number> : {}
+    summaryCards = [
+      { label: 'Knowledge items', value: formatCount(totalCount) },
+      { label: 'Realtime units', value: formatCount(counts.realtimeUnits ?? 0) },
+      { label: 'Active drivers', value: formatCount(counts.activeDrivers ?? 0) },
+      { label: 'Current assignments', value: formatCount(counts.currentAssignments ?? 0) },
+      { label: 'Active units (72h)', value: formatCount(counts.activeUnits72h ?? 0) },
+      { label: 'Last sync', value: lastSyncAt ? formatDate(lastSyncAt) : 'Never' },
+    ]
+    details.push({ label: 'USDOT', value: typeof metadata.usdot === 'string' ? metadata.usdot : '—' })
+    details.push({ label: 'Capabilities', value: Array.isArray(metadata.capabilities) ? metadata.capabilities.filter((value): value is string => typeof value === 'string').join(' · ') : '—' })
+  }
+
   if (source === 'datatruck') {
     const metadata = datatruckConnector?.metadata && typeof datatruckConnector.metadata === 'object' && !Array.isArray(datatruckConnector.metadata)
       ? datatruckConnector.metadata as Record<string, unknown>
@@ -301,8 +349,50 @@ export async function loadIntegrationOverview(
       ? metadata.lastSyncSummary as Record<string, unknown>
       : {}
     const endpoints = lastSyncSummary.endpoints && typeof lastSyncSummary.endpoints === 'object' && !Array.isArray(lastSyncSummary.endpoints)
-      ? lastSyncSummary.endpoints as Record<string, { fetched?: number }>
+      ? lastSyncSummary.endpoints as Record<string, { status?: string; fetched?: number; created?: number; updated?: number; skipped?: number; error?: string | null }>
       : {}
+    const manualModuleItems = await prisma.knowledgeItem.findMany({
+      where: { workspaceId, source: 'datatruck', sourceExternalId: { startsWith: 'manual:datatruck:' } },
+      select: { sourceMetadata: true },
+    })
+    const fileImportCounts: Record<string, number> = {}
+    for (const manualItem of manualModuleItems) {
+      const itemMetadata = manualItem.sourceMetadata && typeof manualItem.sourceMetadata === 'object' && !Array.isArray(manualItem.sourceMetadata)
+        ? manualItem.sourceMetadata as Record<string, unknown>
+        : {}
+      const moduleKey = typeof itemMetadata.moduleKey === 'string' ? itemMetadata.moduleKey : null
+      if (moduleKey) fileImportCounts[moduleKey] = (fileImportCounts[moduleKey] ?? 0) + 1
+    }
+
+    const coverage = getDatatruckEndpointConfigs(metadata).map((endpoint) => {
+      const summary = endpoints[endpoint.key]
+      const status = summary?.status === 'failed'
+        ? 'failed'
+        : endpoint.path
+          ? 'synced'
+          : 'not_mapped'
+      const fileImported = fileImportCounts[endpoint.key] ?? 0
+      const coverageStatus = datatruckCoverageStatus({
+        configuredBy: endpoint.configuredBy,
+        confirmed: endpoint.confirmed,
+        fileImportedCount: fileImported,
+      })
+      return {
+        coverageStatus,
+        sourceLabel: datatruckCoverageSourceLabel(coverageStatus),
+        fileImported,
+        key: endpoint.key,
+        label: endpoint.label,
+        path: endpoint.path,
+        status,
+        fetched: typeof summary?.fetched === 'number' ? summary.fetched : null,
+        created: typeof summary?.created === 'number' ? summary.created : null,
+        updated: typeof summary?.updated === 'number' ? summary.updated : null,
+        skipped: typeof summary?.skipped === 'number' ? summary.skipped : null,
+        lastError: typeof summary?.error === 'string' ? summary.error : null,
+        configuredBy: endpoint.configuredBy,
+      } satisfies DatatruckEndpointCoverage
+    })
 
     const [documentCount, recentDocuments] = await Promise.all([
       prisma.documentAttachment.count({ where: { workspaceId, source: 'datatruck' } }),
@@ -316,11 +406,13 @@ export async function loadIntegrationOverview(
 
     summaryCards = [
       { label: 'Knowledge items', value: formatCount(totalCount) },
+      { label: 'Documents', value: formatCount(documentCount) },
       { label: 'Loads', value: formatCount(endpoints.loads?.fetched ?? 0) },
+      { label: 'Dispatcher board', value: formatCount(endpoints.dispatcherBoard?.fetched ?? 0) },
       { label: 'Drivers', value: formatCount(endpoints.drivers?.fetched ?? 0) },
       { label: 'Trucks', value: formatCount(endpoints.trucks?.fetched ?? 0) },
       { label: 'Trailers', value: formatCount(endpoints.trailers?.fetched ?? 0) },
-      { label: 'Documents', value: formatCount(documentCount) },
+      { label: 'Work orders', value: formatCount(endpoints.workOrders?.fetched ?? 0) },
     ]
 
     details.push({ label: 'Company', value: typeof metadata.companyName === 'string' ? metadata.companyName : 'Datatruck' })
@@ -342,6 +434,13 @@ export async function loadIntegrationOverview(
     if (Array.isArray(lastSyncSummary.warnings) && lastSyncSummary.warnings.length > 0) {
       details.push({ label: 'Warnings', value: lastSyncSummary.warnings.join(' · ') })
     }
+    return buildOverviewData({
+      source, connected, filter, lastSyncAt, summaryCards, details, totalCount, categoryCounts, items,
+      datatruckCoverage: coverage,
+      datatruckWarnings: Array.isArray(lastSyncSummary.warnings)
+        ? lastSyncSummary.warnings.filter((warning): warning is string => typeof warning === 'string')
+        : [],
+    })
   }
 
   if (source === 'slack') {
@@ -483,6 +582,8 @@ function buildOverviewData({
   categoryCounts,
   items,
   notionProjects,
+  datatruckCoverage,
+  datatruckWarnings,
 }: {
   source: IntegrationSource
   connected: boolean
@@ -507,6 +608,8 @@ function buildOverviewData({
     typeOverriddenByUser: boolean
   }>
   notionProjects?: NotionProject[]
+  datatruckCoverage?: DatatruckEndpointCoverage[]
+  datatruckWarnings?: string[]
 }): IntegrationOverviewData {
   return {
     source,
@@ -533,6 +636,8 @@ function buildOverviewData({
       title: item.notionPageTitle ?? null,
     })),
     notionProjects,
+    datatruckCoverage,
+    datatruckWarnings,
     emptyState: emptyState(source, connected),
   }
 }

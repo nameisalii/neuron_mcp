@@ -35,6 +35,7 @@ interface GmailIntegrationCardProps {
   metadata: GmailMetadata | null
   connected?: boolean
   autoOpenSetup?: boolean
+  oauthBlocked?: boolean
 }
 
 const statTileClass = 'rounded-xl border border-warm/60 bg-cream px-3.5 py-2.5'
@@ -45,6 +46,7 @@ export default function GmailIntegrationCard({
   metadata,
   connected: connectedProp,
   autoOpenSetup = false,
+  oauthBlocked = false,
 }: GmailIntegrationCardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
@@ -82,8 +84,9 @@ export default function GmailIntegrationCard({
         {/* Body: metadata / messaging (grows so actions pin to the bottom) */}
         <div className="mt-5 flex-1 space-y-3 text-sm text-muted">
           {!connected && (
-            <p>Neuron reads selected Gmail labels and turns important emails into private, searchable memory.</p>
+            <><p>Neuron reads selected Gmail labels and turns important emails into private, searchable memory.</p><p className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${oauthBlocked ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{oauthBlocked ? 'Error' : 'Ready for test users · Verification needed for public users'}</p></>
           )}
+          {oauthBlocked && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"><p className="font-medium">Google blocked Gmail connection because this OAuth app is not verified for Gmail restricted scopes yet.</p><p className="mt-1">Basic Google Sign-In is separate and continues to work.</p></div>}
           {connected && !configured && (
             <p>Choose labels before syncing. Gmail stays personal by default.</p>
           )}
@@ -146,6 +149,7 @@ export default function GmailIntegrationCard({
         connected={connected}
         initialStep={connected ? 1 : 0}
         metadata={metadata}
+        oauthBlocked={oauthBlocked}
       />
     </>
   )

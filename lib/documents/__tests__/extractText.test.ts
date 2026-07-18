@@ -55,3 +55,17 @@ it('marks unknown formats as unsupported', async () => {
 
   expect(result.status).toBe('unsupported')
 })
+
+it('extracts spreadsheet data from XLSX files', async () => {
+  const XLSX = await import('xlsx')
+  const sheet = XLSX.utils.aoa_to_sheet([['invoice', 'total'], ['INV-1022', 2450]])
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Invoices')
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+
+  const result = await extractDocumentText({ buffer, fileName: 'invoices.xlsx', mimeType: null })
+
+  expect(result.status).toBe('extracted')
+  expect(result.text).toContain('Sheet: Invoices')
+  expect(result.text).toContain('INV-1022')
+})

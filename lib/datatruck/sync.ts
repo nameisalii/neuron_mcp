@@ -4,12 +4,17 @@ import { prisma } from '@/lib/db'
 import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding } from '@/lib/pinecone'
 import {
-  DATATRUCK_ENDPOINTS,
+  getDatatruckEndpointConfigs,
+  getDatatruckFullAccountEndpointConfigs,
+  datatruckInternalRequest,
   type DatatruckConnection,
+  type DatatruckInternalConnection,
+  type DatatruckEndpointConfig,
   type DatatruckEndpointKey,
   fetchDatatruckPaginated,
 } from './client'
 import {
+  genericDatatruckRecordNormalizer,
   normalizeDatatruckDriver,
   normalizeDatatruckLoad,
   normalizeDatatruckTrailer,
@@ -30,6 +35,33 @@ const ENDPOINT_KIND: Record<DatatruckEndpointKey, DatatruckEntityKind> = {
   trucks: 'truck',
   trailers: 'trailer',
   workOrders: 'work_order',
+  liveLoads: 'generic',
+  myLoads: 'generic',
+  ltlTrips: 'generic',
+  loadboard: 'generic',
+  planningBoard: 'generic',
+  invoices: 'generic',
+  bills: 'generic',
+  payroll: 'generic',
+  dispatchers: 'generic',
+  vendors: 'generic',
+  charges: 'generic',
+  transactions: 'generic',
+  customers: 'generic',
+  safetyTasks: 'generic',
+  compliance: 'generic',
+  inspections: 'generic',
+  fleetBoard: 'generic',
+  inventory: 'generic',
+  fleetIssues: 'generic',
+  users: 'generic',
+  reports: 'generic',
+  fuel: 'generic',
+  toll: 'generic',
+  moneyCode: 'generic',
+  cashAdvance: 'generic',
+  scale: 'generic',
+  mailbox: 'generic',
 }
 
 const MAX_LOAD_SUMMARY_CHARS = 8_000
@@ -42,7 +74,10 @@ export interface DatatruckLoadTotals {
 
 export interface DatatruckEndpointSummary {
   endpointKey: DatatruckEndpointKey
+  label: string
   path: string
+  configuredBy: 'metadata' | 'env' | 'default' | 'not_mapped'
+  status: 'synced' | 'failed' | 'not_mapped'
   fetched: number
   created: number
   updated: number
@@ -142,7 +177,7 @@ function limitText(content: string): string {
   return content.length <= MAX_LOAD_SUMMARY_CHARS ? content : `${content.slice(0, MAX_LOAD_SUMMARY_CHARS)}…`
 }
 
-async function upsertKnowledgeItem(params: {
+export async function upsertKnowledgeItem(params: {
   workspaceId: string
   endpointKey: DatatruckEndpointKey
   item: DatatruckNormalizedItem
@@ -220,6 +255,8 @@ function documentSignature(document: DatatruckNormalizedDocument): string {
     document.storageUrl ?? '',
     document.storageKey ?? '',
     document.mimeType ?? '',
+    document.fileSize ?? '',
+    document.extractionStatus ?? '',
     document.externalLoadId ?? '',
     document.sourceMessageId ?? '',
   ].join('|')
@@ -229,7 +266,7 @@ async function upsertDocumentAttachment(
   workspaceId: string,
   document: DatatruckNormalizedDocument,
   counters: { created: number; updated: number; skipped: number },
-): Promise<void> {
+): Promise<string> {
   const existing = await prisma.documentAttachment.findFirst({
     where: { workspaceId, source: 'datatruck', sourceExternalId: document.externalId },
     select: { id: true, fileName: true, sourceUrl: true, storageUrl: true, storageKey: true, mimeType: true, fileSize: true, extractionStatus: true, externalLoadId: true, documentType: true },
@@ -263,15 +300,19 @@ async function upsertDocumentAttachment(
     ].join('|')
     if (documentSignature(document) === currentSignature) {
       counters.skipped++
-      return
+      return existing.id
     }
     await prisma.documentAttachment.update({ where: { id: existing.id }, data: nextData })
     counters.updated++
-    return
+    return existing.id
   }
 
-  await prisma.documentAttachment.create({ data: { workspaceId, ...nextData } })
+  const created = await prisma.documentAttachment.create({
+    data: { workspaceId, ...nextData },
+    select: { id: true },
+  })
   counters.created++
+  return created.id
 }
 
 function loadTotalsFromRecords(records: DatatruckRecord[]): DatatruckLoadTotals {
@@ -286,12 +327,18 @@ function normalizeRecord(kind: DatatruckEntityKind, record: DatatruckRecord): Da
   if (kind === 'driver') return [normalizeDatatruckDriver(record)]
   if (kind === 'truck') return [normalizeDatatruckTruck(record)]
   if (kind === 'trailer') return [normalizeDatatruckTrailer(record)]
+  if (kind === 'generic') return [genericDatatruckRecordNormalizer('record', record)]
   return [normalizeDatatruckWorkOrder(record)]
 }
 
+function normalizeEndpointRecord(endpointKey: DatatruckEndpointKey, record: DatatruckRecord): DatatruckNormalizedItem[] {
+  const kind = ENDPOINT_KIND[endpointKey]
+  if (kind === 'generic') return [genericDatatruckRecordNormalizer(endpointKey, record)]
+  return normalizeRecord(kind, record)
+}
+
 function summarizeEndpoint(
-  endpointKey: DatatruckEndpointKey,
-  path: string,
+  endpoint: DatatruckEndpointConfig,
   fetched: number,
   created: number,
   updated: number,
@@ -301,7 +348,21 @@ function summarizeEndpoint(
   nextStoppedReason: DatatruckEndpointSummary['nextStoppedReason'],
   error: string | null,
 ): DatatruckEndpointSummary {
-  return { endpointKey, path, fetched, created, updated, skipped, pagesFetched, countFromApi, nextStoppedReason, error }
+  return {
+    endpointKey: endpoint.key,
+    label: endpoint.label,
+    path: endpoint.path ?? '',
+    configuredBy: endpoint.configuredBy,
+    status: endpoint.path ? (error ? 'failed' : 'synced') : 'not_mapped',
+    fetched,
+    created,
+    updated,
+    skipped,
+    pagesFetched,
+    countFromApi,
+    nextStoppedReason,
+    error,
+  }
 }
 
 export async function syncDatatruckKnowledge(
@@ -309,6 +370,7 @@ export async function syncDatatruckKnowledge(
   connection: DatatruckConnection,
   _previousCursors: Record<string, string | null> = {},
   _previousLoadTotals?: DatatruckLoadTotals,
+  metadata: unknown = null,
 ): Promise<DatatruckSyncResult> {
   const counters = { created: 0, updated: 0, skipped: 0, embeddingErrors: 0 }
   const failedEndpoints: DatatruckEndpointKey[] = []
@@ -318,9 +380,14 @@ export async function syncDatatruckKnowledge(
   let totalFetched = 0
   let hasMore = false
 
-  for (const endpointKey of Object.keys(DATATRUCK_ENDPOINTS) as DatatruckEndpointKey[]) {
-    const endpointPath = DATATRUCK_ENDPOINTS[endpointKey]
-    const result = await fetchDatatruckPaginated(connection, endpointKey)
+  for (const endpoint of getDatatruckEndpointConfigs(metadata)) {
+    const endpointKey = endpoint.key
+    if (!endpoint.path) {
+      endpointSummaries[endpointKey] = summarizeEndpoint(endpoint, 0, 0, 0, 0, 0, null, 'complete', null)
+      continue
+    }
+
+    const result = await fetchDatatruckPaginated(connection, endpointKey, { path: endpoint.path })
     const endpointCounters = { created: 0, updated: 0, skipped: 0, embeddingErrors: 0 }
     let endpointError: string | null = null
     let endpointFetched = 0
@@ -344,12 +411,38 @@ export async function syncDatatruckKnowledge(
       }
 
       for (const record of records) {
-        const normalizedItems = normalizeRecord(ENDPOINT_KIND[endpointKey], record)
+        const normalizedItems = normalizeEndpointRecord(endpointKey, record)
+        const documentsByExternalId = new Map<string, DatatruckNormalizedDocument>()
         for (const item of normalizedItems) {
-          await upsertKnowledgeItem({ workspaceId, endpointKey, item, counters: endpointCounters })
           for (const document of item.documents) {
-            await upsertDocumentAttachment(workspaceId, document, endpointCounters)
+            documentsByExternalId.set(document.externalId, document)
           }
+        }
+        const documentIdsByExternalId = new Map<string, string>()
+        for (const document of documentsByExternalId.values()) {
+          const documentId = await upsertDocumentAttachment(workspaceId, document, endpointCounters)
+          documentIdsByExternalId.set(document.externalId, documentId)
+        }
+        const documentIds = [...documentIdsByExternalId.values()]
+        for (const item of normalizedItems) {
+          const itemDocumentIds = item.documents
+            .map((document) => documentIdsByExternalId.get(document.externalId))
+            .filter((documentId): documentId is string => Boolean(documentId))
+          const relatedDocumentIds = item.kind === 'load' && item.relatedLoadId && documentIds.length > 0
+            ? documentIds
+            : itemDocumentIds
+          const itemWithDocumentLinks: DatatruckNormalizedItem = relatedDocumentIds.length > 0
+            ? {
+                ...item,
+                sourceMetadata: {
+                  ...item.sourceMetadata,
+                  hasAttachment: true,
+                  documentIds: relatedDocumentIds,
+                  ...(itemDocumentIds.length === 1 ? { documentId: itemDocumentIds[0] } : {}),
+                },
+              }
+            : item
+          await upsertKnowledgeItem({ workspaceId, endpointKey, item: itemWithDocumentLinks, counters: endpointCounters })
         }
       }
 
@@ -387,8 +480,7 @@ export async function syncDatatruckKnowledge(
     if (endpointError) failedEndpoints.push(endpointKey)
 
     endpointSummaries[endpointKey] = summarizeEndpoint(
-      endpointKey,
-      endpointPath,
+      endpoint,
       endpointFetched,
       endpointCounters.created,
       endpointCounters.updated,
@@ -428,6 +520,165 @@ export async function syncDatatruckKnowledge(
   }
 }
 
+async function syncDatatruckEndpointSet(
+  workspaceId: string,
+  baseConnection: DatatruckConnection,
+  endpoints: DatatruckEndpointConfig[],
+  request?: (endpointOrUrl: string) => Promise<Response>,
+): Promise<DatatruckSyncResult> {
+  const counters = { created: 0, updated: 0, skipped: 0, embeddingErrors: 0 }
+  const failedEndpoints: DatatruckEndpointKey[] = []
+  const warnings: string[] = []
+  const endpointSummaries = {} as Record<DatatruckEndpointKey, DatatruckEndpointSummary>
+  const loadTotals = emptyLoadTotals()
+  let totalFetched = 0
+  let hasMore = false
+
+  for (const endpoint of endpoints) {
+    const endpointKey = endpoint.key
+    if (!endpoint.path) {
+      endpointSummaries[endpointKey] = summarizeEndpoint(endpoint, 0, 0, 0, 0, 0, null, 'complete', null)
+      continue
+    }
+
+    const result = await fetchDatatruckPaginated(baseConnection, endpointKey, { path: endpoint.path, request })
+    const endpointCounters = { created: 0, updated: 0, skipped: 0, embeddingErrors: 0 }
+    let endpointError: string | null = null
+    let endpointFetched = 0
+
+    try {
+      const records = result.records
+      endpointFetched = records.length
+      totalFetched += endpointFetched
+
+      if (endpointKey === 'loads') {
+        const partialTotals = loadTotalsFromRecords(records)
+        loadTotals.count += partialTotals.count
+        loadTotals.pay += partialTotals.pay
+        for (const [status, bucket] of Object.entries(partialTotals.byStatus)) {
+          const existing = loadTotals.byStatus[status] ?? { count: 0, pay: 0 }
+          loadTotals.byStatus[status] = {
+            count: existing.count + bucket.count,
+            pay: existing.pay + bucket.pay,
+          }
+        }
+      }
+
+      for (const record of records) {
+        const normalizedItems = normalizeEndpointRecord(endpointKey, record)
+        const documentsByExternalId = new Map<string, DatatruckNormalizedDocument>()
+        for (const item of normalizedItems) {
+          for (const document of item.documents) documentsByExternalId.set(document.externalId, document)
+        }
+        const documentIdsByExternalId = new Map<string, string>()
+        for (const document of documentsByExternalId.values()) {
+          const documentId = await upsertDocumentAttachment(workspaceId, document, endpointCounters)
+          documentIdsByExternalId.set(document.externalId, documentId)
+        }
+        const documentIds = [...documentIdsByExternalId.values()]
+        for (const item of normalizedItems) {
+          const itemDocumentIds = item.documents
+            .map((document) => documentIdsByExternalId.get(document.externalId))
+            .filter((documentId): documentId is string => Boolean(documentId))
+          const relatedDocumentIds = item.kind === 'load' && item.relatedLoadId && documentIds.length > 0
+            ? documentIds
+            : itemDocumentIds
+          const itemWithDocumentLinks: DatatruckNormalizedItem = relatedDocumentIds.length > 0
+            ? {
+                ...item,
+                sourceMetadata: {
+                  ...item.sourceMetadata,
+                  hasAttachment: true,
+                  documentIds: relatedDocumentIds,
+                  ...(itemDocumentIds.length === 1 ? { documentId: itemDocumentIds[0] } : {}),
+                },
+              }
+            : item
+          await upsertKnowledgeItem({ workspaceId, endpointKey, item: itemWithDocumentLinks, counters: endpointCounters })
+        }
+      }
+
+      if (endpointKey === 'loads' && result.nextStoppedReason === 'complete' && endpointFetched > 0) {
+        const summaryItem: DatatruckNormalizedItem = {
+          externalId: 'datatruck:loads:summary',
+          kind: 'load',
+          title: 'Datatruck load summary',
+          content: loadSummaryContent(loadTotals),
+          sourceMetadata: { recordType: 'load', summaryType: 'load_summary', loadCount: loadTotals.count, totalPay: loadTotals.pay },
+          sourceUrl: null,
+          owner: null,
+          sourceCreatedAt: null,
+          relatedLoadId: null,
+          documents: [],
+        }
+        await upsertKnowledgeItem({ workspaceId, endpointKey, item: summaryItem, counters: endpointCounters })
+      }
+
+      if (result.nextStoppedReason === 'max_pages' || result.nextStoppedReason === 'max_records') {
+        hasMore = true
+        warnings.push(`Datatruck ${endpointKey} stopped after ${result.pagesFetched} page(s).`)
+      }
+      if (result.errors.length > 0) {
+        endpointError = result.errors.join('; ')
+        warnings.push(`Datatruck ${endpointKey} returned a pagination error.`)
+      }
+    } catch (error) {
+      endpointError = error instanceof Error ? error.message : 'unknown error'
+      warnings.push(`Datatruck ${endpointKey} failed.`)
+      console.error('[datatruck/sync] endpoint failed', { endpointKey, message: endpointError })
+    }
+
+    if (endpointError) failedEndpoints.push(endpointKey)
+    endpointSummaries[endpointKey] = summarizeEndpoint(
+      endpoint,
+      endpointFetched,
+      endpointCounters.created,
+      endpointCounters.updated,
+      endpointCounters.skipped,
+      result.pagesFetched,
+      result.countFromApi,
+      result.nextStoppedReason,
+      endpointError,
+    )
+    counters.created += endpointCounters.created
+    counters.updated += endpointCounters.updated
+    counters.skipped += endpointCounters.skipped
+    counters.embeddingErrors += endpointCounters.embeddingErrors
+  }
+
+  const ok = failedEndpoints.length === 0
+  return {
+    ok,
+    fetched: totalFetched,
+    created: counters.created,
+    updated: counters.updated,
+    skipped: counters.skipped,
+    embeddingErrors: counters.embeddingErrors,
+    failedEndpoints,
+    endpoints: endpointSummaries,
+    totalFetched,
+    totalCreated: counters.created,
+    totalUpdated: counters.updated,
+    totalSkipped: counters.skipped,
+    warnings,
+    hasMore,
+    loadTotals,
+    message: ok ? 'Datatruck sync complete.' : 'Datatruck sync completed with some warnings.',
+  }
+}
+
+export async function syncDatatruckFullAccountKnowledge(
+  workspaceId: string,
+  connection: DatatruckInternalConnection,
+): Promise<DatatruckSyncResult> {
+  return syncDatatruckEndpointSet(
+    workspaceId,
+    { apiBaseUrl: `https://${connection.companyName}.datatruck.io`, apiToken: '' },
+    getDatatruckFullAccountEndpointConfigs(),
+    (endpointOrUrl) => datatruckInternalRequest(connection, endpointOrUrl),
+  )
+}
+
 export {
   normalizeDatatruckDriver,
   normalizeDatatruckLoad,
@@ -435,4 +686,5 @@ export {
   normalizeDatatruckTruck,
   normalizeDatatruckWorkOrder,
   normalizeDispatcherBoardItem,
+  genericDatatruckRecordNormalizer,
 }

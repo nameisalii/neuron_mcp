@@ -5,25 +5,35 @@ import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { requireWorkspaceMember } from '@/lib/api/workspace-auth'
 import { encrypt } from '@/lib/crypto'
-import { POST } from '../route'
+import { PATCH, POST } from '../route'
 
 jest.mock('@clerk/nextjs/server', () => ({ auth: jest.fn() }))
 jest.mock('@/lib/api/workspace-auth', () => ({ requireWorkspaceMember: jest.fn() }))
 jest.mock('@/lib/crypto', () => ({ encrypt: jest.fn((value: string) => `encrypted(${value})`) }))
 jest.mock('@/lib/db', () => ({
   prisma: {
-    apiConnector: { upsert: jest.fn() },
+    apiConnector: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
   },
 }))
 
 const mockAuth = jest.mocked(auth)
 const mockRequireWorkspaceMember = jest.mocked(requireWorkspaceMember)
 const mockEncrypt = jest.mocked(encrypt)
+const mockFindUnique = jest.mocked(prisma.apiConnector.findUnique)
+const mockUpdate = jest.mocked(prisma.apiConnector.update)
 const mockUpsert = jest.mocked(prisma.apiConnector.upsert)
 
 function request(body: unknown) {
   return POST(new Request('http://localhost/api/integrations/datatruck/configure', {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }))
+}
+
+function patchRequest(body: unknown) {
+  return PATCH(new Request('http://localhost/api/integrations/datatruck/configure', {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }))
@@ -36,6 +46,8 @@ beforeEach(() => {
     workspaceId: 'workspace-1',
     member: { role: 'admin', status: 'active', displayName: 'Ali' },
   } as never)
+  mockFindUnique.mockResolvedValue({ id: 'connector-1', metadata: { companyName: 'sflogistics' } } as never)
+  mockUpdate.mockResolvedValue({} as never)
   mockUpsert.mockResolvedValue({ id: 'connector-1', status: 'connected' } as never)
 })
 
@@ -72,7 +84,7 @@ it('rejects a missing API token', async () => {
 })
 
 it('normalizes a full Datatruck URL to the company name and builds the base URL', async () => {
-  const res = await request({ companyName: 'https://SFLogistics.datatruck.io/', apiToken: 'secret' })
+  const res = await request({ companyName: 'https://SFLogistics.datatruck.io/settings/tokens', apiToken: 'secret' })
 
   expect(res.status).toBe(200)
   expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -86,6 +98,16 @@ it('normalizes a full Datatruck URL to the company name and builds the base URL'
   }))
   const json = await res.json()
   expect(json.connector.companyName).toBe('sflogistics')
+})
+
+it('rejects an unsafe normalized company name', async () => {
+  const res = await request({ companyName: '-bad-company', apiToken: 'secret' })
+
+  expect(res.status).toBe(400)
+  expect(await res.json()).toEqual({
+    error: 'Enter a valid Datatruck company name using lowercase letters, numbers, and hyphens.',
+  })
+  expect(mockUpsert).not.toHaveBeenCalled()
 })
 
 it('stores the encrypted token, never the raw token', async () => {
@@ -109,4 +131,68 @@ it('never returns the token or encrypted credential in the response', async () =
     message: 'Datatruck connected.',
     connector: { id: 'connector-1', status: 'connected', companyName: 'sflogistics' },
   })
+})
+
+it('saves endpoint mapping in connector metadata without accepting unknown keys', async () => {
+  const res = await patchRequest({
+    endpointMapping: {
+      invoices: 'confirmed/path/',
+      customers: '/confirmed/customers/',
+      unknown: '/do-not-store/',
+    },
+  })
+
+  expect(res.status).toBe(200)
+  expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+    where: { id: 'connector-1' },
+    data: {
+      metadata: {
+        companyName: 'sflogistics',
+        endpointMapping: {
+          invoices: '/confirmed/path/',
+          customers: '/confirmed/customers/',
+        },
+      },
+    },
+  }))
+  const body = JSON.stringify(await res.json())
+  expect(body).not.toContain('do-not-store')
+  expect(body).not.toContain('secret')
+})
+
+it('ignores empty endpoint strings and preserves existing default metadata', async () => {
+  mockFindUnique.mockResolvedValue({
+    id: 'connector-1',
+    metadata: {
+      companyName: 'sflogistics',
+      endpoints: {
+        loads: '/orders/',
+        drivers: '/drivers/list/',
+      },
+    },
+  } as never)
+
+  const res = await patchRequest({
+    endpointMapping: {
+      invoices: '   ',
+      fuel: '',
+      customers: 'confirmed/customers/',
+    },
+  })
+
+  expect(res.status).toBe(200)
+  expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+    data: {
+      metadata: {
+        companyName: 'sflogistics',
+        endpoints: {
+          loads: '/orders/',
+          drivers: '/drivers/list/',
+        },
+        endpointMapping: {
+          customers: '/confirmed/customers/',
+        },
+      },
+    },
+  }))
 })

@@ -7,11 +7,13 @@ import { ArrowLeft, BookmarkPlus, CheckCircle, ChevronRight, ExternalLink, FileT
 import { Card } from '@/components/ui/card'
 import { BrandTile, type BrandKey } from '@/components/BrandLogo'
 import KnowledgeCard from '@/components/KnowledgeCard'
-import { INTEGRATION_FILTERS, type IntegrationOverviewData } from '@/lib/integrations/overview'
+import { INTEGRATION_FILTERS, type DatatruckEndpointCoverage, type IntegrationOverviewData } from '@/lib/integrations/overview'
 import { clsx } from 'clsx'
 import DatatruckSetupModal from './DatatruckSetupModal'
 import AddKnowledgeModal from './AddKnowledgeModal'
+import ConnectSourceModal from './ConnectSourceModal'
 import { integrationConnectClass } from './IntegrationCardUi'
+import TruckIntegrationLogo from '@/components/TruckIntegrationLogo'
 
 function manualMetadataOf(item: { sourceMetadata?: unknown }): Record<string, unknown> | null {
   const metadata = item.sourceMetadata
@@ -24,6 +26,7 @@ interface Props {
 }
 
 const BRAND_SOURCES = new Set<BrandKey>(['slack', 'notion', 'linear', 'gmail', 'discord', 'granola', 'telegram', 'teams', 'jira', 'whatsapp'])
+const DATATRUCK_CORE_ENDPOINTS = new Set(['loads', 'drivers', 'trucks', 'trailers', 'workOrders', 'dispatcherBoard'])
 
 function asBrandKey(source: string): BrandKey | null {
   const normalized = source.toLowerCase()
@@ -40,12 +43,53 @@ function timeAgo(iso: string | null): string {
   return new Date(iso).toLocaleDateString()
 }
 
+function normalizeEndpointPath(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+}
+
+function endpointPathLabel(endpoint: DatatruckEndpointCoverage): string {
+  if (endpoint.path) return endpoint.path
+  return endpoint.configuredBy === 'not_mapped' ? 'Not available via current API' : 'Endpoint not configured'
+}
+
+function endpointStatusLabel(endpoint: DatatruckEndpointCoverage): string {
+  if (endpoint.status === 'failed') return 'Failed'
+  if (endpoint.status === 'not_mapped') {
+    return endpoint.configuredBy === 'not_mapped' ? 'Not available via current API' : 'Endpoint not configured'
+  }
+  return endpoint.fetched === null ? 'Connected' : 'Synced'
+}
+
+function endpointSourceLabel(endpoint: DatatruckEndpointCoverage): string {
+  if (endpoint.configuredBy === 'default') return 'Official API'
+  if (endpoint.configuredBy === 'metadata') return 'Custom endpoint'
+  if (endpoint.configuredBy === 'env') return 'Environment endpoint'
+  return 'Unconfirmed'
+}
+
 export default function IntegrationOverviewView({ data }: Props) {
   const router = useRouter()
   const [items, setItems] = useState(data.items)
   const [overrides, setOverrides] = useState<Record<string, { from: string; to: string }>>({})
   const [isDatatruckSetupOpen, setIsDatatruckSetupOpen] = useState(false)
   const [isAddKnowledgeOpen, setIsAddKnowledgeOpen] = useState(false)
+  const [connectSourceKey, setConnectSourceKey] = useState<string | null>(null)
+  const initialEndpointMapping = useMemo(() => Object.fromEntries(
+    (data.datatruckCoverage ?? [])
+      .filter((endpoint) => endpoint.configuredBy === 'metadata' && endpoint.path)
+      .map((endpoint) => [endpoint.key, endpoint.path ?? '']),
+  ), [data.datatruckCoverage])
+  const [endpointMapping, setEndpointMapping] = useState<Record<string, string>>(() => initialEndpointMapping)
+  const [isAdvancedMappingOpen, setIsAdvancedMappingOpen] = useState(false)
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false)
+  const [isEditingCoreEndpoints, setIsEditingCoreEndpoints] = useState(false)
+  const [isSavingEndpointMapping, setIsSavingEndpointMapping] = useState(false)
+  const [endpointMappingMessage, setEndpointMappingMessage] = useState<string | null>(null)
+  const [endpointTestResults, setEndpointTestResults] = useState<Record<string, { ok: boolean; message: string; details?: string }>>({})
+  const [testingEndpointKey, setTestingEndpointKey] = useState<string | null>(null)
   const categoryCounts = useMemo(() => {
     const next = { ...data.categoryCounts }
     for (const change of Object.values(overrides)) {
@@ -72,6 +116,17 @@ export default function IntegrationOverviewView({ data }: Props) {
     if (normalized === 'status updates') return { ...card, value: String(categoryCounts.status_update ?? 0) }
     return card
   })
+  const cleanedEndpointMapping = useMemo(() => Object.fromEntries(
+    Object.entries(endpointMapping)
+      .map(([key, value]) => [key, normalizeEndpointPath(value)] as const)
+      .filter(([, value]) => value.length > 0),
+  ), [endpointMapping])
+  const endpointMappingHasChanges = JSON.stringify(cleanedEndpointMapping) !== JSON.stringify(initialEndpointMapping)
+  const datatruckCoverage = data.datatruckCoverage ?? []
+  const datatruckCoreCoverage = datatruckCoverage.filter((endpoint) => DATATRUCK_CORE_ENDPOINTS.has(endpoint.key))
+  const datatruckOptionalCoverage = datatruckCoverage.filter((endpoint) => !DATATRUCK_CORE_ENDPOINTS.has(endpoint.key))
+  const datatruckConnectedCount = datatruckCoverage.filter((endpoint) => endpoint.status !== 'not_mapped').length
+  const datatruckNotAvailableCount = datatruckCoverage.filter((endpoint) => endpoint.status === 'not_mapped').length
 
   function handleCategoryChange(id: string, nextCategory: string) {
     setItems((prev) => prev.map((item) => {
@@ -87,6 +142,69 @@ export default function IntegrationOverviewView({ data }: Props) {
     }))
   }
 
+  async function saveEndpointMapping() {
+    setIsSavingEndpointMapping(true)
+    setEndpointMappingMessage(null)
+    try {
+      const res = await fetch('/api/integrations/datatruck/configure', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpointMapping: cleanedEndpointMapping }),
+      })
+      const json = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) throw new Error(json.error ?? 'Could not save endpoint mapping. Please try again.')
+      setEndpointMappingMessage('Endpoint mapping saved.')
+      router.refresh()
+    } catch (error) {
+      setEndpointMappingMessage(error instanceof Error ? error.message : 'Could not save endpoint mapping. Please try again.')
+    } finally {
+      setIsSavingEndpointMapping(false)
+    }
+  }
+
+  async function testEndpoint(endpointKey: string) {
+    const path = normalizeEndpointPath(endpointMapping[endpointKey] ?? '')
+    if (!path) return
+    setTestingEndpointKey(endpointKey)
+    setEndpointTestResults((current) => ({ ...current, [endpointKey]: { ok: false, message: 'Testing endpoint...' } }))
+    try {
+      const res = await fetch('/api/integrations/datatruck/test-endpoint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+      const json = await res.json().catch(() => ({})) as {
+        error?: string
+        httpStatus?: number
+        shape?: string
+        recordCount?: number
+        fieldNames?: string[]
+        pagination?: { detected?: boolean }
+      }
+      if (!res.ok) throw new Error(json.error ?? 'Endpoint test failed.')
+      const fields = json.fieldNames?.length ? `Fields: ${json.fieldNames.slice(0, 10).join(', ')}` : null
+      const pagination = json.pagination?.detected ? 'Pagination detected.' : null
+      setEndpointTestResults((current) => ({
+        ...current,
+        [endpointKey]: {
+          ok: true,
+          message: `Success. HTTP ${json.httpStatus ?? res.status}. ${json.recordCount ?? 0} result${json.recordCount === 1 ? '' : 's'} (${json.shape ?? 'unknown'} shape).`,
+          details: [fields, pagination].filter(Boolean).join(' '),
+        },
+      }))
+    } catch (error) {
+      setEndpointTestResults((current) => ({
+        ...current,
+        [endpointKey]: {
+          ok: false,
+          message: error instanceof Error ? error.message : 'Endpoint test failed.',
+        },
+      }))
+    } finally {
+      setTestingEndpointKey(null)
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       <div className="flex items-start justify-between gap-4">
@@ -98,6 +216,8 @@ export default function IntegrationOverviewView({ data }: Props) {
           <div className="flex items-center gap-3">
             {brand ? (
               <BrandTile brand={brand} className="h-12 w-12" />
+            ) : data.source === 'five_eld' || data.source === 'datatruck' ? (
+              <TruckIntegrationLogo provider={data.source} size={32} />
             ) : null}
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{data.title}</h1>
@@ -165,6 +285,240 @@ export default function IntegrationOverviewView({ data }: Props) {
           </div>
         </Card>
       )}
+
+      {data.source === 'datatruck' && datatruckCoverage.length ? (
+        <section className="space-y-4">
+          <Card padding="sm">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Datatruck coverage</h2>
+                <p className="mt-1 max-w-2xl text-xs text-gray-500">
+                  Neuron automatically syncs Datatruck's core modules. Connect additional modules through a discovered API endpoint or a file import.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
+                {datatruckCoreCoverage.length} official modules connected
+              </span>
+            </div>
+
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Core Datatruck data</h3>
+            <div className="mb-4 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {datatruckCoreCoverage.map((endpoint) => (
+                <div key={endpoint.key} className="flex items-center gap-2 text-sm text-gray-700">
+                  <CheckCircle className={clsx('h-3.5 w-3.5', endpoint.status === 'failed' ? 'text-red-400' : 'text-green-500')} />
+                  <span className="font-medium">{endpoint.label}</span>
+                  {typeof endpoint.fetched === 'number' && <span className="text-xs text-gray-400">{endpoint.fetched} records</span>}
+                </div>
+              ))}
+            </div>
+
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Additional modules</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 text-xs uppercase text-gray-400">
+                    <th className="py-2 pr-3 font-medium">Module</th>
+                    <th className="py-2 pr-3 font-medium">Source</th>
+                    <th className="py-2 pr-3 font-medium">Status</th>
+                    <th className="py-2 pr-3 font-medium">Records</th>
+                    <th className="py-2 font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {datatruckOptionalCoverage.map((endpoint) => {
+                    const isConnected = endpoint.coverageStatus !== 'not_connected'
+                    return (
+                      <tr key={endpoint.key} className="border-b border-gray-50 last:border-0">
+                        <td className="py-2 pr-3 font-medium text-gray-800">{endpoint.label}</td>
+                        <td className="py-2 pr-3 text-xs text-gray-500">
+                          {endpoint.sourceLabel}
+                          {endpoint.coverageStatus === 'custom_api' && endpoint.path ? (
+                            <span className="ml-1 font-mono text-[11px] text-gray-400">{endpoint.path}</span>
+                          ) : null}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {isConnected ? (
+                            <span className={clsx(
+                              'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
+                              endpoint.status === 'failed' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700',
+                            )}
+                            >
+                              {endpoint.coverageStatus === 'file_import' ? 'Imported' : endpoint.status === 'failed' ? 'Failed' : 'Synced'}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-gray-600">
+                          {endpoint.coverageStatus === 'file_import'
+                            ? endpoint.fileImported
+                            : isConnected
+                              ? endpoint.fetched ?? '—'
+                              : '—'}
+                        </td>
+                        <td className="py-2">
+                          <button
+                            type="button"
+                            onClick={() => setConnectSourceKey(endpoint.key)}
+                            className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                          >
+                            {isConnected ? 'Manage source' : 'Connect source'}
+                          </button>
+                          {endpoint.lastError ? (
+                            <p className="mt-1 max-w-[220px] truncate text-[11px] text-red-500">{endpoint.lastError}</p>
+                          ) : null}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          {data.connected ? (
+            <Card padding="sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900">Advanced endpoint mapping</h2>
+                  <p className="mt-1 max-w-2xl text-xs text-gray-500">
+                    Optional. Add extra Datatruck API paths only if you know them from Datatruck API docs or Chrome DevTools Network.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAdvancedMappingOpen((current) => !current)}
+                  className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  {isAdvancedMappingOpen ? 'Hide advanced mapping' : 'Show advanced mapping'}
+                </button>
+              </div>
+              {!isAdvancedMappingOpen ? (
+                <p className="mt-3 text-xs text-gray-500">
+                  Company name and API token are enough for the default Datatruck sync. Use advanced mapping only to add confirmed paths for extra modules.
+                </p>
+              ) : (
+                <div className="mt-5 space-y-5">
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsTutorialOpen((current) => !current)}
+                      className="flex w-full items-center justify-between text-left text-sm font-medium text-gray-800"
+                    >
+                      <span>How to find Datatruck endpoint paths</span>
+                      <span className="text-xs text-gray-500">{isTutorialOpen ? 'Hide' : 'Show'}</span>
+                    </button>
+                    {isTutorialOpen && (
+                      <div className="mt-3 space-y-3 text-sm text-gray-600">
+                        <ol className="list-decimal space-y-1 pl-5">
+                          <li>Open the Datatruck page you want to sync.</li>
+                          <li>Open Chrome DevTools.</li>
+                          <li>Go to the Network tab.</li>
+                          <li>Filter by Fetch/XHR.</li>
+                          <li>Refresh the Datatruck page.</li>
+                          <li>Click the API request.</li>
+                          <li>Copy the path after /api/v1/openapi.</li>
+                          <li>Paste it here and click Test endpoint.</li>
+                          <li>Save mapping if the test succeeds.</li>
+                        </ol>
+                        <div className="rounded-md bg-white p-3 text-xs text-gray-600">
+                          <p>Full URL: https://yourcompany.datatruck.io/api/v1/openapi/confirmed/path/</p>
+                          <p>Endpoint path: /confirmed/path/</p>
+                        </div>
+                        <p className="text-xs font-medium text-gray-700">Never paste your API token into endpoint fields.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-semibold text-gray-900">Core endpoints</h3>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingCoreEndpoints((current) => !current)}
+                        className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                      >
+                        {isEditingCoreEndpoints ? 'Lock core endpoints' : 'Edit core endpoints'}
+                      </button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {datatruckCoreCoverage.map((endpoint) => (
+                        <div key={endpoint.key} className="space-y-1">
+                          <label htmlFor={`datatruck-endpoint-${endpoint.key}`} className="text-xs font-medium text-gray-500">{endpoint.label}</label>
+                          <div className="flex gap-2">
+                            <input
+                              id={`datatruck-endpoint-${endpoint.key}`}
+                              value={endpointMapping[endpoint.key] ?? ''}
+                              onChange={(event) => setEndpointMapping((current) => ({ ...current, [endpoint.key]: event.target.value }))}
+                              placeholder={endpoint.path ?? 'Paste endpoint path after /api/v1/openapi'}
+                              disabled={!isEditingCoreEndpoints}
+                              className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
+                            />
+                          </div>
+                          {!isEditingCoreEndpoints && <p className="text-xs text-gray-400">Using confirmed default: {endpoint.path}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-900">Optional modules</h3>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {datatruckOptionalCoverage.map((endpoint) => {
+                        const fieldValue = endpointMapping[endpoint.key] ?? ''
+                        const normalizedValue = normalizeEndpointPath(fieldValue)
+                        const result = endpointTestResults[endpoint.key]
+                        return (
+                          <div key={endpoint.key} className="space-y-1">
+                            <label htmlFor={`datatruck-endpoint-${endpoint.key}`} className="text-xs font-medium text-gray-500">{endpoint.label}</label>
+                            <div className="flex gap-2">
+                              <input
+                                id={`datatruck-endpoint-${endpoint.key}`}
+                                value={fieldValue}
+                                onChange={(event) => setEndpointMapping((current) => ({ ...current, [endpoint.key]: event.target.value }))}
+                                placeholder="Paste confirmed endpoint path after /api/v1/openapi"
+                                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                              />
+                              {normalizedValue ? (
+                                <button
+                                  type="button"
+                                  onClick={() => testEndpoint(endpoint.key)}
+                                  disabled={testingEndpointKey === endpoint.key}
+                                  className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {testingEndpointKey === endpoint.key ? 'Testing' : 'Test'}
+                                </button>
+                              ) : null}
+                            </div>
+                            {result ? (
+                              <div className={clsx('rounded-md px-3 py-2 text-xs', result.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700')}>
+                                <p className="font-medium">{result.message}</p>
+                                {result.details && <p className="mt-1 text-[11px]">{result.details}</p>}
+                              </div>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={saveEndpointMapping}
+                      disabled={isSavingEndpointMapping || !endpointMappingHasChanges}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Save mapping
+                    </button>
+                    {endpointMappingMessage && <span className="text-xs text-gray-500">{endpointMappingMessage}</span>}
+                  </div>
+                </div>
+              )}
+            </Card>
+          ) : null}
+        </section>
+      ) : null}
 
       {data.source === 'notion' && (
         <section>
@@ -316,6 +670,20 @@ export default function IntegrationOverviewView({ data }: Props) {
           router.refresh()
         }}
       />
+
+      {connectSourceKey ? (
+        <ConnectSourceModal
+          moduleKey={connectSourceKey}
+          moduleLabel={datatruckCoverage.find((endpoint) => endpoint.key === connectSourceKey)?.label ?? connectSourceKey}
+          currentMapping={cleanedEndpointMapping}
+          isOpen
+          onClose={() => setConnectSourceKey(null)}
+          onSaved={() => {
+            setConnectSourceKey(null)
+            router.refresh()
+          }}
+        />
+      ) : null}
     </div>
   )
 }

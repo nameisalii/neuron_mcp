@@ -88,11 +88,50 @@ it('normalizes driver, load, and dispatcher board records into readable content'
   expect(loadItems.map((item) => item.externalId)).toEqual([
     'datatruck:load:12345:summary',
     'datatruck:load:12345:stops',
+    'datatruck:load:12345:assignment',
     'datatruck:load:12345:documents',
-    'datatruck:load:12345:dispatch',
   ])
   expect(loadItems[0].content).toContain('Load: 12345')
-  expect(loadItems[2].documents).toHaveLength(1)
+  expect(loadItems.find((item) => item.externalId.endsWith(':documents'))?.documents).toHaveLength(1)
+
+  const richLoadItems = normalizeDatatruckLoad({
+    id: 54321,
+    load_id: 'LD-54321',
+    shipment_id: 'SHIP-77',
+    status: 'delivered',
+    customer__company_name: 'Target Customer',
+    dispatcher__full_name: 'Dana Dispatcher',
+    transportation_mode: 'FTL',
+    total_miles: 620,
+    total_pay: 2500,
+    per_mile_revenue: 4.03,
+    eta_detail: { on_time: true, eta_datetime: '2026-07-03T13:00:00Z' },
+    trip: {
+      trip_id: 'TRIP-9',
+      status: 'complete',
+      driver__full_name: 'Jane Doe',
+      team_driver__full_name: 'John Team',
+      truck__unit_number: '44',
+      carrier_name: 'Carrier Co',
+      settlement: { status: 'ready', settlement_number: 'SET-1', is_sent: true },
+    },
+    batch_orders: [{ invoice_number: 'INV-99', is_sent: true, batch: { batch_number: 'B-1', status: 'sent' } }],
+    equipment_type: 'Reefer',
+    driver_requirements: ['TWIC'],
+    min_temperature: '32',
+    max_temperature: '36',
+  })
+  const richSummary = richLoadItems.find((item) => item.externalId === 'datatruck:load:54321:summary')
+  const richFinancials = richLoadItems.find((item) => item.externalId === 'datatruck:load:54321:financials')
+  const richRequirements = richLoadItems.find((item) => item.externalId === 'datatruck:load:54321:requirements')
+  expect(richSummary?.content).toContain('Shipment ID: SHIP-77')
+  expect(richSummary?.content).toContain('Customer: Target Customer')
+  expect(richSummary?.sourceMetadata).toMatchObject({ customerCompanyName: 'Target Customer' })
+  expect(richFinancials?.content).toContain('Invoice information associated with this load.')
+  expect(richFinancials?.content).toContain('Invoice number: INV-99')
+  expect(richFinancials?.content).toContain('Settlement number: SET-1')
+  expect(richRequirements?.content).toContain('Equipment type: Reefer')
+  expect(richRequirements?.content).toContain('Driver requirements: TWIC')
 
   const dispatcher = normalizeDispatcherBoardItem({
     id: 'dispatch-1',
@@ -197,12 +236,18 @@ it('creates Datatruck knowledge items and attachments across all endpoints', asy
     data: expect.objectContaining({
       workspaceId: 'workspace-1',
       source: 'datatruck',
-      sourceExternalId: 'doc-1',
+      sourceExternalId: expect.stringMatching(/^datatruck:load:12345:document:/),
       externalLoadId: '12345',
       documentType: 'BOL',
-      extractionStatus: 'pending',
+      extractionStatus: 'remote_link',
     }),
   }))
+  expect(mockCreate.mock.calls.some(([args]) => {
+    const data = (args as { data: { sourceExternalId: string; sourceMetadata: Record<string, unknown> } }).data
+    return data.sourceExternalId === 'datatruck:load:12345:summary'
+      && Array.isArray(data.sourceMetadata.documentIds)
+      && data.sourceMetadata.hasAttachment === true
+  })).toBe(true)
   expect(result.loadTotals.count).toBe(1)
   expect(result.loadTotals.pay).toBe(0)
   expect(result.message).toBe('Datatruck sync complete.')
@@ -246,4 +291,51 @@ it('continues syncing the remaining endpoints when one endpoint fails', async ()
   expect(result.totalFetched).toBeGreaterThan(0)
   expect(result.endpoints.loads.fetched).toBeGreaterThan(0)
   expect(mockCreate).toHaveBeenCalled()
+})
+
+it('skips unmapped optional endpoints without failing sync', async () => {
+  mockApi({ '/drivers/list/': [{ id: 68, status: 'available' }] })
+
+  const result = await syncDatatruckKnowledge('workspace-1', connection)
+
+  expect(result.ok).toBe(true)
+  expect(result.endpoints.invoices.status).toBe('not_mapped')
+  expect(result.endpoints.invoices.fetched).toBe(0)
+  expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/confirmed/path/'), expect.anything())
+})
+
+it('syncs a configured optional endpoint with the generic normalizer', async () => {
+  mockApi({
+    '/confirmed/path/': [{ id: 'inv-1', invoice_number: 'INV-1', status: 'open', amount: '1200.50', updated_at: '2026-07-08T00:00:00Z' }],
+  })
+
+  const result = await syncDatatruckKnowledge('workspace-1', connection, {}, undefined, {
+    endpointMapping: { invoices: '/confirmed/path/' },
+  })
+
+  expect(result.ok).toBe(true)
+  expect(result.endpoints.invoices.status).toBe('synced')
+  expect(result.endpoints.invoices.fetched).toBe(1)
+  expect(mockCreate.mock.calls.some(([args]) => {
+    const data = (args as { data: { sourceExternalId: string; content: string; sourceMetadata: Record<string, unknown> } }).data
+    return data.sourceExternalId === 'datatruck:invoice-batch:inv-1'
+      && data.content.includes('Amount: 1200.50')
+      && data.sourceMetadata.endpointKey === 'invoices'
+  })).toBe(true)
+})
+
+it('keeps syncing when a configured optional endpoint fails', async () => {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/confirmed/path/')) return { ok: false, status: 403, json: async () => ({}) } as Response
+    return { ok: true, status: 200, json: async () => ({ count: 1, next: null, results: [{ id: 'ok' }] }) } as Response
+  }) as never
+
+  const result = await syncDatatruckKnowledge('workspace-1', connection, {}, undefined, {
+    endpointMapping: { invoices: '/confirmed/path/' },
+  })
+
+  expect(result.ok).toBe(false)
+  expect(result.failedEndpoints).toContain('invoices')
+  expect(result.endpoints.invoices.status).toBe('failed')
+  expect(result.totalFetched).toBeGreaterThan(0)
 })

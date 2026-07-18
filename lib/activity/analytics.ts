@@ -190,6 +190,7 @@ function formatSourceLabel(source: string): string {
   const normalized = source.toLowerCase()
   if (normalized === 'manual_upload') return 'Manual uploads'
   if (normalized === 'datatruck') return 'Datatruck'
+  if (normalized === 'five_eld') return 'Five ELD'
   if (normalized === 'gmail') return 'Gmail'
   if (normalized === 'slack') return 'Slack'
   if (normalized === 'notion') return 'Notion'
@@ -289,7 +290,7 @@ function detectIntegrationStatus(
   integration: IntegrationRow | null | undefined,
   connector: ConnectorRow | null | undefined,
 ): IntegrationHealthStat['status'] {
-  if (source === 'datatruck') {
+  if (source === 'datatruck' || source === 'five_eld') {
     if (!connector || connector.status === 'not_configured') return 'needs_setup'
     if (connector.status === 'sync_error' || extractWarningCount(connector.metadata) > 0) return 'sync_warning'
     return 'connected'

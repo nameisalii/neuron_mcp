@@ -15,6 +15,12 @@ export interface QuerySource {
   relevanceScore: number
 }
 
+export interface SourceRankingIntent {
+  requestedSources?: string[]
+  temporalType?: string
+  query?: string
+}
+
 const CATEGORY_PRIORITY: Record<string, number> = {
   decision: 7,
   rule: 6,
@@ -39,6 +45,47 @@ function timestamp(source: QuerySource): number {
   return new Date(source.sourceCreatedAt ?? source.updatedAt ?? 0).getTime() || 0
 }
 
+export function meaningfulSourceContent(content: string): boolean {
+  const cleaned = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  if (cleaned.length < 12) return false
+  if (/^(fact|update|message|note|n\/a|none)$/i.test(cleaned)) return false
+  if (!/[a-z0-9]/i.test(cleaned)) return false
+  return true
+}
+
+function exactMatchBoost(source: QuerySource, query: string | undefined): number {
+  if (!query) return 0
+  const terms = query.toLowerCase().split(/\W+/).filter((term) => term.length > 3)
+  if (terms.length === 0) return 0
+  const haystack = `${source.pageTitle} ${source.content} ${source.owner ?? ''} ${source.sourceExternalId ?? ''}`.toLowerCase()
+  const matches = terms.filter((term) => haystack.includes(term)).length
+  return Math.min(matches / Math.max(terms.length, 1), 1)
+}
+
+function recencyBoost(source: QuerySource): number {
+  const time = timestamp(source)
+  if (!time) return 0
+  const ageDays = Math.max(0, (Date.now() - time) / 86_400_000)
+  if (ageDays <= 1) return 1
+  if (ageDays <= 7) return 0.8
+  if (ageDays <= 30) return 0.45
+  if (ageDays <= 90) return 0.2
+  return 0
+}
+
+function hybridScore(source: QuerySource, intent?: SourceRankingIntent): number {
+  const requested = intent?.requestedSources ?? []
+  const sourceMatch = requested.length === 0 ? 0 : requested.includes(source.source) ? 1 : -0.5
+  const recency = intent?.temporalType && intent.temporalType !== 'all_time' ? recencyBoost(source) : 0
+  const exact = exactMatchBoost(source, intent?.query)
+  return (
+    source.relevanceScore * 0.55 +
+    sourceMatch * 0.2 +
+    recency * 0.15 +
+    exact * 0.1
+  )
+}
+
 function dedupeKey(source: QuerySource): string {
   if (source.source === 'linear') {
     return `linear:${source.sourceExternalId ?? source.sourceUrl ?? source.chunkId}`
@@ -52,9 +99,9 @@ function dedupeKey(source: QuerySource): string {
   return `${source.source}:${source.sourceExternalId ?? source.sourceUrl ?? source.chunkId}`
 }
 
-export function rankAndDedupeSources(sources: QuerySource[]): QuerySource[] {
+export function rankAndDedupeSources(sources: QuerySource[], intent?: SourceRankingIntent): QuerySource[] {
   const grouped = new Map<string, QuerySource>()
-  for (const source of sources) {
+  for (const source of sources.filter((item) => meaningfulSourceContent(item.content))) {
     const key = dedupeKey(source)
     const existing = grouped.get(key)
     if (!existing) {
@@ -72,6 +119,7 @@ export function rankAndDedupeSources(sources: QuerySource[]): QuerySource[] {
 
   return [...grouped.values()].sort((a, b) => {
     return (
+      hybridScore(b, intent) - hybridScore(a, intent) ||
       b.relevanceScore - a.relevanceScore ||
       categoryPriority(b) - categoryPriority(a) ||
       timestamp(b) - timestamp(a) ||
@@ -81,8 +129,8 @@ export function rankAndDedupeSources(sources: QuerySource[]): QuerySource[] {
   })
 }
 
-export function splitRankedSources(sources: QuerySource[], limit = 3) {
-  const ranked = rankAndDedupeSources(sources)
+export function splitRankedSources(sources: QuerySource[], limit = 3, intent?: SourceRankingIntent) {
+  const ranked = rankAndDedupeSources(sources, intent)
   return {
     sources: ranked,
     topSources: ranked.slice(0, limit),

@@ -1,0 +1,7882 @@
+# Datatruck Network Audit
+
+Date: 2026-07-10T01:21:00.618Z
+
+This audit was captured from an authenticated local browser session. Cookies, Authorization values, CSRF values, session IDs, JWTs, API keys, and raw records are intentionally omitted.
+
+## Summary Matrix
+
+| Module | Endpoint | Method | Status | Auth signals | Records | Pagination | Recommendation |
+|---|---|---:|---:|---|---:|---|---|
+| All loads | `https://sflogistics.datatruck.io/api/v2/order/list/full/?page=1&page_size=20&filter=%5B%5D&ordering=` | GET | 200 | Authorization | 20 | count, next, previous | Investigate supported token flow before production |
+| Live loads | `https://sflogistics.datatruck.io/api/v2/order/list/full/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22status%22%2C%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatched%22%2C%22in_transit%22%5D%7D%5D&ordering=` | GET | 200 | Authorization | 1 | count, next, previous | Investigate supported token flow before production |
+| My loads | `https://sflogistics.datatruck.io/api/v2/order/my-loads/?page=1&page_size=20&filter=%5B%5D&ordering=` | GET | 200 | Authorization | 20 | count, next, previous | Investigate supported token flow before production |
+| LTL trips | `https://sflogistics.datatruck.io/api/v1/ltl/list/?page=1&page_size=20&filter=%5B%5D&ordering=` | GET | 200 | Authorization | 0 | count, next, previous | Investigate supported token flow before production |
+| Loadboard | `https://sflogistics.datatruck.io/api/v1/user/subs-info/` | GET | 200 | Authorization |  |  | Investigate supported token flow before production |
+| Planning board | `https://sflogistics.datatruck.io/api/v1/configuration/list/?filter=[%7B%22column%22:%22key%22,%22value%22:[%22CALENDAR_DRIVER_STATUS_EDITABLE%22,%22SALARY_CREATE_TIME%22,%22WEEK_START_NUMBER%22,%22PLANNING_CALENDAR_DEL_DATE_COLORING%22],%22contains%22:%22in%22%7D]` | GET | 200 | Authorization | 4 | count, next, previous | Investigate supported token flow before production |
+| Dispatch board | `https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/drivers/?start_date=2026-06-14&end_date=2026-06-20&page=1&page_size=25` | GET | 200 | Authorization | 2 | count, next, previous | Investigate supported token flow before production |
+| Invoice batches | `https://sflogistics.datatruck.io/api/v1/invoice/batches/list/?page=1&page_size=20&filter=[]&ordering=` | GET | 200 | Authorization | 2 | count, next, previous | Investigate supported token flow before production |
+| Driver settlements | `https://sflogistics.datatruck.io/api/v1/salary/batches/list/?page=1&page_size=20&filter=[]&ordering=` | GET | 200 | Authorization | 15 | count, next, previous | Investigate supported token flow before production |
+| Dispatcher settlements | `https://sflogistics.datatruck.io/api/v1/salary/dispatcher/batch-list/?page=1&page_size=20&filter=%5B%5D&ordering=` | OPTIONS | 200 | None observed |  |  | Not enough evidence |
+| Vendor settlements | `https://sflogistics.datatruck.io/api/v1/vendor/batch/list/v2/?page=1&page_size=20&filter=%5B%5D&ordering=` | OPTIONS | 200 | None observed |  |  | Not enough evidence |
+| Bills | `https://sflogistics.datatruck.io/api/v1/vendor/bill/list/?from_date=2022-01-01&to_date=2026-07-09&page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3Afalse%2C%22column%22%3A%22is_archived%22%7D%5D&ordering=` | OPTIONS | 200 | None observed |  |  | Not enough evidence |
+| Charges | `https://sflogistics.datatruck.io/api/v1/settings/financial-types/list/?page_size=all&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22deduction%22%2C%22column%22%3A%22category%22%7D%5D` | GET | 200 | Authorization | 24 | count, next, previous | Investigate supported token flow before production |
+| Transactions | `https://sflogistics.datatruck.io/api/v1/salary/transactions/types/` | GET | 200 | Authorization |  |  | Investigate supported token flow before production |
+| Customers | `https://sflogistics.datatruck.io/api/v1/customer/?page=1&page_size=20&filter=[]&ordering=` | GET | 200 | Authorization | 20 | count, next, previous | Investigate supported token flow before production |
+| Vendors | `https://sflogistics.datatruck.io/api/v1/vendor/?page=1&page_size=20&filter=%5B%5D&ordering=` | GET | 200 | Authorization | 3 | count, next, previous | Investigate supported token flow before production |
+| Safety tasks | `https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22safety%22%2C%22safety-claim%22%2C%22safety-inspection%22%2C%22safety-archive%22%5D%7D%5D&type=filter` | OPTIONS | 200 | None observed |  |  | Not enough evidence |
+| Compliance | `https://sflogistics.datatruck.io/api/v1/user/subs-info/` | GET | 200 | Authorization |  |  | Investigate supported token flow before production |
+| Trucks | `https://sflogistics.datatruck.io/api/v2/truck/truck/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22value%22%3A%22inactive%22%2C%22column%22%3A%22status%22%7D%5D&ordering=-id` | GET | 200 | Authorization | 2 | count, next, previous | Investigate supported token flow before production |
+| Trailers | `https://sflogistics.datatruck.io/api/v2/truck/trailer-dispatch-statuses/` | GET | 200 | Authorization | 0 |  | Investigate supported token flow before production |
+| Inspections | `https://sflogistics.datatruck.io/api/v1/fleet/inspection/inspection-forms/list/?page=1&page_size=1000&filter=%5B%7B%22column%22%3A%22is_archived%22%2C%22value%22%3Afalse%2C%22contains%22%3A%22is%22%7D%5D&ordering=` | OPTIONS | 200 | None observed |  |  | Not enough evidence |
+| Fleet board | `https://sflogistics.datatruck.io/api/v1/truck/boards/total-gross-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all` | GET | 200 | Authorization | 2 | count, next, previous | Investigate supported token flow before production |
+| Inventory | `https://sflogistics.datatruck.io/api/v1/inventory/assets/list/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22is_archived%22%2C%22value%22%3Afalse%2C%22contains%22%3A%22contains%22%7D%5D&ordering=` | GET | 200 | Authorization | 0 | count, next, previous | Investigate supported token flow before production |
+| Work orders | `https://sflogistics.datatruck.io/api/v1/mc/select/?page_size=all&ordering=-id` | GET | 200 | Authorization | 1 | count, next, previous | Investigate supported token flow before production |
+| Fleet issues | `https://sflogistics.datatruck.io/api/v2/truck/task/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22column%22%3A%22task_status%22%2C%22value%22%3A%22completed%22%7D%2C%7B%22contains%22%3A%22is_not%22%2C%22column%22%3A%22task_status%22%2C%22value%22%3A%22archived%22%7D%5D&ordering=` | OPTIONS | 200 | None observed |  |  | Not enough evidence |
+| Drivers | `https://sflogistics.datatruck.io/api/v2/driver/list/?page=1&page_size=20&filter=[%7B%22contains%22:%22is%22,%22value%22:%22active%22,%22column%22:%22new_employee_status%22%7D]&ordering=` | GET | 200 | Authorization | 2 | count, next, previous | Investigate supported token flow before production |
+| Users | `https://sflogistics.datatruck.io/api/v2/driver/list/?page=1&page_size=20&filter=[%7B%22contains%22:%22is%22,%22value%22:%22active%22,%22column%22:%22new_employee_status%22%7D]&ordering=` | GET | 200 | Authorization | 2 | count, next, previous | Investigate supported token flow before production |
+| Reports | `https://sflogistics.datatruck.io/api/v1/dashboard/report/trip/dispatcher/?page=1&page_size=20&filter=[]&ordering=&start_date=2026-07-06T00:00:00&end_date=2026-07-12T23:59:59&nature_type=factual&service_type=delivery` | GET | 200 | Authorization | 1 | count, next, previous | Investigate supported token flow before production |
+| Fuel | `https://sflogistics.datatruck.io/api/v1/fuel/transactions/?ordering=&page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22fuel%22%2C%22column%22%3A%22transaction_type%22%7D%5D` | GET | 200 | Authorization | 20 | count, next, previous | Investigate supported token flow before production |
+| Toll | `https://sflogistics.datatruck.io/api/v1/toll/transactions/?ordering=&page=1&page_size=20&filter=%5B%5D` | GET | 200 | Authorization | 20 | count, next, previous | Investigate supported token flow before production |
+| Money code | `https://sflogistics.datatruck.io/api/v1/fuel/money-code-contracts` | GET | 200 | Authorization | 1 |  | Investigate supported token flow before production |
+| Cash advance | `https://sflogistics.datatruck.io/api/v1/user/subs-info/` | GET | 200 | Authorization |  |  | Investigate supported token flow before production |
+| Scale | `https://sflogistics.datatruck.io/api/v1/fuel/transactions/card-numbers?filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22scale%22%2C%22column%22%3A%22transaction_type%22%7D%5D&search=&page=1&page_size=20` | GET | 200 | Authorization | 0 | count, next, previous | Investigate supported token flow before production |
+| Mailbox | `https://sflogistics.datatruck.io/api/v1/user/subs-info/` | GET | 200 | Authorization |  |  | Investigate supported token flow before production |
+
+## Module Details
+
+### All loads
+
+Frontend: https://app.datatruck.io/load-management/all/load-trip
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=load-creation-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22load%22%2C%22trip%22%2C%22load-trip%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/count/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, upcoming, dispatched, in_transit, delivered, unpaid
+  - firstResultKeys: total, upcoming, dispatched, in_transit, delivered, unpaid
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/LTL_WORKFLOW_VISIBILITY/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/totals/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - firstResultKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=stop-checkout-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/list/full/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 20
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, order_stop_count, load_id, shipment_id, status, load_pay, adjusted_load_pay, load_type, payment_type, total_miles, note, note_created_by_full_name, equipment_type, created_datetime, modified_datetime, created_by_full_name, source, total_other_pay, total_pay, total_pay_base, driver_pay, driver_pay_base, per_mile_revenue, per_mile_revenue_base, miles, empty_miles, detention_flag, sub_status_name, sub_status_color, driver_settlement_status, dispatcher_settlement_status, order_batch_status, is_following, follower_ids, followers, tags, driver_id, driver_full_name, driver_mc_number_id, driver_mc_number_company_name, carrier_id, carrier_name, driver_carrier_id, driver_carrier_full_name, team_driver_id, team_driver_full_name, truck_id, truck_unit_number, trailer_id, trailer_unit_number, ltl_trip_id, ltl_trip_name, dispatcher_full_name, customer_id, customer__company_name, mc_number_id, mc_number__company_name, office__office_name, pickup_appointment_time, delivery_appointment_time, pickup_time, delivery_time, pickup_date, delivery_date, pickup_location, pickup_location_state, pickup_location_state_code, delivery_location, delivery_location_state, delivery_location_state_code, delivery_location_timezone, is_flagged, flagging_reason, trip, eta_final_status, eta_current_status, estimated_mile, eta_datetime, eta_last_updated_at_datetime, truck_location_name
+  - nestedObjectKeys: {"follower_ids":[],"followers":[],"tags":["name"],"trip":["id","status","trip_id","mile","empty_mile","heading_to","next_stop"],"documents":[],"equipment_type_child":["parent"]}
+- GET https://sflogistics.datatruck.io/api/v2/order/totals/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - firstResultKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/LOAD_ID_DUPLICATE_RESTRICTION/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+
+### Live loads
+
+Frontend: https://app.datatruck.io/load-management/live
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22live-loads%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22live-loads%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/order/totals/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22status%22%2C%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatched%22%2C%22in_transit%22%5D%7D%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/order/totals/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22status%22%2C%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatched%22%2C%22in_transit%22%5D%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - firstResultKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=stop-checkout-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/list/full/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22status%22%2C%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatched%22%2C%22in_transit%22%5D%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, order_stop_count, load_id, shipment_id, status, load_pay, adjusted_load_pay, load_type, payment_type, total_miles, note, note_created_by_full_name, equipment_type, created_datetime, modified_datetime, created_by_full_name, source, total_other_pay, total_pay, total_pay_base, driver_pay, driver_pay_base, per_mile_revenue, per_mile_revenue_base, miles, empty_miles, detention_flag, sub_status_name, sub_status_color, driver_settlement_status, dispatcher_settlement_status, order_batch_status, is_following, follower_ids, followers, tags, driver_id, driver_full_name, driver_mc_number_id, driver_mc_number_company_name, carrier_id, carrier_name, driver_carrier_id, driver_carrier_full_name, team_driver_id, team_driver_full_name, truck_id, truck_unit_number, trailer_id, trailer_unit_number, ltl_trip_id, ltl_trip_name, dispatcher_full_name, customer_id, customer__company_name, mc_number_id, mc_number__company_name, office__office_name, pickup_appointment_time, delivery_appointment_time, pickup_time, delivery_time, pickup_date, delivery_date, pickup_location, pickup_location_state, pickup_location_state_code, delivery_location, delivery_location_state, delivery_location_state_code, delivery_location_timezone, is_flagged, flagging_reason, trip, eta_final_status, eta_current_status, estimated_mile, eta_datetime, eta_last_updated_at_datetime, truck_location_name
+  - nestedObjectKeys: {"follower_ids":[],"followers":[],"tags":["name"],"trip":["id","status","trip_id","mile","empty_mile","heading_to","next_stop"],"documents":[],"equipment_type_child":["parent"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/order/list/full/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22status%22%2C%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatched%22%2C%22in_transit%22%5D%7D%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/order/totals/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22status%22%2C%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatched%22%2C%22in_transit%22%5D%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - firstResultKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - nestedObjectKeys: {}
+
+### My loads
+
+Frontend: https://app.datatruck.io/load-management/my-loads
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/my-loads/totals/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - firstResultKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=stop-checkout-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/my-loads/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 20
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, order_stop_count, load_id, shipment_id, status, load_pay, adjusted_load_pay, load_type, payment_type, total_miles, note, note_created_by_full_name, equipment_type, created_datetime, modified_datetime, created_by_full_name, source, total_other_pay, total_pay, total_pay_base, driver_pay, driver_pay_base, per_mile_revenue, per_mile_revenue_base, miles, empty_miles, detention_flag, sub_status_name, sub_status_color, driver_settlement_status, dispatcher_settlement_status, order_batch_status, is_following, follower_ids, followers, tags, driver_id, driver_full_name, driver_mc_number_id, driver_mc_number_company_name, carrier_id, carrier_name, driver_carrier_id, driver_carrier_full_name, team_driver_id, team_driver_full_name, truck_id, truck_unit_number, trailer_id, trailer_unit_number, ltl_trip_id, ltl_trip_name, dispatcher_full_name, customer_id, customer__company_name, mc_number_id, mc_number__company_name, office__office_name, pickup_appointment_time, delivery_appointment_time, pickup_time, delivery_time, pickup_date, delivery_date, pickup_location, pickup_location_state, pickup_location_state_code, delivery_location, delivery_location_state, delivery_location_state_code, delivery_location_timezone, is_flagged, flagging_reason, trip, eta_final_status, eta_current_status, estimated_mile, eta_datetime, eta_last_updated_at_datetime, truck_location_name
+  - nestedObjectKeys: {"follower_ids":[],"followers":[],"tags":["name"],"trip":["id","status","trip_id","mile","empty_mile","heading_to","next_stop"],"documents":[],"equipment_type_child":["parent"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22my-loads%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/my-loads/totals/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - firstResultKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/LOAD_ID_DUPLICATE_RESTRICTION/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+
+### LTL trips
+
+Frontend: https://app.datatruck.io/load-management/ltl
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/ltl/list/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/ltl/list/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22ltl%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22ltl%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Loadboard
+
+Frontend: https://app.datatruck.io/load-builder
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+
+### Planning board
+
+Frontend: https://app.datatruck.io/planning-calendar/board/grid-view
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/DRIVER_STATUS_TOTALS_TYPE_IN_PLANNING_CALENDAR/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/configuration/configuration/DRIVER_STATUS_TOTALS_TYPE_IN_PLANNING_CALENDAR/
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/configuration/list/?filter=[%7B%22column%22:%22key%22,%22value%22:[%22CALENDAR_DRIVER_STATUS_EDITABLE%22,%22SALARY_CREATE_TIME%22,%22WEEK_START_NUMBER%22,%22PLANNING_CALENDAR_DEL_DATE_COLORING%22],%22contains%22:%22in%22%7D]
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 4
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/configuration/list/?filter=[%7B%22column%22:%22key%22,%22value%22:[%22CALENDAR_DRIVER_STATUS_EDITABLE%22,%22SALARY_CREATE_TIME%22,%22WEEK_START_NUMBER%22,%22PLANNING_CALENDAR_DEL_DATE_COLORING%22],%22contains%22:%22in%22%7D]
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22calendar%22%2C%22planning-calendar%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/driver-coverage-statistics/?start_date=2026-07-10T00%3A00%3A00&end_date=2026-07-10T23%3A59%3A59&filter=%5B%5D
+  - status: unknown
+  - contentType: unknown
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/driver/status-count/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: available, dispatched
+  - firstResultKeys: available, dispatched
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/driver/dispatch-status-count/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: Dispatched, Enroute
+  - firstResultKeys: Dispatched, Enroute
+  - nestedObjectKeys: {"Dispatched":["count","color"],"Enroute":["count","color"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/driver-coverage-statistics/?start_date=2026-07-10T00%3A00%3A00&end_date=2026-07-10T23%3A59%3A59&filter=%5B%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/driver/status-count/
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/driver/dispatch-status-count/
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/driver-coverage-statistics/?start_date=2026-07-06T00%3A00%3A00&end_date=2026-07-12T23%3A59%3A59&filter=%5B%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: count
+  - topLevelKeys: coverage, covered_count, count, active_drivers_count, non_active_drivers_count, target_achieved_drivers
+  - firstResultKeys: coverage, covered_count, count, active_drivers_count, non_active_drivers_count, target_achieved_drivers
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/totals/?ordering=&page_size=20&filter=%5B%7B%22column%22%3A%22delivery_time%22%2C%22contains%22%3A%22between_datetime%22%2C%22value%22%3A%222026-07-06+00%3A00%3A00%2C2026-07-12+23%3A59%3A59%22%7D%5D&start_date=2026-07-06T00%3A00%3A00&end_date=2026-07-12T23%3A59%3A59
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - firstResultKeys: total_miles, total_load_miles, total_empty_miles, total_driver_pay, total_load_pay, total_tonu_pay, total_pay, total_service_fee, rpm_for_loaded_miles, rpm_for_total_miles, rpem, base_currency_code
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/driver-coverage-statistics/?start_date=2026-07-06T00%3A00%3A00&end_date=2026-07-12T23%3A59%3A59&filter=%5B%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/order/totals/?ordering=&page_size=20&filter=%5B%7B%22column%22%3A%22delivery_time%22%2C%22contains%22%3A%22between_datetime%22%2C%22value%22%3A%222026-07-06+00%3A00%3A00%2C2026-07-12+23%3A59%3A59%22%7D%5D&start_date=2026-07-06T00%3A00%3A00&end_date=2026-07-12T23%3A59%3A59
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/?page=1&ordering=&page_size=20&filter=%5B%5D&start_date=2026-07-06T00%3A00%3A00&end_date=2026-07-12T23%3A59%3A59
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: total_gross, total_driver_pay, count, next, previous, results
+  - firstResultKeys: id, full_name, email, driver_type, driver_type_code, dispatcher_name, truck_unit_number, truck_id, total_gross, current_location_name, mc_company_name, team_driver_full_name, team_driver_email, team_driver_type, team_driver_contact_number, team_driver_id, status, dispatch_status_id, dispatch_status_name, dispatch_status_color, dispatch_status_since, contact_number, notes, dispatcher_notes, eta_notes, origin_delivery_notes, load_id, load_total_pay, driver_total_pay, order_id, customer_company_name, customer_address, customer_id, trip_id, load_semantic_id, trip_semantic_id, shipment_id, office_name, pick_up_time, pick_up_city, pick_up_state, pick_up_state_code, pick_up_zip_code, pick_up_location, delivery_time, delivery_city, delivery_state, delivery_state_code, delivery_zip_code, delivery_location, trailer_unit_number, trailer_id, custom_trailer_unit_number, estimated_time, estimated_mile, first_order_stop_ready_time_start_date, last_order_stop_delivery_time_end_date, tags, trailer_info, communication_method, payment_tariff_name, total_miles, loaded_miles, rpm, empty_mile
+  - nestedObjectKeys: {"tags":[]}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/?page=1&ordering=&page_size=20&filter=%5B%5D&start_date=2026-07-06T00%3A00%3A00&end_date=2026-07-12T23%3A59%3A59
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+
+### Dispatch board
+
+Frontend: https://app.datatruck.io/dispatch-board
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatcher-board-settings/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, user_id, view_type, list_display_filter, status_visibility, sorting, date_filter_type, is_show_target, is_show_target_percent, is_show_ltl_trip, theme, created_datetime, modified_datetime
+  - firstResultKeys: id, user_id, view_type, list_display_filter, status_visibility, sorting, date_filter_type, is_show_target, is_show_target_percent, is_show_ltl_trip, theme, created_datetime, modified_datetime
+  - nestedObjectKeys: {"list_display_filter":[]}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatcher-board-settings/
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/WEEK_START_NUMBER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/driver/?search=&filter=%5B%5D&page=1&page_size=20
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/truck/?search=&filter=%5B%5D&page=1&page_size=20
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/hr/dispatcher/?search=&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22column%22%3A%22status%22%2C%22value%22%3A%22inactive%22%7D%5D&page=1&page_size=20
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/summary/?start_date=2026-07-05&end_date=2026-07-11&page=1&page_size=25
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/driver/status-count/?start_date=2026-07-05&end_date=2026-07-11
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/driver/dispatch-status-count/?start_date=2026-07-05&end_date=2026-07-11
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatch-board-group-by-dispatcher%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatch-board-dates%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22dispatch-board%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/drivers/?start_date=2026-07-05&end_date=2026-07-11&page=1&page_size=25
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatch-board-filters%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=load-creation-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/driver/?search=&filter=%5B%5D&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, mc_number, payment_tariff, employee_status, brith_date, contact_number, telegram_number, driver_license, driver_license_state, driver_license_expiration, status, assigned_truck, other_id, assigned_trailer, assigned_dispatcher, team_driver, salary_percent, notes, account, full_name, is_active, is_main, address1, address2, city, state, can_see_load_pay, zip_code
+  - nestedObjectKeys: {"mc_number":["id","company_name","company_email","billing_emails","is_default","is_active","default_currency"],"payment_tariff":["id","tariff","name","is_active","prices","is_default","guaranteed_payment"],"assigned_truck":["id","unit_number","plate_number","is_active","latitude","longitude","location_name","odometer","last_service_date","last_service_mile"],"account":["id","first_name","last_name","username","full_name","email","telegram_id","telegram_group_chat_id","telegram_group_name","avatar","type_user","time_zone","last_login","mc_number","mc_numbers"]}
+- GET https://sflogistics.datatruck.io/api/v2/truck/truck/?search=&filter=%5B%5D&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: statuses, count, next, previous, results
+  - firstResultKeys: id, make, model, unit_number, plate_number, vin, reg_expiry_date, last_annual_inspection_date, company_mc, ownership, odometer, year, dimensions, state, status, tags, ifta_reportable, geofence_status, current_target_stop, notes, driver_operator, co_driver_operator, tag_number, card_number, owner, warnings, insurance_issue_date, insurance_expiration_date, registration_expiration_date, inspection_expiration_date, last_service_date, last_service_mile, dispatch_status, dispatch_status_since, aging_days
+  - nestedObjectKeys: {"company_mc":["id","company_name","company_email","billing_emails","is_default","is_active","default_currency"],"tags":[],"driver_operator":["id","account","assigned_trailer"],"warnings":[],"dispatch_status":["name","color"]}
+- GET https://sflogistics.datatruck.io/api/v1/hr/dispatcher/?search=&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22column%22%3A%22status%22%2C%22value%22%3A%22inactive%22%7D%5D&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/summary/?start_date=2026-07-05&end_date=2026-07-11&page=1&page_size=25
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: trip_count, empty_miles, miles, total_miles, total_driver_gross, total_gross, service_fee, rate
+  - firstResultKeys: trip_count, empty_miles, miles, total_miles, total_driver_gross, total_gross, service_fee, rate
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/driver/status-count/?start_date=2026-07-05&end_date=2026-07-11
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: available, dispatched
+  - firstResultKeys: available, dispatched
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/driver/dispatch-status-count/?start_date=2026-07-05&end_date=2026-07-11
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: Dispatched, Enroute
+  - firstResultKeys: Dispatched, Enroute
+  - nestedObjectKeys: {"Dispatched":["count","color"],"Enroute":["count","color"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatch-board-group-by-dispatcher%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatch-board-dates%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22dispatch-board%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/order/count/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, upcoming, dispatched, in_transit, delivered, unpaid
+  - firstResultKeys: total, upcoming, dispatched, in_transit, delivered, unpaid
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/drivers/?start_date=2026-07-05&end_date=2026-07-11&page=1&page_size=25
+  - status: unknown
+  - contentType: unknown
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22dispatch-board-filters%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/driver-coverage-statistics/?start_date=2026-06-14T00%3A00%3A00&end_date=2026-06-20T23%3A59%3A59&filter=%5B%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/summary/?start_date=2026-06-14&end_date=2026-06-20&page=1&page_size=25
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/driver/status-count/?start_date=2026-06-14&end_date=2026-06-20
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/driver-coverage-statistics/?start_date=2026-06-14T00%3A00%3A00&end_date=2026-06-20T23%3A59%3A59&filter=%5B%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: count
+  - topLevelKeys: coverage, covered_count, count, active_drivers_count, non_active_drivers_count, target_achieved_drivers
+  - firstResultKeys: coverage, covered_count, count, active_drivers_count, non_active_drivers_count, target_achieved_drivers
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/summary/?start_date=2026-06-14&end_date=2026-06-20&page=1&page_size=25
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: trip_count, empty_miles, miles, total_miles, total_driver_gross, total_gross, service_fee, rate
+  - firstResultKeys: trip_count, empty_miles, miles, total_miles, total_driver_gross, total_gross, service_fee, rate
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/driver/status-count/?start_date=2026-06-14&end_date=2026-06-20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: available, dispatched
+  - firstResultKeys: available, dispatched
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/driver/dispatch-status-count/?start_date=2026-06-14&end_date=2026-06-20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: Dispatched, Enroute
+  - firstResultKeys: Dispatched, Enroute
+  - nestedObjectKeys: {"Dispatched":["count","color"],"Enroute":["count","color"]}
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/drivers/?start_date=2026-06-14&end_date=2026-06-20&page=1&page_size=25
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, full_name, status, contact_number, co_driver_full_name, co_driver_id, dispatch_status_id, dispatcher_id, dispatcher_name, dispatch_status_name, dispatch_status_color, mc_company_name, dispatch_status_since, trailer_id, trailer_unit_number, truck_id, truck_unit_number, state, dispatch_notes, trip_count, current_location_name, current_latitude, current_longitude, last_update_current_location_datetime, state_code, current_location_state
+  - nestedObjectKeys: {"dispatch_notes":[]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/driver/dispatch-status-count/?start_date=2026-06-14&end_date=2026-06-20
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/drivers/?start_date=2026-06-14&end_date=2026-06-20&page=1&page_size=25
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/driver/dispatch-status/?ordering=ordering&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/driver/dispatch-status/?ordering=ordering&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 11
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, color, covered, ordering, driver_status
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/events/?driver_ids=68&driver_ids=35&start_date=2026-06-14&end_date=2026-06-20&page_size=25
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: trips, home_requests, safety_tasks, work_orders, daily_notes
+  - firstResultKeys: trips, home_requests, safety_tasks, work_orders, daily_notes
+  - nestedObjectKeys: {"trips":["trip_name","trip_id","status","load_status","driver_id","load_number","order_id","total_load_pay","start_state_code","start_city","end_state_code","end_city","effective_pickup_time","effective_delivery_time","is_ltl_trip"],"home_requests":[],"safety_tasks":[],"work_orders":[],"daily_notes":[]}
+- GET https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/drivers-summary/?driver_ids=68&driver_ids=35&start_date=2026-06-14&end_date=2026-06-20&page_size=25
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: driver_id, trip_count, total_miles, total_driver_gross, total_gross, rate, weekly_gross_threshold_amount, is_target_met, target_met_percentage, work_days
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/events/?driver_ids=68&driver_ids=35&start_date=2026-06-14&end_date=2026-06-20&page_size=25
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/planning_calendar/dispatch-board/drivers-summary/?driver_ids=68&driver_ids=35&start_date=2026-06-14&end_date=2026-06-20&page_size=25
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- POST https://sflogistics.datatruck.io/api/v2/mobile/app-storage/upsert/
+  - status: 200
+  - contentType: text/plain
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/mobile/app-storage/upsert/
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+
+### Invoice batches
+
+Frontend: https://app.datatruck.io/accounting/invoices/batches
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/invoice/batches/list/?page=1&page_size=20&filter=[]&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, batch_number, status, created_datetime, note, created_by, mc_number, invoices_count, is_sent_count, invoices_total, invoices_total_base
+  - nestedObjectKeys: {"created_by":["id","full_name"],"mc_number":["id","company_name"]}
+- GET https://sflogistics.datatruck.io/api/v1/invoice/batches/list-total/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_invoices_count, total_invoices_total, total_is_sent_count, base_currency_code
+  - firstResultKeys: total_invoices_count, total_invoices_total, total_is_sent_count, base_currency_code
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22invoice%22%2C%22invoice-report%22%2C%22invoice-batches%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/invoice/batches/list/?page=1&page_size=100&filter=[]&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, batch_number, status, created_datetime, note, created_by, mc_number, invoices_count, is_sent_count, invoices_total, invoices_total_base
+  - nestedObjectKeys: {"created_by":["id","full_name"],"mc_number":["id","company_name"]}
+
+### Driver settlements
+
+Frontend: https://app.datatruck.io/accounting/salary/driver-settlements
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=ui-auto-refresh
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=salary-listings-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/salary/batches/list-total/?filter=[]
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_batches_count, total_settlements_count, total_amount, base_currency_code
+  - firstResultKeys: total_batches_count, total_settlements_count, total_amount, base_currency_code
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/salary/batches/list/?page=1&page_size=20&filter=[]&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 15
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, batch_number, status, date, check_date, from_date, to_date, filter_time, note, week_number, exchange_rate, created_by, mc_number, currency, settlements_count, total_amount, total_amount_base
+  - nestedObjectKeys: {"created_by":["id","full_name"],"mc_number":["id","company_name"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22salary%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Dispatcher settlements
+
+Frontend: https://app.datatruck.io/accounting/salary/dispatcher-salary
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/salary/dispatcher/batch-list/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/salary/dispatcher/batch-list/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: batch_count, total_amount, total_settlements_count, count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22salary%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Vendor settlements
+
+Frontend: https://app.datatruck.io/accounting/vendors/bills-batch
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/vendor/batch/list/v2/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/vendor/batch/summary/?filter=[]
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22billing%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/vendor/batch/list/v2/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/vendor/batch/summary/?filter=[]
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: count
+  - topLevelKeys: count, posted_count, unposted_count, paid_count, total_bill_due
+  - firstResultKeys: count, posted_count, unposted_count, paid_count, total_bill_due
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22billing%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Bills
+
+Frontend: https://app.datatruck.io/accounting/vendors/bills
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/quickbooks-online/qbo_company/?page_size=1
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/quickbooks-online/qbo_company/?page_size=1
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/vendor/bill/list/?from_date=2022-01-01&to_date=2026-07-09&page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3Afalse%2C%22column%22%3A%22is_archived%22%7D%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/vendor/bill/list/?from_date=2022-01-01&to_date=2026-07-09&page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3Afalse%2C%22column%22%3A%22is_archived%22%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: total_amount, net_pay, count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22billing%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Charges
+
+Frontend: https://app.datatruck.io/accounting/salary/one-time-charges
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/driver/other-pay/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22approved%22%2C%22pending%22%5D%2C%22column%22%3A%22status%22%7D%5D&ordering=&once=true
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/settings/financial-types/list/?page_size=all&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22other_pay%22%2C%22column%22%3A%22category%22%7D%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=isPresignedUrlUploadEnabled
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=one-time-charges-v2
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/driver/other-pay/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22approved%22%2C%22pending%22%5D%2C%22column%22%3A%22status%22%7D%5D&ordering=&once=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: total_amount, count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/settings/financial-types/list/?page_size=all&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22other_pay%22%2C%22column%22%3A%22category%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 18
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, model, account_type, category, description, is_default, created_datetime, modified_datetime
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=isPresignedUrlUploadEnabled
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=one-time-charges-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22salary%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/salary/one-time-charges/list/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22approved%22%2C%22pending%22%5D%2C%22column%22%3A%22status%22%7D%2C%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22driver%22%2C%22column%22%3A%22chargeable__type%22%7D%2C%7B%22contains%22%3A%22is%22%2C%22value%22%3Afalse%2C%22column%22%3A%22is_charged%22%7D%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/salary/one-time-charges/totals/?filter=[%7B%22contains%22:%22in%22,%22value%22:[%22approved%22,%22pending%22],%22column%22:%22status%22%7D,%7B%22contains%22:%22is%22,%22value%22:%22driver%22,%22column%22:%22chargeable__type%22%7D,%7B%22contains%22:%22is%22,%22value%22:false,%22column%22:%22is_charged%22%7D]
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/salary/one-time-charges/list/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22approved%22%2C%22pending%22%5D%2C%22column%22%3A%22status%22%7D%2C%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22driver%22%2C%22column%22%3A%22chargeable__type%22%7D%2C%7B%22contains%22%3A%22is%22%2C%22value%22%3Afalse%2C%22column%22%3A%22is_charged%22%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/salary/one-time-charges/totals/?filter=[%7B%22contains%22:%22in%22,%22value%22:[%22approved%22,%22pending%22],%22column%22:%22status%22%7D,%7B%22contains%22:%22is%22,%22value%22:%22driver%22,%22column%22:%22chargeable__type%22%7D,%7B%22contains%22:%22is%22,%22value%22:false,%22column%22:%22is_charged%22%7D]
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_deductions, total_other_pay
+  - firstResultKeys: total_deductions, total_other_pay
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=isPresignedUrlUploadEnabled
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/settings/financial-types/list/?page_size=all&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22other_pay%22%2C%22column%22%3A%22category%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 18
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, model, account_type, category, description, is_default, created_datetime, modified_datetime
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/settings/financial-types/list/?page_size=all&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22deduction%22%2C%22column%22%3A%22category%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 24
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, model, account_type, category, description, is_default, created_datetime, modified_datetime
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/settings/financial-types/list/?page_size=all&filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22deduction%22%2C%22column%22%3A%22category%22%7D%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+
+### Transactions
+
+Frontend: https://app.datatruck.io/payroll/transactions
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/salary/transactions/types/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: types
+  - firstResultKeys: types
+  - nestedObjectKeys: {"types":[]}
+- GET https://sflogistics.datatruck.io/api/v1/salary/transactions/list/?from_date=2026-07-01&to_date=2026-07-31&page=1&page_size=20&filter=[]&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/salary/transactions/list-total/?from_date=2026-07-01&to_date=2026-07-31&filter=[]
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_count, total_amount, base_currency_code
+  - firstResultKeys: total_count, total_amount, base_currency_code
+  - nestedObjectKeys: {}
+
+### Customers
+
+Frontend: https://app.datatruck.io/customer-management/main/all-customers
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/customer/?page=1&page_size=20&filter=[]&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22customer%22%2C%22location%22%2C%22vendor%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/customer/?page=1&page_size=20&filter=[]&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 20
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, company_name, number, reference_number, email, contact_number, note, website, mc_number, address, rating, billing_address, proof_of_delivery, rate_confirmation, billing_type, address1, status, city, state, zip_code, billing_address1, billing_city, billing_state, billing_zip_code, billing_emails, customer_type, tags, is_flagged, flagged_reason, warning, scoring, total_load_pay, country, billing_country, comments, currencies
+  - nestedObjectKeys: {"billing_emails":[],"tags":[],"comments":[],"currencies":[]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22customer%22%2C%22location%22%2C%22vendor%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Vendors
+
+Frontend: https://app.datatruck.io/customer-management/main/vendors
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/vendor/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/vendor/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, type, name, email, contact_number, website, address1, address2, state, city, zip_code, billing_address1, billing_address2, billing_state, billing_city, billing_zip_code, vendor_id, usdot, notes, tags, is_active, status, pay_to, routing_number, bank_name, account_number, ein_number, billing_type, billing_payment_method, billing_terms_days, billing_term, remit_to, remit_address1, remit_address2, remit_city, remit_state, remit_zip_code, carrier_type, carrier_status, authority_grant_date, authority_grand_expire_date, vehicle_inspection_total, vehicle_inspection_oos_total, vehicle_inspection_percentage, driver_inspection_total, driver_inspection_oos_total, driver_inspection_percentage, review_type, review_date, safety_rating, safety_rating_date, hazmat_eligible, operating_ability, cargo_type, power_unit, driver_count, truck_count, trailer_count, fuel_deduction_type, fuel_percent_of_rebate, show_fuel_rebate_by, mc_number, country, billing_country, remit_country
+  - nestedObjectKeys: {"tags":[],"billing_term":["name"],"mc_number":["id","company_name"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22customer%22%2C%22location%22%2C%22vendor%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Safety tasks
+
+Frontend: https://app.datatruck.io/safety/main/safety-tasks
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/driver/work-order/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/driver/work-order/stats/?is_archived=false
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22safety%22%2C%22safety-claim%22%2C%22safety-inspection%22%2C%22safety-archive%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/driver/work-order/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: total_price, count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/driver/work-order/stats/?is_archived=false
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_count, total_sum, pending_count, pending_sum, completed_count, total_completed_sum, in_progress_count, total_in_progress_sum
+  - firstResultKeys: total_count, total_sum, pending_count, pending_sum, completed_count, total_completed_sum, in_progress_count, total_in_progress_sum
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22safety%22%2C%22safety-claim%22%2C%22safety-inspection%22%2C%22safety-archive%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Compliance
+
+Frontend: https://app.datatruck.io/driver/safety-dashboard/compliance-report
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+
+### Trucks
+
+Frontend: https://app.datatruck.io/fleet-management/main/trucks
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/truck/dispatch-statuses/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: id, count, name, color, truck_status
+  - firstResultKeys: id, count, name, color, truck_status
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/dispatch-statuses/
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/truck/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22value%22%3A%22inactive%22%2C%22column%22%3A%22status%22%7D%5D&ordering=-id
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22truck%22%2C%22trailer%22%2C%22unassigned-truck%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/truck/truck/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22value%22%3A%22inactive%22%2C%22column%22%3A%22status%22%7D%5D&ordering=-id
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: statuses, count, next, previous, results
+  - firstResultKeys: id, make, model, unit_number, plate_number, vin, reg_expiry_date, last_annual_inspection_date, company_mc, ownership, odometer, year, dimensions, state, status, tags, ifta_reportable, geofence_status, current_target_stop, notes, driver_operator, co_driver_operator, tag_number, card_number, owner, warnings, insurance_issue_date, insurance_expiration_date, registration_expiration_date, inspection_expiration_date, last_service_date, last_service_mile, dispatch_status, dispatch_status_since, aging_days
+  - nestedObjectKeys: {"company_mc":["id","company_name","company_email","billing_emails","is_default","is_active","default_currency"],"tags":[],"driver_operator":["id","account","assigned_trailer"],"warnings":[],"dispatch_status":["name","color"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22truck%22%2C%22trailer%22%2C%22unassigned-truck%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Trailers
+
+Frontend: https://app.datatruck.io/fleet-management/main/trailers
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/truck/trailer-dispatch-statuses/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/trailer-dispatch-statuses/
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/trailer/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22value%22%3A%22inactive%22%2C%22column%22%3A%22status%22%7D%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/truck/trailer/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22value%22%3A%22inactive%22%2C%22column%22%3A%22status%22%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: statuses, count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22truck%22%2C%22trailer%22%2C%22unassigned-truck%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Inspections
+
+Frontend: https://app.datatruck.io/fleet-management/main/inspections-form
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/fleet/inspection/inspection-forms/list/?page=1&page_size=1000&filter=%5B%7B%22column%22%3A%22is_archived%22%2C%22value%22%3Afalse%2C%22contains%22%3A%22is%22%7D%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/fleet/inspection/inspection-forms/list/?page=1&page_size=1000&filter=%5B%7B%22column%22%3A%22is_archived%22%2C%22value%22%3Afalse%2C%22contains%22%3A%22is%22%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22truck%22%2C%22trailer%22%2C%22unassigned-truck%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Fleet board
+
+Frontend: https://app.datatruck.io/fleet-management/main/fleet-board
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/WEEK_START_NUMBER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/mc/?page_size=15&ordering=-id
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/boards/total-gross-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/boards/total-miles-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/boards/mpg-by-unit-number/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/boards/total-fuel-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/boards/total-toll-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/boards/total-cost-by-procedure/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/boards/total-cost-by-unit-number/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/truck/boards/trailer-total-cost-by-unit-number/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/work-order-report-monthly/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/mc/?page_size=15&ordering=-id
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, company_name, company_phone, company_email, billing_emails, company_address, company_address2, company_state, company_city, company_zip, company_type, owner, usdot, tax_id, notes, logo, number, scac_code, prefix, is_default, is_active, country, default_currency, salary_email_integration, invoice_email_integration, bill_email_integration, load_trip_email_integration
+  - nestedObjectKeys: {"billing_emails":[],"logo":["id","file","format","name","created_datetime"]}
+- GET https://sflogistics.datatruck.io/api/v1/truck/boards/total-gross-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results, sum
+  - firstResultKeys: id, name, value
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/truck/boards/total-miles-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results, sum
+  - firstResultKeys: id, name, value
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/truck/boards/mpg-by-unit-number/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results, sum
+  - firstResultKeys: id, name, value, total_miles, total_fuel
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/truck/boards/total-fuel-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results, sum
+  - firstResultKeys: id, name, value
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/truck/boards/total-toll-by-unit/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results, sum
+  - firstResultKeys: id, name, value
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/truck/boards/total-cost-by-procedure/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results, sum
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/truck/boards/total-cost-by-unit-number/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results, sum
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/truck/boards/trailer-total-cost-by-unit-number/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results, sum
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/truck/work-order-report-monthly/?start_date=2025-12-31&end_date=2026-07-09&calculation_type=delivery&is_factual=true&mc_number=&truck_id=&ownership_type=&page_size=all
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22truck%22%2C%22trailer%22%2C%22unassigned-truck%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Inventory
+
+Frontend: https://app.datatruck.io/fleet-management/main/inventory
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/inventory/assets/list/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22is_archived%22%2C%22value%22%3Afalse%2C%22contains%22%3A%22contains%22%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/inventory/assets/list/?page=1&page_size=20&filter=%5B%7B%22column%22%3A%22is_archived%22%2C%22value%22%3Afalse%2C%22contains%22%3A%22contains%22%7D%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22truck%22%2C%22trailer%22%2C%22unassigned-truck%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Work orders
+
+Frontend: https://app.datatruck.io/maintenance/main/work-order
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/mc/select/?page_size=all&ordering=-id
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/work_order/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/work_order/stats/?is_archived=false
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22work_order%22%2C%22maintenance%2Ftodo%2F%22%2C%22maintenance%2Ftodo%22%2C%22maintenance%2Farchived%22%2C%22maintenance%2Fcompleted%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/mc/select/?page_size=all&ordering=-id
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, company_name, company_email, billing_emails, is_default, is_active, default_currency
+  - nestedObjectKeys: {"billing_emails":[]}
+- GET https://sflogistics.datatruck.io/api/v2/truck/work_order/?page=1&page_size=20&filter=%5B%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: amount, total_price, count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/truck/work_order/stats/?is_archived=false
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total_count, total_sum, open_count, total_open_sum, paid_count, total_paid_sum, on_hold_count, total_on_hold_sum, completed_count, total_completed_sum
+  - firstResultKeys: total_count, total_sum, open_count, total_open_sum, paid_count, total_paid_sum, on_hold_count, total_on_hold_sum, completed_count, total_completed_sum
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22work_order%22%2C%22maintenance%2Ftodo%2F%22%2C%22maintenance%2Ftodo%22%2C%22maintenance%2Farchived%22%2C%22maintenance%2Fcompleted%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Fleet issues
+
+Frontend: https://app.datatruck.io/maintenance/main/fleet-issues-todo
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/task/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22column%22%3A%22task_status%22%2C%22value%22%3A%22completed%22%7D%2C%7B%22contains%22%3A%22is_not%22%2C%22column%22%3A%22task_status%22%2C%22value%22%3A%22archived%22%7D%5D&ordering=
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v2/truck/task/statuses/
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/truck/task/?page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22is_not%22%2C%22column%22%3A%22task_status%22%2C%22value%22%3A%22completed%22%7D%2C%7B%22contains%22%3A%22is_not%22%2C%22column%22%3A%22task_status%22%2C%22value%22%3A%22archived%22%7D%5D&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/truck/task/statuses/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: upcoming, due_soon, expiry, completed, archived
+  - firstResultKeys: upcoming, due_soon, expiry, completed, archived
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22work_order%22%2C%22maintenance%2Ftodo%2F%22%2C%22maintenance%2Ftodo%22%2C%22maintenance%2Farchived%22%2C%22maintenance%2Fcompleted%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Drivers
+
+Frontend: https://app.datatruck.io/hr-management/main/drivers
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22driver%22%2C%22driver-all%22%2C%22driver-inactive%22%2C%22driver-unassigned%22%2C%22dispatcher%22%2C%22dispatcher-inactive%22%2C%22employee%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/driver/list/?page=1&page_size=20&filter=[%7B%22contains%22:%22is%22,%22value%22:%22active%22,%22column%22:%22new_employee_status%22%7D]&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, new_employee_status, account, driver_type, contact_number, status, dispatch_status, assigned_truck, assigned_trailer, card_number, tag_number, work_status, tags, payment_tariff, team_driver, warnings, mc_number, assigned_dispatcher, dispatcher_office, driver_license, driver_license_state, hire_date, driver_license_expiration, medical_card_expiration_date, license_issue_date, license_expiration_date, full_name, main_driver, notes, brith_date, pay_to_name, terminate_date, billing_email, communication_method, rehire_date, country, billing_country, emergency_contact_country, safety_manager, payment_currency
+  - nestedObjectKeys: {"account":["id","first_name","middle_name","last_name","full_name","username","email","phone_number","avatar","time_zone","last_login","last_activity","mc_number","mc_numbers","type_user","telegram_id","telegram_group_chat_id","telegram_group_name"],"dispatch_status":["id","name","color","covered","ordering","driver_status"],"assigned_truck":["id","unit_number","plate_number","is_active","latitude","longitude","location_name","odometer","last_service_date","last_service_mile"],"tags":[],"payment_tariff":["id","tariff","name","is_active","prices","is_default","guaranteed_payment"],"warnings":[],"mc_number":["id","company_name","company_email","billing_emails","is_default","is_active","default_currency"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22driver%22%2C%22driver-all%22%2C%22driver-inactive%22%2C%22driver-unassigned%22%2C%22dispatcher%22%2C%22dispatcher-inactive%22%2C%22employee%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Users
+
+Frontend: https://app.datatruck.io/hr-management/users
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/driver/list/?page=1&page_size=20&filter=[%7B%22contains%22:%22is%22,%22value%22:%22active%22,%22column%22:%22new_employee_status%22%7D]&ordering=
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 2
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, new_employee_status, account, driver_type, contact_number, status, dispatch_status, assigned_truck, assigned_trailer, card_number, tag_number, work_status, tags, payment_tariff, team_driver, warnings, mc_number, assigned_dispatcher, dispatcher_office, driver_license, driver_license_state, hire_date, driver_license_expiration, medical_card_expiration_date, license_issue_date, license_expiration_date, full_name, main_driver, notes, brith_date, pay_to_name, terminate_date, billing_email, communication_method, rehire_date, country, billing_country, emergency_contact_country, safety_manager, payment_currency
+  - nestedObjectKeys: {"account":["id","first_name","middle_name","last_name","full_name","username","email","phone_number","avatar","time_zone","last_login","last_activity","mc_number","mc_numbers","type_user","telegram_id","telegram_group_chat_id","telegram_group_name"],"dispatch_status":["id","name","color","covered","ordering","driver_status"],"assigned_truck":["id","unit_number","plate_number","is_active","latitude","longitude","location_name","odometer","last_service_date","last_service_mile"],"tags":[],"payment_tariff":["id","tariff","name","is_active","prices","is_default","guaranteed_payment"],"warnings":[],"mc_number":["id","company_name","company_email","billing_emails","is_default","is_active","default_currency"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Reports
+
+Frontend: https://app.datatruck.io/report
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/WEEK_START_NUMBER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/dashboard/report/trip/dispatcher/?page=1&page_size=20&filter=[]&ordering=&start_date=2026-07-06T00:00:00&end_date=2026-07-12T23:59:59&nature_type=factual&service_type=delivery
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: count, next, previous
+  - topLevelKeys: total_mile, empty_mile, load_mile, revenue_per_mile, total_revenue, total_cost, total_driver_pay, gross_income, gross_margin, total_service_fee, total_load_count, total_trip_count, count, next, previous, results
+  - firstResultKeys: id, name, total_revenue, total_load_count, total_trip_count, empty_mile, load_mile, total_mile, total_cost, total_driver_pay, revenue_per_mile, gross_income, gross_margin, trip_expenses, bills, service_fee
+  - nestedObjectKeys: {}
+
+### Fuel
+
+Frontend: https://app.datatruck.io/integrations/fuel/transactions
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/fuel/transactions/card-numbers?filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22fuel%22%2C%22column%22%3A%22transaction_type%22%7D%5D&search=&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 4
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: card_number
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/fuel/transactions/card-numbers?filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22fuel%22%2C%22column%22%3A%22transaction_type%22%7D%5D&search=&page=1&page_size=20
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/fuel/transactions/?ordering=&page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22fuel%22%2C%22column%22%3A%22transaction_type%22%7D%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22fuel%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/fuel/transactions/?ordering=&page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22fuel%22%2C%22column%22%3A%22transaction_type%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 20
+  - pagination: count, next, previous
+  - topLevelKeys: total_quantity, total_amount, total_invoiced_amount, total_fee, total_discount_amount, total, count, next, previous, results
+  - firstResultKeys: id, source, source_file, transaction_id, card_number, mc_number, description, transaction_type, discount_amount, discount_amount_base, misc_amount, misc_amount_base, product, date, quantity, total, total_base, amount, amount_base, company, location, transfer_code, fee, fee_base, total_invoice_amount, total_invoice_amount_base, currency, exchange_rate, exchange_rate_date, driver, truck, is_billable, billable, city, state, policy, total_fee, settlement, created_datetime, in_settlements, card, status, from_mobile, synced_status, reason_for_fail, bill_vendor
+  - nestedObjectKeys: {"mc_number":["id","company_name"],"driver":["id","first_name","last_name","full_name","driver_type"],"truck":["id","unit_number","ownership"],"card":["id","number"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/fuel/transactions/card-numbers?filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22fuel%22%2C%22column%22%3A%22transaction_type%22%7D%5D&search=&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 4
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: card_number
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22fuel%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Toll
+
+Frontend: https://app.datatruck.io/integrations/toll/transactions
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/toll/transactions/tag-numbers?search=&filter=%5B%5D&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: tag_number
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/toll/transactions/tag-numbers?search=&filter=%5B%5D&page=1&page_size=20
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/toll/transactions/?ordering=&page=1&page_size=20&filter=%5B%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22toll%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/toll/transactions/tag-numbers?search=&filter=%5B%5D&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: tag_number
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/toll/transactions/?ordering=&page=1&page_size=20&filter=%5B%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 20
+  - pagination: count, next, previous
+  - topLevelKeys: total_amount, count, next, previous, results
+  - firstResultKeys: id, source, source_file, transaction_id, tag_no, service, description, post_date, tag_number, truck_number, license_plate, license_state, entry_datetime, entry_plaza, entry_plaza_name, entry_lane, exit_datetime, exit_plaza, exit_plaza_name, exit_lane, toll_class, miles, amount, amount_base, agency, type, pre_paid, discounted, discounted_amount, discounted_amount_base, cost_center, unit, fee_amount, fee_amount_base, currency, exchange_rate, exchange_rate_date, is_billable, settlement, bill_vendor, driver, truck, mc_number, created_datetime, in_settlements, synced_status, reason_for_fail, city, state, company, tag
+  - nestedObjectKeys: {"source_file":["id","file","format","name","created_datetime"],"driver":["id","first_name","last_name","full_name","driver_type"],"truck":["id","unit_number","ownership"],"mc_number":["id","company_name"],"tag":["id","number"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22toll%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Money code
+
+Frontend: https://app.datatruck.io/integrations/money_code/transactions
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/fuel/money-codes/?page=1&page_size=20&filter=%5B%5D&ordering=-active_date
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: total_amount, total_fee_amount, count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/fuel/money-codes/?page=1&page_size=20&filter=%5B%5D&ordering=-active_date
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/fuel/money-code-contracts
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/fuel/money-code-contracts
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- OPTIONS https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22money-code%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/template-filter/?filter=%5B%7B%22contains%22%3A%22is_in%22%2C%22column%22%3A%22key%22%2C%22value%22%3A%5B%22money-code%22%5D%7D%5D&type=filter
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- POST https://sflogistics.datatruck.io/api/v1/fuel/sync-contracts
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: message
+  - firstResultKeys: message
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/fuel/sync-contracts
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/fuel/money-code-contracts
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: status, contract_id, description
+  - firstResultKeys: status, contract_id, description
+  - nestedObjectKeys: {}
+
+### Cash advance
+
+Frontend: https://app.datatruck.io/cash-advance
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+
+### Scale
+
+Frontend: https://app.datatruck.io/integrations/scale
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/fuel/transactions/card-numbers?filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22scale%22%2C%22column%22%3A%22transaction_type%22%7D%5D&search=&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/fuel/transactions/card-numbers?filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22scale%22%2C%22column%22%3A%22transaction_type%22%7D%5D&search=&page=1&page_size=20
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+- OPTIONS https://sflogistics.datatruck.io/api/v1/fuel/transactions/?ordering=&page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22scale%22%2C%22column%22%3A%22transaction_type%22%7D%5D
+  - status: 200
+  - contentType: text/html
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/fuel/transactions/?ordering=&page=1&page_size=20&filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22scale%22%2C%22column%22%3A%22transaction_type%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: total_quantity, total_amount, total_invoiced_amount, total_fee, total_discount_amount, total, count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/fuel/transactions/card-numbers?filter=%5B%7B%22contains%22%3A%22contains%22%2C%22value%22%3A%22scale%22%2C%22column%22%3A%22transaction_type%22%7D%5D&search=&page=1&page_size=20
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 0
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+
+### Mailbox
+
+Frontend: https://app.datatruck.io/mailbox
+
+- GET https://maps.googleapis.com/maps/api/js?key=%5BREDACTED%5D&v=weekly&language=en&region=en&libraries=places&callback=initMap
+  - status: 200
+  - contentType: text/javascript
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: unavailable
+  - firstResultKeys: unavailable
+  - nestedObjectKeys: unavailable
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=multicurrency
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/user/me/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - firstResultKeys: id, uuid, full_name, first_name, last_name, username, email, phone_number, avatar, type_user, time_zone, is_superuser, permissions, is_2fa, mc_number, mc_numbers, position, aws_cognito_id, telegram_id, telegram_group_chat_id, telegram_group_name, base_currency_code
+  - nestedObjectKeys: {"permissions":[],"mc_numbers":[]}
+- GET https://maps.googleapis.com/maps/api/mapsjs/gen_204?csp_test=true
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: none
+  - firstResultKeys: none
+  - nestedObjectKeys: {}
+- GET https://api.datatruck.io/api/clients/plans/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=false, csrf=false
+  - classification: UNSUPPORTED
+  - resultCount: 3
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, title, price, allowed_truck_count, powerbi_enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22is%22%2C%22value%22%3A%22design-system%22%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 1
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v2/mobile/app-storage/list/?filter=%5B%7B%22contains%22%3A%22in%22%2C%22value%22%3A%5B%22sidebarOrder%22%2C%22pinnedMenuItems%22%2C%22pinnedSectionOpen%22%2C%22full-sidebar%22%2C%22menuCollapseState%22%5D%2C%22column%22%3A%22key%22%7D%5D
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: not detected
+  - topLevelKeys: results
+  - firstResultKeys: key, data
+  - nestedObjectKeys: {"data":["value"]}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=payroll-driver-v2
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/feature-flags/check/?flag_name=carrier-salary
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: flag_name, enabled
+  - firstResultKeys: flag_name, enabled
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/configuration/configuration/MC_NUMBER_GLOBAL_FILTER/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: id, name, key, value, type_value, options, section
+  - firstResultKeys: id, name, key, value, type_value, options, section
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/setup-guides/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: categories, tasks_total, tasks_completed, percent
+  - firstResultKeys: categories, tasks_total, tasks_completed, percent
+  - nestedObjectKeys: {"categories":["id","tasks","tasks_total","tasks_completed"]}
+- GET https://sflogistics.datatruck.io/api/v1/notification/stats/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: total, read, unread
+  - firstResultKeys: total, read, unread
+  - nestedObjectKeys: {}
+- GET https://sflogistics.datatruck.io/api/v1/marketplace/apps/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: 5
+  - pagination: count, next, previous
+  - topLevelKeys: count, next, previous, results
+  - firstResultKeys: id, name, avatar, description, price, category, meta_data, is_free, is_subscribed, subscription_status, app_code
+  - nestedObjectKeys: {"category":["id","name"],"meta_data":["permissions"]}
+- GET https://sflogistics.datatruck.io/api/v1/user/subs-info/
+  - status: 200
+  - contentType: application/json
+  - authSignals: cookie=false, authorization=true, csrf=false
+  - classification: INTERNAL_API_SEPARATE_TOKEN
+  - resultCount: unknown
+  - pagination: not detected
+  - topLevelKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - firstResultKeys: status, has_pending_checkout, exp_days, exp_date, stripe_price_id, plan, price
+  - nestedObjectKeys: {}
+
+## Auth Classification Legend
+
+- OFFICIAL_OPEN_API: request used /api/v1/openapi/ and is compatible with the existing Open API-token strategy.
+- INTERNAL_API_BROWSER_SESSION: request appears to depend on browser cookies. Do not productionize with a personal session cookie.
+- INTERNAL_API_SEPARATE_TOKEN: request includes Authorization and needs a supported token acquisition flow before production use.
+- UNSUPPORTED: no usable API evidence captured in this audit.
+
+## Open API Token Compatibility Check
+
+The existing Neuron Datatruck connector sends `Authorization: Token <redacted>` to the official `/api/v1/openapi/...` base URL. A safe local check using that same token scheme returned:
+
+| Endpoint category | Tested path | Result |
+|---|---|---|
+| Official loads | `/api/v1/openapi/orders/?page=1&page_size=1` | 200 OK, paginated JSON |
+| Internal invoice batches | `/api/v1/invoice/batches/list/?page=1&page_size=1&filter=[]&ordering=` | 401 Unauthorized |
+| Internal driver settlements | `/api/v1/salary/batches/list/?page=1&page_size=1&filter=[]&ordering=` | 401 Unauthorized |
+| Internal customers | `/api/v1/customer/?page=1&page_size=1&filter=[]&ordering=` | 401 Unauthorized |
+| Internal fuel transactions | `/api/v1/fuel/transactions/?ordering=&page=1&page_size=1&filter=[]` | 401 Unauthorized |
+
+Conclusion: the browser web application is using a separate internal authorization mechanism. These internal endpoints should not be added to the production Open API connector unless Datatruck confirms a supported stable token/OAuth/private API flow for them.
+
+## Safe Integration Classification
+
+- A. OFFICIAL_OPEN_API: existing confirmed endpoints remain safe for production: `/orders/`, `/drivers/list/`, `/trucks/list/`, `/trailers/list/`, `/work-orders/`, `/orders/dispatcher-board/list/`.
+- B. INTERNAL_API_BROWSER_SESSION: not observed in this run. No cookie-only data endpoints were identified.
+- C. INTERNAL_API_SEPARATE_TOKEN: most Datatruck web app module endpoints observed in this audit. They use an internal `Authorization` header, but that value was not captured or recorded.
+- D. WEBHOOK_AVAILABLE: no new webhook behavior was verified in this audit.
+- E. FILE_EXPORT_ONLY: export/download routes exist in the frontend bundle for invoices, reports, fuel/toll, PDFs, and CSV/XLSX-style workflows, but this audit did not verify a safe export-only integration.
+- F. UNSUPPORTED: pages where only generic app-shell requests were captured or the route did not expose list data during the audit.
+
+## Documents And Downloads
+
+The frontend bundle contains document/PDF/export paths for load sharing, invoice/batch downloads, fleet inspection PDFs, salary settlement PDFs, dashboard report PDFs, and accounting exports. This audit did not bulk-download documents. A safe Neuron implementation should store remote document metadata, preserve the source URL only when it is stable and authorized for the workspace, and avoid downloading arbitrary files unless Datatruck provides a supported API contract for the file URL and auth behavior.
+
+## Query Coverage Targets
+
+- Invoices: unpaid invoices, invoice batches created recently, invoice totals by week.
+- Driver settlements: latest settlements, unpaid/posting state, settlement amount for a driver.
+- Bills/vendors: recent vendor bills, unpaid bills, bill totals.
+- Customers/vendors: customer/vendor list lookup, active customers, recent customer activity if exposed.
+- Compliance/safety: compliance issues needing attention, safety tasks by driver/truck/trailer.
+- Fleet/maintenance: truck/trailer status, inspections, inventory, fleet issues, work-order costs.
+- Fuel/toll/money code/scale: recent expenses, unmatched transactions, totals by date range.
+- Mailbox: unread or important messages, mailbox-linked load updates, AI dispatcher conversations if exposed by a supported API.
+
+## Recommended Strategy
+
+Keep the existing six confirmed Open API endpoints as the production connector baseline. For internal browser-session endpoints, ask Datatruck for official partner/private API access or design a secure per-workspace browser-session connector with encrypted session storage, explicit customer authorization, rotation/expiry handling, and strong tenant isolation. Do not copy local browser cookies into env vars or production configuration.
+
+Recommended next steps:
+
+1. Ask Datatruck for official API coverage or partner/private API access for invoice batches, salary/settlement, customer, vendor, bill, fuel, toll, inventory, inspection, and safety endpoints.
+2. If Datatruck supports a stable user-scoped bearer token/OAuth flow for the internal API, add a separate encrypted per-workspace Datatruck Web API connector. Do not reuse the Open API token assumption.
+3. If only browser-session auth is supported, treat it as a separate secure browser connector project with explicit user consent, encrypted session storage, refresh/expiry handling, tenant isolation, and clear operational limits.
+4. Do not map the observed internal endpoints into Neuron production sync until their authorization model is supported and documented.
