@@ -2,6 +2,9 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import OverviewClient from './OverviewClient'
+import { normalizeKnowledgeItem } from '@/lib/knowledge/display'
+
+export const dynamic = 'force-dynamic'
 
 const FILTER_MAP = {
   all: null,
@@ -64,11 +67,11 @@ export default async function OverviewPage({
       orderBy: { createdAt: 'desc' },
       take: 100,
       select: {
-        id: true, content: true, category: true, source: true, confidence: true,
+        id: true, summary: true, reason: true, label: true, content: true, category: true, source: true, confidence: true,
         aiSuggestedCategory: true, typeOverriddenByUser: true,
         verified: true, verifiedAt: true, frozen: true, conflictNote: true, createdAt: true,
-        sourceUrl: true, sourceExternalId: true, owner: true, sourceCreatedAt: true,
-        updatedAt: true, notionPageTitle: true,
+        sourceExternalId: true,
+        updatedAt: true, notionPageTitle: true, sourceMetadata: true,
       },
     }),
   ])
@@ -76,21 +79,25 @@ export default async function OverviewPage({
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Overview</h1>
-        <p className="text-gray-500 text-sm mt-1">Your company&apos;s collective intelligence.</p>
+        <h1 className="text-2xl font-bold text-gray-900">Knowledge</h1>
+        <p className="text-gray-500 text-sm mt-1">Verified company memory from every connected source.</p>
       </div>
 
       <OverviewClient
         activeFilter={filter}
         initialCounts={{ all: knowledgeCount, decision: decisionCount, idea: ideaCount }}
         lastSyncLabel={timeAgo(latestIntegration?.lastSyncAt ?? null)}
-        initialItems={items.map((item) => ({
-          ...item,
-          createdAt: item.createdAt.toISOString(),
-          verifiedAt: item.verifiedAt?.toISOString() ?? null,
-          sourceCreatedAt: item.sourceCreatedAt?.toISOString() ?? null,
-          updatedAt: item.updatedAt.toISOString(),
-        }))}
+        initialItems={items.map((item) => {
+          const normalized = normalizeKnowledgeItem(item)
+          const sourceCreatedAt = normalized.displaySourceCreatedAt
+          return {
+            ...normalized,
+            createdAt: item.createdAt.toISOString(),
+            verifiedAt: item.verifiedAt?.toISOString() ?? null,
+            displaySourceCreatedAt: sourceCreatedAt instanceof Date ? sourceCreatedAt.toISOString() : sourceCreatedAt,
+            updatedAt: item.updatedAt.toISOString(),
+          }
+        })}
       />
     </div>
   )

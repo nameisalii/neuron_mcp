@@ -144,17 +144,37 @@ export default function TelegramIntegrationCard({
             Connect a Telegram group or channel to Neuron so new useful messages can become searchable company knowledge. Neuron starts capturing messages after the bot is added and connected. Old chat history is not available through Telegram’s official bot API.
           </p>
           <p className="rounded-lg border border-warm/60 bg-cream px-3 py-2 text-sm text-ink">
-            Bot to add: <span className="font-mono">@{setup?.botUsername ?? botUsername}</span>
+            Bot to add:{' '}
+            <a
+              href={`https://t.me/${setup?.botUsername ?? botUsername}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-accent underline underline-offset-2"
+            >
+              @{setup?.botUsername ?? botUsername}
+            </a>
           </p>
-          <ol className="list-decimal space-y-2 pl-5 text-sm text-muted">
-            <li>Open the Telegram group or channel you want Neuron to learn from.</li>
-            <li>Add the Neuron bot to the group or channel.</li>
-            <li>If it is a group, make sure the bot can read messages.</li>
-            <li>Copy the connection command below.</li>
-            <li>Paste the command inside that Telegram group or channel.</li>
-            <li>Send one useful test message after connecting.</li>
-            <li>Come back to Neuron and click Sync Now or check the Overview.</li>
-          </ol>
+          <div className="grid gap-3 text-sm text-muted sm:grid-cols-2">
+            <div className="rounded-xl border border-warm/60 p-3">
+              <p className="font-medium text-ink">Direct messages</p>
+              <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+                <li>Open the bot link above.</li>
+                <li>Send the connection command below.</li>
+                <li>Send a new message after Neuron confirms the connection.</li>
+              </ol>
+            </div>
+            <div className="rounded-xl border border-warm/60 p-3">
+              <p className="font-medium text-ink">Groups</p>
+              <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+                <li>Add the Neuron bot to the group.</li>
+                <li>Send the connection command in that group.</li>
+                <li>If messages are not captured, open BotFather → /setprivacy → choose the bot → Disable.</li>
+              </ol>
+            </div>
+          </div>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Telegram bots cannot read old history. Only new messages sent after setup are captured.
+          </p>
 
           {loading && <p className="inline-flex items-center gap-2 text-sm text-muted"><Loader2 className="h-4 w-4 animate-spin" /> Preparing setup…</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { openai, generateEmbedding } from '@/lib/openai'
 import { prisma } from '@/lib/db'
+import { safelySuggestTasksFromKnowledgeItem } from '@/lib/tasks/service'
 import { upsertEmbedding, upsertEmbeddingInNamespace, searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { EXTRACTION_SYSTEM_PROMPT, GMAIL_EXTRACTION_SYSTEM_PROMPT, CONFLICT_SYSTEM_PROMPT } from './prompts'
 import { escapeXml } from '@/lib/utils'
@@ -271,6 +272,16 @@ export async function extractKnowledgeDetailed(
               sourceCreatedAt: batchSourceCreatedAt,
             },
             select: { id: true },
+          })
+          await safelySuggestTasksFromKnowledgeItem({
+            id: dbItem.id,
+            workspaceId,
+            content: item.content,
+            source,
+            sourceExternalId: sourceExternalId ?? null,
+            sourceUrl: sourceUrl ?? null,
+            notionPageTitle: notionPage?.title ?? null,
+            sourceCreatedAt: batchSourceCreatedAt,
           })
         } catch (dbErr) {
           console.error('[extractKnowledge] DB write failed, skipping item', dbErr)

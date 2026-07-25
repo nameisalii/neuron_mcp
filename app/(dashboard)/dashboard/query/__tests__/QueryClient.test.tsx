@@ -72,26 +72,37 @@ it('renders a multiline composer with disabled empty send button', () => {
   expect(screen.getByTestId('query-header-controls')).toBeInTheDocument()
   expect(screen.getByTestId('query-thread-scroll')).toHaveClass('overflow-y-auto')
   expect(screen.getByTestId('query-composer')).toBeInTheDocument()
-  const textarea = screen.getByRole('textbox', { name: 'Ask anything' })
+  const textarea = screen.getByRole('textbox', { name: 'Ask Neuron anything' })
   expect(textarea.tagName).toBe('TEXTAREA')
   expect(textarea).toHaveAttribute('rows', '1')
   expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled()
 })
 
-it('shows an example prompt and lets the user copy it into the composer', () => {
+it('shows starter prompts once and copies a chip into the composer', () => {
   renderQueryClient()
 
-  expect(screen.getByText('Ask your Brain')).toBeInTheDocument()
-  expect(screen.queryByText('Search across your connected workspace knowledge.')).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: /What changed in Telegram today\?/ })).toBeInTheDocument()
+  expect(screen.getByText('How can I help you?')).toBeInTheDocument()
+  expect(screen.queryByText(/example changes every few seconds/i)).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Try asking')).toHaveClass('whitespace-nowrap')
+  expect(screen.getAllByRole('button', { name: 'What changed today?' })).toHaveLength(1)
 
-  fireEvent.click(screen.getByRole('button', { name: /What changed in Telegram today\?/ }))
-  expect(screen.getByRole('textbox', { name: 'Ask anything' })).toHaveValue('What changed in Telegram today?')
+  fireEvent.click(screen.getByRole('button', { name: 'What changed today?' }))
+  expect(screen.getByRole('textbox', { name: 'Ask Neuron anything' })).toHaveValue('What changed today?')
+})
+
+it('deduplicates recent questions by normalized text', () => {
+  render(<QueryClient workspaceType="solo" recentQueries={[
+    { id: '1', query: 'What changed today?', createdAt: '2026-07-24T10:00:00.000Z' },
+    { id: '2', query: '  WHAT  CHANGED TODAY?  ', createdAt: '2026-07-23T10:00:00.000Z' },
+    { id: '3', query: 'What needs attention?', createdAt: '2026-07-22T10:00:00.000Z' },
+  ]} />)
+  expect(screen.getByLabelText('Recent questions')).toHaveClass('whitespace-nowrap')
+  expect(screen.getAllByRole('button', { name: /what changed today\?/i })).toHaveLength(1)
 })
 
 it('expands the composer for multiline input', () => {
   renderQueryClient()
-  const textarea = screen.getByRole('textbox', { name: 'Ask anything' }) as HTMLTextAreaElement
+  const textarea = screen.getByRole('textbox', { name: 'Ask Neuron anything' }) as HTMLTextAreaElement
   Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 120 })
 
   fireEvent.change(textarea, { target: { value: 'Line one\nLine two' } })
@@ -101,7 +112,7 @@ it('expands the composer for multiline input', () => {
 
 it('sends on Enter and renders chat bubbles with collapsed sources', async () => {
   renderQueryClient()
-  const textarea = screen.getByRole('textbox', { name: 'Ask anything' })
+  const textarea = screen.getByRole('textbox', { name: 'Ask Neuron anything' })
 
   fireEvent.change(textarea, { target: { value: 'Find BOL for load 12345' } })
   fireEvent.keyDown(textarea, { key: 'Enter' })
@@ -112,17 +123,20 @@ it('sends on Enter and renders chat bubbles with collapsed sources', async () =>
   })))
   expect(screen.getByText('Find BOL for load 12345')).toBeInTheDocument()
   expect(await screen.findByText('Neuron found a BOL for load 12345.')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Sources (1)' })).toHaveAttribute('aria-expanded', 'false')
+  const assistantHeader = screen.getByLabelText('Neuron assistant').parentElement!
+  expect(assistantHeader.textContent).not.toContain('Neuron')
+  expect(assistantHeader.querySelector('time')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'From integrations (1)' })).toHaveAttribute('aria-expanded', 'false')
   expect(screen.queryByText('Load board update')).not.toBeInTheDocument()
 
-  fireEvent.click(screen.getByRole('button', { name: 'Sources (1)' }))
+  fireEvent.click(screen.getByRole('button', { name: 'From integrations (1)' }))
   expect(screen.getByText('Load board update')).toBeInTheDocument()
   expect(screen.getByText(/@dispatch_updates · Telegram ·/)).toBeInTheDocument()
 })
 
 it('keeps Shift+Enter as a newline action instead of submitting', () => {
   renderQueryClient()
-  const textarea = screen.getByRole('textbox', { name: 'Ask anything' })
+  const textarea = screen.getByRole('textbox', { name: 'Ask Neuron anything' })
 
   fireEvent.change(textarea, { target: { value: 'Long question' } })
   fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
@@ -132,7 +146,7 @@ it('keeps Shift+Enter as a newline action instead of submitting', () => {
 
 it('clears the current thread when New Chat is clicked', async () => {
   renderQueryClient()
-  const textarea = screen.getByRole('textbox', { name: 'Ask anything' })
+  const textarea = screen.getByRole('textbox', { name: 'Ask Neuron anything' })
 
   fireEvent.change(textarea, { target: { value: 'load' } })
   fireEvent.keyDown(textarea, { key: 'Enter' })
@@ -141,7 +155,7 @@ it('clears the current thread when New Chat is clicked', async () => {
 
   fireEvent.click(screen.getByRole('button', { name: 'New Chat' }))
   await waitFor(() => expect(screen.queryByText('load')).not.toBeInTheDocument())
-  expect(screen.getByText('Ask your Brain')).toBeInTheDocument()
+  expect(screen.getByText('How can I help you?')).toBeInTheDocument()
   expect(global.fetch).not.toHaveBeenCalledWith(expect.stringMatching(/delete|reset/i), expect.anything())
 })
 
@@ -254,10 +268,10 @@ it('opens a saved conversation from Recents and continues it in Search', async (
 
   expect(await screen.findByText('Telegram is connected to Neuron.')).toBeInTheDocument()
   expect(screen.getByText('What does Neuron know about Telegram?')).toBeInTheDocument()
-  expect(screen.getByRole('textbox', { name: 'Ask anything' })).toBeInTheDocument()
+  expect(screen.getByRole('textbox', { name: 'Ask Neuron anything' })).toBeInTheDocument()
 
-  fireEvent.change(screen.getByRole('textbox', { name: 'Ask anything' }), { target: { value: 'What changed?' } })
-  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Ask anything' }), { key: 'Enter' })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask Neuron anything' }), { target: { value: 'What changed?' } })
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Ask Neuron anything' }), { key: 'Enter' })
 
   await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/query', expect.objectContaining({
     body: JSON.stringify({ question: 'What changed?', conversationId: 'history-1' }),
@@ -392,14 +406,14 @@ it('shows a safe error when rename fails', async () => {
 
 it('sends follow-up messages with the active conversationId', async () => {
   renderQueryClient()
-  const textarea = screen.getByRole('textbox', { name: 'Ask anything' })
+  const textarea = screen.getByRole('textbox', { name: 'Ask Neuron anything' })
 
   fireEvent.change(textarea, { target: { value: 'Find BOL for load 12345' } })
   fireEvent.keyDown(textarea, { key: 'Enter' })
   expect(await screen.findByText('Neuron found a BOL for load 12345.')).toBeInTheDocument()
 
-  fireEvent.change(screen.getByRole('textbox', { name: 'Ask anything' }), { target: { value: 'Show me more' } })
-  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Ask anything' }), { key: 'Enter' })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask Neuron anything' }), { target: { value: 'Show me more' } })
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Ask Neuron anything' }), { key: 'Enter' })
 
   await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/query', expect.objectContaining({
     body: JSON.stringify({ question: 'Show me more', conversationId: 'conversation-1' }),

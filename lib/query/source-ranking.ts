@@ -13,6 +13,8 @@ export interface QuerySource {
   sourceCreatedAt: string | null
   updatedAt: string | null
   relevanceScore: number
+  verified?: boolean
+  conflictNote?: string | null
 }
 
 export interface SourceRankingIntent {

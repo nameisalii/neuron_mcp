@@ -195,7 +195,7 @@ export default async function IntegrationsPage(
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-display font-semibold text-ink">Integrations</h1>
-        <p className="text-sm text-muted mt-1">Connect your tools so Neuron can capture and organize your team&apos;s knowledge.</p>
+        <p className="text-sm text-muted mt-1">Connect the tools your team already uses. Neuron turns them into your company brain.</p>
       </div>
 
       {searchParams.success === 'slack' && <SuccessBanner>Slack connected successfully.</SuccessBanner>}

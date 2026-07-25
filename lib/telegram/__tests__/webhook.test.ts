@@ -4,12 +4,12 @@ jest.mock('@/lib/db', () => ({ prisma: {} }))
 jest.mock('@/lib/extraction/extractor', () => ({}))
 jest.mock('@/lib/openai', () => ({}))
 jest.mock('@/lib/pinecone', () => ({}))
+jest.mock('@/lib/tasks/service', () => ({ extractAndCreateSuggestedTaskFromKnowledgeItem: jest.fn() }))
 
 describe('shouldSkipTelegramText', () => {
   it.each([
     ['hi', 'small_talk'],
     ['how are you doing', 'small_talk'],
-    ['Roadmap', 'too_short'],
     ['👍 👋', 'emoji_only'],
     ['...?!', 'punctuation_only'],
     ['https://example.com/roadmap', 'url_only'],
@@ -20,6 +20,7 @@ describe('shouldSkipTelegramText', () => {
   })
 
   it.each([
+    'Roadmap',
     'Launch Friday',
     'Fix billing',
     'Ship auth',

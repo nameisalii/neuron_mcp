@@ -6,20 +6,21 @@ import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { generateEmbedding, openai } from '@/lib/openai'
 import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
-import { trackEvent } from '@/lib/activity'
+import { trackValidationEvent } from '@/lib/activity'
 import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/persistence'
 import { searchDocumentAttachments } from '@/lib/documents/search'
 
 jest.mock('@clerk/nextjs/server', () => ({ auth: jest.fn() }))
 jest.mock('@/lib/db', () => ({
   prisma: {
-    user: { findUnique: jest.fn() },
+    user: { findUnique: jest.fn(), updateMany: jest.fn() },
     workspaceMember: { findUnique: jest.fn() },
     workspace: { findUnique: jest.fn() },
     notionChunk: { findMany: jest.fn() },
     knowledgeItem: { findMany: jest.fn() },
     emailThread: { findMany: jest.fn() },
     queryLog: { create: jest.fn() },
+    activityEvent: { count: jest.fn(), findFirst: jest.fn() },
   },
 }))
 jest.mock('@/lib/openai', () => ({
@@ -27,7 +28,7 @@ jest.mock('@/lib/openai', () => ({
   openai: { chat: { completions: { create: jest.fn() } } },
 }))
 jest.mock('@/lib/pinecone', () => ({ searchSimilar: jest.fn(), searchInNamespace: jest.fn() }))
-jest.mock('@/lib/activity', () => ({ trackEvent: jest.fn() }))
+jest.mock('@/lib/activity', () => ({ trackValidationEvent: jest.fn() }))
 jest.mock('@/lib/chat/persistence', () => ({
   createOrAppendConversation: jest.fn(),
   storeAssistantMessage: jest.fn(),
@@ -45,7 +46,7 @@ const mockEmbed = jest.mocked(generateEmbedding)
 const mockSearch = jest.mocked(searchSimilar)
 const mockPersonalSearch = jest.mocked(searchInNamespace)
 const mockChat = jest.mocked(openai.chat.completions.create)
-const mockTrackEvent = jest.mocked(trackEvent)
+const mockTrackEvent = jest.mocked(trackValidationEvent)
 const mockEmailThreadFindMany = jest.mocked(prisma.emailThread.findMany)
 const mockCreateOrAppendConversation = jest.mocked(createOrAppendConversation)
 const mockStoreAssistantMessage = jest.mocked(storeAssistantMessage)
@@ -105,7 +106,9 @@ beforeEach(() => {
   mockKnowledgeFindMany.mockResolvedValue([] as never)
   mockEmailThreadFindMany.mockResolvedValue([] as never)
   mockQueryLogCreate.mockResolvedValue({ id: 'log-1' } as never)
-  mockTrackEvent.mockResolvedValue(undefined)
+  mockTrackEvent.mockResolvedValue({ ok: true, eventId: 'event-1' })
+  jest.mocked(prisma.activityEvent.count).mockResolvedValue(1)
+  jest.mocked(prisma.activityEvent.findFirst).mockResolvedValue({ id: 'existing-completion' } as never)
   mockCreateOrAppendConversation.mockResolvedValue({ conversationId: 'conversation-1', relatedLoadId: null })
   mockStoreAssistantMessage.mockResolvedValue(undefined)
   mockSearchDocumentAttachments.mockResolvedValue([])
@@ -469,7 +472,7 @@ describe('POST /api/query', () => {
     )
   })
 
-  it('creates an ActivityEvent with the question', async () => {
+  it('creates a safe query ActivityEvent without the private question text', async () => {
     const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
     await res.text() // consume stream so async start() completes
     expect(mockTrackEvent).toHaveBeenCalledWith(
@@ -477,9 +480,17 @@ describe('POST /api/query', () => {
       CLERK_ID,
       DISPLAY_NAME,
       'query',
-      expect.stringContaining('asked'),
-      expect.any(Object),
+      'Ali Z queried the company brain',
+      expect.objectContaining({ queryLength: 26, hasAnswer: true, hasSources: true, sourceTypes: ['notion'] }),
     )
+  })
+
+  it('still returns the answer when onboarding progress tracking fails', async () => {
+    jest.mocked(prisma.activityEvent.count).mockRejectedValueOnce(new Error('activity table temporarily unavailable'))
+    const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
+    expect(res.status).toBe(200)
+    const events = await readSSE(res)
+    expect(events.find((event) => event.type === 'done')?.answer).toContain('Refunds over $500')
   })
 
   it('returns no-information SSE done event when no chunks found', async () => {
@@ -506,5 +517,13 @@ describe('POST /api/query', () => {
     expect(res.status).toBe(500)
     const data = await res.json()
     expect(data.error).toBe('Internal server error')
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      CLERK_ID,
+      DISPLAY_NAME,
+      'query_failed',
+      'Company brain query failed',
+      expect.objectContaining({ errorCode: 'QUERY_INTERNAL_ERROR', queryLength: 26 }),
+    )
   })
 })

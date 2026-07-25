@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
-import { Brain, Search, Plug, Menu, X, Settings, Activity, MessageSquare } from 'lucide-react'
-import { useState } from 'react'
+import { LayoutDashboard, Search, Plug, Menu, X, Settings, Activity, ListTodo, PanelLeftClose, PanelLeftOpen, GitBranch, MessageSquare } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { clsx } from 'clsx'
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher'
 import UpgradeModal from '@/components/UpgradeModal'
@@ -27,27 +27,33 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard/overview', label: 'Overview', icon: Brain },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/dashboard/query', label: 'Query', icon: Search },
-  { href: '/dashboard/activity', label: 'Activity', icon: Activity },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ListTodo },
+  { href: '/dashboard/decisions', label: 'Decisions', icon: GitBranch },
   { href: '/dashboard/integrations', label: 'Integrations', icon: Plug },
-  { href: '/dashboard/settings/capture', label: 'Capture', icon: Settings },
+  { href: '/dashboard/activity', label: 'Activity', icon: Activity },
   { href: '/dashboard/feedback', label: 'Feedback', icon: MessageSquare },
+  { href: '/dashboard/settings/capture', label: 'Settings', icon: Settings },
 ]
 
 interface NavLinkProps extends NavItem {
   count?: number
+  collapsed?: boolean
 }
 
-function NavLink({ href, label, icon: Icon, exact, count }: NavLinkProps) {
+function NavLink({ href, label, icon: Icon, exact, count, collapsed = false }: NavLinkProps) {
   const pathname = usePathname()
   const isActive = exact ? pathname === href : pathname.startsWith(href)
 
   return (
     <Link
       href={href}
+      aria-label={label}
+      title={collapsed ? label : undefined}
       className={clsx(
-        'group relative flex items-center justify-between gap-3 px-3 py-2.5 rounded-[10px] text-sm font-medium transition-colors',
+        'group relative flex items-center gap-3 rounded-[10px] py-2.5 text-sm font-medium transition-colors',
+        collapsed ? 'justify-between px-3 lg:justify-center lg:px-2' : 'justify-between px-3',
         isActive
           ? 'bg-white/10 text-white'
           : 'text-white/65 hover:bg-white/[0.07] hover:text-white'
@@ -58,12 +64,13 @@ function NavLink({ href, label, icon: Icon, exact, count }: NavLinkProps) {
       )}
       <span className="flex items-center gap-3">
         <Icon className={clsx('w-[18px] h-[18px] shrink-0', isActive && 'text-accent')} />
-        {label}
+        <span className={collapsed ? 'lg:hidden' : undefined}>{label}</span>
       </span>
       {count !== undefined && count > 0 && (
         <span
           className={clsx(
             'text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center',
+            collapsed && 'lg:hidden',
             isActive ? 'bg-accent text-white' : 'bg-white/10 text-white/70'
           )}
         >
@@ -84,7 +91,20 @@ export default function DashboardShell({
   workspaceId?: string
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
+
+  useEffect(() => {
+    setSidebarCollapsed(window.localStorage.getItem('neuron.sidebarCollapsed') === 'true')
+  }, [])
+
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((current) => {
+      const next = !current
+      window.localStorage.setItem('neuron.sidebarCollapsed', String(next))
+      return next
+    })
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-cream">
@@ -98,16 +118,25 @@ export default function DashboardShell({
       <aside
         className={clsx(
           'fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-black text-white',
-          'transform transition-transform duration-200 lg:static lg:z-auto lg:h-screen lg:translate-x-0',
+          'transform transition-[transform,width] duration-200 lg:static lg:z-auto lg:h-screen lg:translate-x-0',
+          sidebarCollapsed ? 'lg:w-[72px]' : 'lg:w-64',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex items-center px-5 h-16 shrink-0">
-          <NeuronLogo variant="bare" size="sm" />
+        <div className={clsx('flex h-16 shrink-0 items-center gap-2', sidebarCollapsed ? 'justify-between px-5 lg:justify-center lg:px-2' : 'justify-between px-5')}>
+          {sidebarCollapsed ? <><NeuronLogo variant="bare" size="sm" className="lg:hidden"/><NeuronLogo variant="bare" size="sm" showWord={false} className="hidden lg:flex"/></> : <NeuronLogo variant="bare" size="sm" />}
+          <button
+            type="button"
+            onClick={toggleSidebarCollapsed}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="hidden rounded-lg p-2 text-white/55 transition hover:bg-white/10 hover:text-white lg:inline-flex"
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
         </div>
 
         {workspaceId && (
-          <>
+          <div className={sidebarCollapsed ? 'lg:hidden' : undefined}>
             <div className="px-3 pb-2">
               <WorkspaceSwitcher
                 currentWorkspaceId={workspaceId}
@@ -119,22 +148,21 @@ export default function DashboardShell({
               onClose={() => setShowUpgrade(false)}
               onUpgradeComplete={() => setShowUpgrade(false)}
             />
-          </>
+          </div>
         )}
 
-        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+        <nav className={clsx('flex-1 space-y-1 overflow-y-auto px-3 py-3', sidebarCollapsed && 'lg:px-2')}>
           {navItems.map((item) => (
             <NavLink
               key={item.href}
               {...item}
+              collapsed={sidebarCollapsed}
               count={item.countKey ? counts[item.countKey] : undefined}
             />
           ))}
         </nav>
 
-        <div className="px-5 py-4 border-t border-white/10">
-          <p className="text-[11px] text-white/40">Your company brain</p>
-        </div>
+        <div className={clsx('border-t border-white/10 px-5 py-4', sidebarCollapsed && 'lg:hidden')}><p className="text-[11px] text-white/40">Neuron workspace</p></div>
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">

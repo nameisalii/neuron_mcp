@@ -73,8 +73,8 @@ it('uploads the file first, then sends the query with documentIds', async () => 
 
   renderComposer()
   selectFile(new File(['hello'], 'BOL.pdf', { type: 'application/pdf' }))
-  fireEvent.change(screen.getByLabelText('Ask anything'), { target: { value: 'Attach this as BOL for load 12345' } })
-  fireEvent.submit(screen.getByLabelText('Ask anything').closest('form') as HTMLFormElement)
+  fireEvent.change(screen.getByLabelText('Ask Neuron anything'), { target: { value: 'Attach this as BOL for load 12345' } })
+  fireEvent.submit(screen.getByLabelText('Ask Neuron anything').closest('form') as HTMLFormElement)
 
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
 

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { extractKnowledgeDetailed } from '@/lib/extraction/extractor'
 import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding } from '@/lib/pinecone'
+import { extractAndCreateSuggestedTaskFromKnowledgeItem } from '@/lib/tasks/service'
 
 jest.mock('@/lib/db', () => ({
   prisma: {
@@ -24,6 +25,7 @@ jest.mock('@/lib/extraction/extractor', () => ({
 }))
 jest.mock('@/lib/openai', () => ({ generateEmbedding: jest.fn() }))
 jest.mock('@/lib/pinecone', () => ({ upsertEmbedding: jest.fn() }))
+jest.mock('@/lib/tasks/service', () => ({ extractAndCreateSuggestedTaskFromKnowledgeItem: jest.fn() }))
 
 const secret = 'telegram-webhook-secret'
 const integration = { id: 'int-1', workspaceId: 'ws-1' }
@@ -76,6 +78,7 @@ beforeEach(() => {
       itemProcessingFailed: 0,
     },
   })
+  ;(extractAndCreateSuggestedTaskFromKnowledgeItem as jest.Mock).mockResolvedValue({ status: 'created', tasks: [{ id: 'task-1' }] })
   jest.spyOn(console, 'info').mockImplementation(() => {})
 })
 
@@ -111,6 +114,69 @@ it('creates a Telegram KnowledgeItem from a text message before extraction', asy
   })
   expect((prisma.knowledgeItem.create as jest.Mock).mock.invocationCallOrder[0])
     .toBeLessThan((extractKnowledgeDetailed as jest.Mock).mock.invocationCallOrder[0])
+})
+
+it.each([
+  ['direct', 'private'],
+  ['group', 'supergroup'],
+])('creates knowledge from a bound %s message', async (_label, type) => {
+  await POST(request(textUpdate({ chat: { id: -1001234, type } })))
+
+  expect(prisma.knowledgeItem.create).toHaveBeenCalledWith({
+    data: expect.objectContaining({ source: 'telegram' }),
+    select: { id: true },
+  })
+})
+
+it('accepts edited messages and runs task extraction with Telegram source context', async () => {
+  const update = textUpdate()
+  const editedUpdate = { update_id: update.update_id, edited_message: update.message }
+  await POST(request(editedUpdate))
+
+  expect(extractAndCreateSuggestedTaskFromKnowledgeItem).toHaveBeenCalledWith(expect.objectContaining({
+    knowledgeItemId: 'ki-1',
+    workspaceId: 'ws-1',
+  }))
+})
+
+it('retries task extraction when the Telegram KnowledgeItem already exists', async () => {
+  ;(prisma.knowledgeItem.findFirst as jest.Mock).mockResolvedValue({ id: 'ki-existing' })
+  const response = await POST(request(textUpdate()))
+  expect(response.status).toBe(200)
+  expect(extractAndCreateSuggestedTaskFromKnowledgeItem).toHaveBeenCalledWith({ knowledgeItemId: 'ki-existing', workspaceId: 'ws-1' })
+  expect(prisma.knowledgeItem.create).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['/start abcdefghijklmnop', 'private'],
+  ['/start@neuron_mcp_bot abcdefghijklmnop', 'supergroup'],
+])('binds a chat using %s', async (text, type) => {
+  ;(prisma.integration.findMany as jest.Mock).mockResolvedValue([{
+    id: 'int-setup',
+    workspaceId: 'ws-setup',
+    channels: [],
+    metadata: { setupCode: 'abcdefghijklmnop' },
+  }])
+
+  const response = await POST(request(textUpdate({ text, chat: { id: -1009999, type, title: 'Test team' } })))
+  expect(response.status).toBe(200)
+  expect(prisma.integration.update).toHaveBeenCalledWith({
+    where: { id: 'int-setup' },
+    data: expect.objectContaining({
+      channels: ['-1009999'],
+      teamId: '-1009999',
+      teamName: 'Test team',
+      metadata: expect.objectContaining({ status: 'connected' }),
+    }),
+  })
+  expect((await response.json()).skippedReasons).toEqual({ binding_command: 1 })
+})
+
+it('ignores non-setup bot commands', async () => {
+  const response = await POST(request(textUpdate({ text: '/help' })))
+  expect(response.status).toBe(200)
+  expect((await response.json()).skippedReasons).toEqual({ command: 1 })
+  expect(prisma.knowledgeItem.create).not.toHaveBeenCalled()
 })
 
 it('does not duplicate a repeated message', async () => {

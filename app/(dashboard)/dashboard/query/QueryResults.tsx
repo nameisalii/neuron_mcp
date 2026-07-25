@@ -27,7 +27,7 @@ interface Props {
   onCopy: () => void
 }
 
-const WEAK_ANSWER = 'I could not find enough information to answer confidently, but these are the closest sources I found.'
+const WEAK_ANSWER = 'I could not find enough information to answer confidently, but these are the closest references I found.'
 
 function safeHref(value: string): string | null {
   try {
@@ -180,19 +180,25 @@ export default function QueryResults({ answer, sources, documents = [], complete
   const [sourcesExpanded, setSourcesExpanded] = useState(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(documents.length > 0)
   const displayAnswer = answer.trim() || (complete && sources.length > 0 ? WEAK_ANSWER : '')
+  const hasConflicts = sources.some((source) => Boolean(source.conflictNote))
+  const hasRecentOrVerified = sources.some((source) => {
+    if (source.verified) return true
+    const value = source.sourceCreatedAt ?? source.updatedAt
+    return value ? Date.now() - new Date(value).getTime() <= 30 * 86_400_000 : false
+  })
+  const confidenceLabel = sources.length === 0 || hasConflicts
+    ? 'Low confidence'
+    : hasRecentOrVerified
+      ? 'High confidence'
+      : 'Medium confidence'
 
   return (
     <div className="space-y-4">
       {displayAnswer && (
         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" aria-label="Neuron answer">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-black">
-                <img src="/neuron-assistant-logo.png" alt="" className="h-full w-full object-cover" />
-              </span>
-              <h2 className="text-sm font-semibold text-gray-900">Neuron</h2>
-            </div>
-            {complete && (
+          <div className="mb-3 flex items-center justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${confidenceLabel === 'High confidence' ? 'bg-emerald-50 text-emerald-700' : confidenceLabel === 'Medium confidence' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>{confidenceLabel}</span>{hasConflicts && <span className="text-xs text-amber-700">Some sources may conflict. Review source cards.</span>}</div>
+          {complete && (
+            <div className="mb-3 flex justify-end">
               <button
                 type="button"
                 onClick={onCopy}
@@ -202,11 +208,11 @@ export default function QueryResults({ answer, sources, documents = [], complete
                 <Copy className="h-3.5 w-3.5" aria-hidden="true" />
                 {copied ? 'Copied!' : 'Copy answer'}
               </button>
-            )}
-          </div>
+            </div>
+          )}
           {displayAnswer.toLowerCase().includes('conflict') && (
             <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700">
-              Conflict detected in your knowledge base. Review sources for inconsistencies.
+              I found conflicting saved context. Review the referenced integrations for inconsistencies.
             </div>
           )}
           <MarkdownAnswer answer={displayAnswer} sources={sources} />
@@ -262,14 +268,14 @@ export default function QueryResults({ answer, sources, documents = [], complete
       )}
 
       {sources.length > 0 && (
-        <section aria-label="Sources" className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <section aria-label="From integrations" className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <button
             type="button"
             onClick={() => setSourcesExpanded((value) => !value)}
             className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900"
             aria-expanded={sourcesExpanded}
           >
-            <span>Sources ({sources.length})</span>
+            <span>From integrations ({sources.length})</span>
             <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${sourcesExpanded ? 'rotate-180' : ''}`} />
           </button>
           {sourcesExpanded && (

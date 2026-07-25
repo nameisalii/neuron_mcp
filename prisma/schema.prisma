@@ -50,6 +50,7 @@ model Workspace {
   digests         Digest[]
   alerts          Alert[]
   userPreferences UserPreference[]
+  tasks           Task[]
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @default(now()) @updatedAt
 }
@@ -59,6 +60,7 @@ model KnowledgeItem {
   workspaceId      String
   workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   content          String
+  summary          String?
   category         String
   aiSuggestedCategory String?
   source           String
@@ -90,12 +92,95 @@ model KnowledgeItem {
   sourceCreatedAt  DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
+  extractedTasks   Task[]
 
   @@unique([workspaceId, contentHash])
   @@index([workspaceId, category])
   @@index([workspaceId, verified])
   @@index([workspaceId, notionPageId])
   @@index([workspaceId, source, sourceExternalId])
+}
+
+enum TaskStatus {
+  suggested
+  active
+  completed
+  declined
+  archived
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum TaskCategory {
+  work
+  school
+  startup
+  truck
+  personal
+  other
+}
+
+enum TaskActivityType {
+  created
+  suggested
+  approved
+  edited
+  completed
+  reopened
+  declined
+  archived
+}
+
+model Task {
+  id                           String       @id @default(cuid())
+  workspaceId                  String
+  workspace                    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title                        String
+  description                  String?
+  status                       TaskStatus   @default(suggested)
+  priority                     TaskPriority @default(medium)
+  category                     TaskCategory @default(work)
+  color                        String?
+  dueAt                        DateTime?
+  completedAt                  DateTime?
+  sourceType                   String?
+  sourceId                     String?
+  sourceUrl                    String?
+  sourceTitle                  String?
+  sourceSnippet                String?
+  extractedFromKnowledgeItemId String?
+  extractedFromKnowledgeItem   KnowledgeItem? @relation(fields: [extractedFromKnowledgeItemId], references: [id], onDelete: SetNull)
+  assignedToUserId             String?
+  createdByUserId              String?
+  confidence                   Float?
+  metadata                     Json?
+  dedupeKey                    String?
+  events                       TaskEvent[]
+  createdAt                    DateTime     @default(now())
+  updatedAt                    DateTime     @updatedAt
+
+  @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, status])
+  @@index([workspaceId, category])
+  @@index([workspaceId, dueAt])
+  @@index([extractedFromKnowledgeItemId])
+}
+
+model TaskEvent {
+  id        String           @id @default(cuid())
+  taskId    String
+  task      Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String?
+  type      TaskActivityType
+  message   String?
+  createdAt DateTime         @default(now())
+
+  @@index([taskId, createdAt])
 }
 
 model Decision {

@@ -146,6 +146,7 @@ export default function SourceCard({ source, i, variants }: Props) {
               </span>
             </div>
             <p className="mt-1 text-xs text-gray-500">{getSourceSubtitle(source)}</p>
+            <p className="mt-1 text-[11px] text-gray-400">{source.verified ? 'Verified source' : `${Math.round(Math.max(0, Math.min(source.relevanceScore, 1)) * 100)}% relevance`}</p>
           </div>
         </div>
         {sourceUrl && (

@@ -120,13 +120,15 @@ describe('TelegramIntegrationCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Configure' }))
 
     expect(await screen.findByText('Connect Telegram to Neuron')).toBeInTheDocument()
-    expect(screen.getByText(/Add the Neuron bot to the group or channel/)).toBeInTheDocument()
+    expect(screen.getByText(/Add the Neuron bot to the group/)).toBeInTheDocument()
     expect(screen.getByText('Bot to add:')).toHaveTextContent('@neuron_mcp_bot')
+    expect(screen.getByRole('link', { name: '@neuron_mcp_bot' })).toHaveAttribute('href', 'https://t.me/neuron_mcp_bot')
     expect(await screen.findByText('/start setup-code')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy connection command' })).toBeInTheDocument()
+    expect(screen.getByText(/BotFather.*setprivacy.*Disable/)).toBeInTheDocument()
+    expect(screen.getByText(/cannot read old history.*Only new messages/i)).toBeInTheDocument()
 
     const visibleText = document.body.textContent ?? ''
-    expect(visibleText).not.toContain('BotFather')
     expect(visibleText).not.toContain('TELEGRAM_BOT_TOKEN')
     expect(visibleText).not.toContain('TELEGRAM_WEBHOOK_SECRET')
     expect(visibleText.toLowerCase()).not.toContain('webhook')

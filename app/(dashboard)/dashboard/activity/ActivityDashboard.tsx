@@ -118,7 +118,68 @@ function activityLinks(event: ActivityFeedEvent): Array<{ label: string; href: s
   ].filter((link): link is { label: string; href: string } => Boolean(link))
 }
 
-function StatCard({
+function FeaturedMetric({
+  icon: Icon,
+  label,
+  value,
+  note,
+  tone,
+}: {
+  icon: LucideIcon
+  label: string
+  value: string
+  note: string
+  tone: 'dark' | 'accent'
+}) {
+  return (
+    <div
+      className={clsx(
+        'relative isolate min-h-[178px] overflow-hidden rounded-2xl p-5 sm:p-6',
+        tone === 'dark'
+          ? 'bg-navy text-white'
+          : 'border border-accent/15 bg-accent-soft text-navy',
+      )}
+    >
+      <div
+        aria-hidden="true"
+        className={clsx(
+          'absolute -right-12 -top-16 -z-10 h-40 w-40 rounded-full blur-2xl',
+          tone === 'dark' ? 'bg-accent/35' : 'bg-white/90',
+        )}
+      />
+      <div className="flex h-full flex-col justify-between gap-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className={clsx(
+              'inline-flex h-10 w-10 items-center justify-center rounded-xl',
+              tone === 'dark' ? 'bg-white/10 text-white' : 'bg-white text-accent shadow-sm',
+            )}>
+              <Icon className="h-5 w-5" />
+            </span>
+            <p className={clsx(
+              'text-[12px] font-semibold uppercase tracking-[0.16em]',
+              tone === 'dark' ? 'text-white/65' : 'text-navy/55',
+            )}>
+              {label}
+            </p>
+          </div>
+          <Sparkles className={clsx('h-4 w-4', tone === 'dark' ? 'text-white/35' : 'text-accent/45')} />
+        </div>
+        <div>
+          <p className="text-[40px] font-semibold leading-none tracking-[-0.04em] sm:text-[46px]">{value}</p>
+          <p className={clsx(
+            'mt-3 text-[13px]',
+            tone === 'dark' ? 'text-white/60' : 'text-navy/55',
+          )}>
+            {note}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SupportingMetric({
   icon: Icon,
   label,
   value,
@@ -130,16 +191,58 @@ function StatCard({
   note: string
 }) {
   return (
-    <Card padding="md">
+    <div className="group flex min-h-[132px] flex-col justify-between rounded-2xl border border-line-subtle bg-bg-card/55 p-4 transition-colors hover:bg-white sm:p-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-ink-muted">{label}</p>
-          <p className="mt-2 text-[30px] font-semibold tracking-tight text-ink-primary">{value}</p>
-          <p className="mt-2 text-[13px] text-ink-muted">{note}</p>
-        </div>
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-line-subtle bg-bg-card text-ink-secondary">
-          <Icon className="h-5 w-5" />
+        <p className="max-w-[12rem] text-[12px] font-semibold uppercase leading-relaxed tracking-[0.13em] text-ink-muted">{label}</p>
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-line-subtle bg-white text-ink-secondary shadow-sm transition-transform group-hover:-translate-y-0.5">
+          <Icon className="h-4 w-4" />
         </span>
+      </div>
+      <div className="mt-5 flex items-end justify-between gap-3">
+        <p className="text-[27px] font-semibold leading-none tracking-tight text-ink-primary">{value}</p>
+        <p className="pb-0.5 text-right text-[11px] leading-tight text-ink-muted">{note}</p>
+      </div>
+    </div>
+  )
+}
+
+function MetricsOverview({ totals }: { totals: BrainActivityAnalytics['totals'] }) {
+  return (
+    <Card padding="lg" data-testid="activity-kpis" className="overflow-hidden">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">At a glance</p>
+          <CardTitle className="mt-2 text-[20px] sm:text-[22px]">Workspace pulse</CardTitle>
+          <p className="mt-2 text-[13px] text-ink-muted">A snapshot of how your team is building and using its brain.</p>
+        </div>
+        <span className="inline-flex items-center gap-2 rounded-full border border-line-subtle bg-bg-card px-3 py-1.5 text-[12px] font-medium text-ink-muted">
+          <span className="h-1.5 w-1.5 rounded-full bg-positive" />
+          Live workspace totals
+        </span>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <FeaturedMetric
+          icon={Brain}
+          label="Knowledge items"
+          value={totals.knowledgeItems.toLocaleString()}
+          note="Captured across your workspace"
+          tone="dark"
+        />
+        <FeaturedMetric
+          icon={MessageSquareText}
+          label="Questions asked"
+          value={totals.questionsAsked.toLocaleString()}
+          note="All-time query activity"
+          tone="accent"
+        />
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SupportingMetric icon={FileText} label="Documents" value={totals.documents.toLocaleString()} note="Imported" />
+        <SupportingMetric icon={Filter} label="Active integrations" value={totals.activeSources.toLocaleString()} note="Connected" />
+        <SupportingMetric icon={Users} label="Active users" value={totals.activeUsers.toLocaleString()} note="Last 30 days" />
+        <SupportingMetric icon={RefreshCcw} label="Syncs" value={totals.syncs.toLocaleString()} note="Last 7 days" />
       </div>
     </Card>
   )
@@ -214,7 +317,7 @@ function ChartBlock({ data }: { data: BrainActivityAnalytics['activityByDay'] })
 function SourcesBlock({ sources }: { sources: BrainActivityAnalytics['sources'] }) {
   const max = Math.max(...sources.map((source) => source.count), 0)
   if (sources.length === 0) {
-    return <EmptyBlock title="Connect integrations to see source activity." description="Source usage will appear here once Neuron starts ingesting knowledge." />
+    return <EmptyBlock title="Connect integrations to see activity." description="Integration usage will appear here once Neuron starts capturing company context." />
   }
 
   return (
@@ -381,7 +484,7 @@ function AttentionBlock({ items }: { items: BrainActivityAnalytics['needsAttenti
 
 function HealthBlock({ items }: { items: BrainActivityAnalytics['integrationHealth'] }) {
   if (items.length === 0) {
-    return <EmptyBlock title="No integration health data yet." description="Connect sources and sync content to see health at a glance." />
+    return <EmptyBlock title="No integration health data yet." description="Connect integrations and sync content to see health at a glance." />
   }
 
   const toneStyles: Record<IntegrationHealthStat['status'], string> = {
@@ -585,22 +688,12 @@ export default function ActivityDashboard({ members, currentUserId, analytics }:
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-col gap-6 overflow-hidden">
-      <div className="space-y-2">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-ink-muted">Activity</p>
-        <h1 className="text-[32px] font-semibold tracking-tight text-ink-primary sm:text-[40px]">Team Activity</h1>
-        <p className="max-w-2xl text-[16px] leading-relaxed text-ink-muted">
-          Workspace brain health, usage, and recent changes.
-        </p>
+      <div>
+        <h1 className="text-[32px] font-semibold tracking-tight text-ink-primary sm:text-[40px]">Activity</h1>
+        <p className="mt-1 text-sm text-ink-secondary">Recent updates from your workspace.</p>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6" data-testid="activity-kpis">
-        <StatCard icon={Brain} label="Knowledge items" value={analytics.totals.knowledgeItems.toLocaleString()} note="All time" />
-        <StatCard icon={MessageSquareText} label="Questions asked" value={analytics.totals.questionsAsked.toLocaleString()} note="All time query activity" />
-        <StatCard icon={FileText} label="Documents" value={analytics.totals.documents.toLocaleString()} note="All uploaded and imported documents" />
-        <StatCard icon={Filter} label="Active sources" value={analytics.totals.activeSources.toLocaleString()} note="Connected integrations and connectors" />
-        <StatCard icon={Users} label="Active users" value={analytics.totals.activeUsers.toLocaleString()} note="Last 30 days" />
-        <StatCard icon={RefreshCcw} label="Syncs" value={analytics.totals.syncs.toLocaleString()} note="Last 7 days" />
-      </section>
+      <MetricsOverview totals={analytics.totals} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.9fr)]">
         <div className="space-y-6">
@@ -758,7 +851,7 @@ export default function ActivityDashboard({ members, currentUserId, analytics }:
 
         <div className="space-y-6">
           <SectionShell
-            title="Most used sources"
+            title="Most used integrations"
             subtitle="Where your workspace knowledge is coming from."
             testId="activity-sources"
           >
@@ -783,7 +876,7 @@ export default function ActivityDashboard({ members, currentUserId, analytics }:
 
           <SectionShell
             title="Integration health"
-            subtitle="Connection status, sync health, and source volume."
+            subtitle="Connection status, sync health, and integration volume."
             testId="activity-health"
           >
             <HealthBlock items={analytics.integrationHealth} />

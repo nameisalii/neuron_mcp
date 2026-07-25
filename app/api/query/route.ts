@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { openai, generateEmbedding } from '@/lib/openai'
 import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
-import { trackEvent } from '@/lib/activity'
+import { trackValidationEvent } from '@/lib/activity'
 import { buildQuerySystemPrompt } from '@/lib/extraction/prompts'
 import { splitRankedSources, type QuerySource } from '@/lib/query/source-ranking'
 import { detectQueryIntent, type QueryIntent } from '@/lib/query/intent'
@@ -130,6 +130,8 @@ type KnowledgeItemResult = {
   updatedAt: Date
   visibility: string
   visibilitySetBy: string | null
+  verified: boolean
+  conflictNote: string | null
 }
 
 function isMissingColumnError(err: unknown) {
@@ -156,6 +158,8 @@ async function findKnowledgeItems(
     updatedAt: true,
     visibility: true,
     visibilitySetBy: true,
+    verified: true,
+    conflictNote: true,
   } satisfies Prisma.KnowledgeItemSelect
 
   try {
@@ -255,6 +259,33 @@ function sourceDisplayName(source: string): string {
   return source.charAt(0).toUpperCase() + source.slice(1)
 }
 
+function isTaskQuery(question: string) {
+  return /\b(tasks?|to[- ]?dos?|action items?|asked me to do|follow[- ]?ups?)\b/i.test(question)
+}
+
+async function answerTaskQuery(workspaceId: string, question: string) {
+  const lower = question.toLowerCase()
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1)
+  const source = ['telegram', 'slack', 'gmail', 'datatruck', 'linear', 'discord', 'notion'].find(value => lower.includes(value))
+  const where: Prisma.TaskWhereInput = {
+    workspaceId,
+    status: { in: ['suggested', 'active'] },
+    ...(source ? { sourceType: source } : {}),
+    ...(/\burgent\b/.test(lower) ? { priority: 'urgent' } : {}),
+    ...(/\btoday\b/.test(lower) ? { dueAt: { gte: today, lt: tomorrow } } : {}),
+  }
+  const tasks = await prisma.task.findMany({ where, orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'desc' }], take: 25 })
+  if (!tasks.length) return 'I couldn’t find any tasks matching that request in your Tasks dashboard.'
+  const lines = tasks.map((task, index) => {
+    const due = task.dueAt ? ` — due ${task.dueAt.toLocaleString()}` : ''
+    const sourceName = task.sourceType ? ` · ${sourceDisplayName(task.sourceType)}` : ''
+    return `${index + 1}. **${task.title}**${due} · ${task.priority}${sourceName} · ${task.status}`
+  })
+  return `## Tasks\n\n${lines.join('\n')}\n\nBased on ${tasks.length} task${tasks.length === 1 ? '' : 's'} in your workspace.`
+}
+
 function summarizeSourceUpdates(sources: QuerySource[], intent: QueryIntent): string {
   const requested = intent.requestedSources[0] ?? sources[0]?.source ?? 'workspace'
   const display = sourceDisplayName(requested)
@@ -324,11 +355,73 @@ function intentMetadata(intent: QueryIntent): Prisma.InputJsonObject {
   }
 }
 
-async function safeTrackEvent(...args: Parameters<typeof trackEvent>) {
+async function safeTrackEvent(...args: Parameters<typeof trackValidationEvent>) {
   try {
-    await trackEvent(...args)
+    return await trackValidationEvent(...args)
   } catch (err) {
-    console.error('[query] activity tracking skipped', err instanceof Error ? err.message : 'unknown error')
+    console.error('[query] validation event failed', { eventType: args[3], errorCode: err instanceof Error ? err.message : 'UNKNOWN' })
+    return { ok: false as const, errorCode: 'ACTIVITY_WRITE_FAILED' as const }
+  }
+}
+
+async function recordSuccessfulQuery(params: {
+  workspaceId: string
+  userId: string
+  displayName: string
+  queryLength: number
+  sources: QuerySource[]
+  resultCount: number
+  hasAnswer: boolean
+  confidence: number
+  latencyMs: number
+}) {
+  const safeMetadata = {
+    sourceTypes: [...new Set(params.sources.map((source) => source.source))],
+    resultCount: params.resultCount,
+    hasAnswer: params.hasAnswer,
+    hasSources: params.sources.length > 0,
+    latencyMs: params.latencyMs,
+    confidence: params.confidence,
+    queryLength: params.queryLength,
+  }
+  await safeTrackEvent(params.workspaceId, params.userId, params.displayName, 'query', `${params.displayName} queried the company brain`, safeMetadata)
+  if (params.sources.length === 0 || !params.hasAnswer) return
+
+  const answered = await safeTrackEvent(
+    params.workspaceId,
+    params.userId,
+    params.displayName,
+    'onboarding_question_answered',
+    `${params.displayName} received a sourced answer`,
+    { sourceTypes: safeMetadata.sourceTypes, sourceCount: params.sources.length },
+  )
+  if (!answered.ok) return
+  try {
+    const sourcedAnswers = await prisma.activityEvent.count({
+      where: { workspaceId: params.workspaceId, eventType: 'onboarding_question_answered' },
+    })
+    if (sourcedAnswers < 3) return
+    const existingCompletion = await prisma.activityEvent.findFirst({
+      where: { workspaceId: params.workspaceId, eventType: 'onboarding_completed' },
+      select: { id: true },
+    })
+    if (existingCompletion) return
+    await prisma.user.updateMany({
+      where: { clerkId: params.userId, workspace: { id: params.workspaceId } },
+      data: { onboardingCompleted: true },
+    })
+    await safeTrackEvent(
+      params.workspaceId,
+      params.userId,
+      params.displayName,
+      'onboarding_completed',
+      'Company brain setup completed',
+      { sourcedAnswers },
+    )
+  } catch {
+    // Onboarding progress is validation instrumentation and must never turn a
+    // successful company-brain answer into a failed product request.
+    console.error('[query] onboarding progress unavailable', { errorCode: 'ONBOARDING_PROGRESS_FAILED' })
   }
 }
 
@@ -348,6 +441,8 @@ async function safeSaveQueryLog(
 }
 
 export async function POST(req: Request) {
+  const startedAt = Date.now()
+  let failureContext: { workspaceId: string; userId: string; displayName: string; queryLength: number } | null = null
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -383,6 +478,7 @@ export async function POST(req: Request) {
     }
 
     const { question, conversationId: requestedConversationId, documentIds } = parsed.data
+    failureContext = { workspaceId, userId, displayName, queryLength: question.length }
     const escapedQuestion = escapeXml(question)
     const intent = detectQueryIntent(question)
     let conversationId: string | null = null
@@ -416,6 +512,15 @@ export async function POST(req: Request) {
     })
     const workspaceName = workspace?.name ?? 'your workspace'
 
+    if (isTaskQuery(question)) {
+      const answer = await answerTaskQuery(workspaceId, question)
+      const ranked = splitRankedSources([], 3, { query: question })
+      void safeSaveQueryLog(workspaceId, userId, displayName, question, answer, [])
+      if (conversationId) void storeAssistantMessage({ workspaceId, userId, conversationId, answer, sourceReferences: [], documentReferences: [], relatedLoadId, metadata: { confidence: 100, source: 'tasks' } }).catch(() => null)
+      await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: [], resultCount: 0, hasAnswer: Boolean(answer.trim()), confidence: 100, latencyMs: Date.now() - startedAt })
+      return new Response(makeStaticAnswerStream({ answer, ranked, documents: [], conversationId, confidence: 100 }), { headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
     if (isTtEldLiveQuestion(question)) {
       const live = await answerTtEldLocationQuestion(workspaceId, question)
       if (live) {
@@ -433,7 +538,7 @@ export async function POST(req: Request) {
             metadata: { confidence: live.sources.length ? 100 : 0, liveSource: 'five_eld' },
           }).catch(() => null)
         }
-        void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked a live Five ELD question`, { conversationId, integration: 'five_eld' })
+        await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: live.sources, resultCount: live.sources.length, hasAnswer: Boolean(live.answer.trim()), confidence: live.sources.length ? 100 : 0, latencyMs: Date.now() - startedAt })
         return new Response(makeStaticAnswerStream({ answer: live.answer, ranked, documents: [], conversationId, confidence: live.sources.length ? 100 : 0 }), {
           headers: { 'Content-Type': 'text/event-stream' },
         })
@@ -537,7 +642,7 @@ export async function POST(req: Request) {
         }).catch((err) => console.error('[query] assistant persistence failed', err))
       }
       void safeSaveQueryLog(workspaceId, userId, displayName, question, noInfoAnswer, [])
-      void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, conversationId ? { conversationId, relatedLoadId } : {})
+      await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: [], resultCount: 0, hasAnswer: true, confidence: 0, latencyMs: Date.now() - startedAt })
       return new Response(makeEmptyStream(noInfoAnswer, conversationId), { headers: { 'Content-Type': 'text/event-stream' } })
     }
 
@@ -635,6 +740,8 @@ export async function POST(req: Request) {
         : item.sourceCreatedAt?.toISOString() ?? metadataDateToIso(sourceMetadata) ?? null,
       updatedAt: item.updatedAt?.toISOString() ?? null,
       relevanceScore: scoreMap.get(item.id) ?? 0,
+      verified: item.verified,
+      conflictNote: item.conflictNote,
     }})
 
     const ranked = splitRankedSources([...chunkSources, ...knowledgeSources], 3, {
@@ -680,11 +787,7 @@ export async function POST(req: Request) {
           },
         }).catch((err) => console.error('[query] assistant persistence failed', err))
       }
-      void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, {
-        conversationId,
-        relatedLoadId,
-        documentCount: documentResults.length,
-      })
+      await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: ranked.sources, resultCount: ranked.totalSources, hasAnswer: Boolean(answer.trim()), confidence, latencyMs: Date.now() - startedAt })
       return new Response(makeStaticAnswerStream({ answer, ranked, documents: documentResults, conversationId, confidence, retrievalDebug }), {
         headers: { 'Content-Type': 'text/event-stream' },
       })
@@ -742,12 +845,8 @@ Use the provided workspace knowledge. If sources are present, summarize or expla
               },
             }).catch((err) => console.error('[query] assistant persistence failed', err))
           }
-          void safeTrackEvent(workspaceId, userId, displayName, 'query', `[${displayName}] asked: ${question.slice(0, 80)}`, {
-            conversationId,
-            relatedLoadId,
-            documentCount: documentResults.length,
-          })
           const answer = fullAnswer.trim() || 'I could not find enough information to answer confidently, but these are the closest sources I found.'
+          await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: ranked.sources, resultCount: ranked.totalSources, hasAnswer: Boolean(answer.trim()), confidence, latencyMs: Date.now() - startedAt })
           sendSSE(controller, { type: 'done', answer, ...ranked, documents: documentResults, conversationId, confidence, ...(retrievalDebug ? { retrievalDebug } : {}) })
         } finally {
           controller.close()
@@ -757,7 +856,17 @@ Use the provided workspace knowledge. If sources are present, summarize or expla
 
     return new Response(readable, { headers: { 'Content-Type': 'text/event-stream' } })
   } catch (err) {
-    console.error('[query]', err)
+    console.error('[query]', err instanceof Error ? err.message : 'unknown error')
+    if (failureContext) {
+      await safeTrackEvent(
+        failureContext.workspaceId,
+        failureContext.userId,
+        failureContext.displayName,
+        'query_failed',
+        'Company brain query failed',
+        { errorCode: 'QUERY_INTERNAL_ERROR', queryLength: failureContext.queryLength, latencyMs: Date.now() - startedAt },
+      )
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

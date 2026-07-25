@@ -20,7 +20,7 @@ export default function OnboardingClient() {
       return
     }
 
-    router.push('/dashboard/overview')
+    router.push('/dashboard')
     router.refresh()
   }
 
@@ -36,7 +36,7 @@ export default function OnboardingClient() {
         disabled={submitting}
         onClick={completeOnboarding}
       >
-        {submitting ? 'Creating workspace...' : 'Continue to dashboard'}
+        {submitting ? 'Creating workspace...' : 'Start setup'}
       </Button>
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </div>

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
 
   const result = await processTelegramUpdate(payload)
-  console.info('[telegram/webhook] summary', {
+  const summary = {
     workspaceId: result.workspaceId,
     integrationId: result.integrationId,
     chatIdHash: result.chatIdHash,
@@ -36,6 +36,16 @@ export async function POST(req: Request) {
     extractionErrors: result.extractionErrors,
     embeddingErrors: result.embeddingErrors,
     databaseErrors: result.databaseErrors,
-  })
-  return NextResponse.json({ success: true, ...result })
+  }
+  console.info('[telegram/webhook] summary', summary)
+  if (process.env.TELEGRAM_DEBUG_SAFE === 'true') {
+    console.info('[telegram/webhook] safe-debug', {
+      ...result.safeDebug,
+      chatIdHash: result.chatIdHash,
+      knowledgeItemCreated: result.knowledgeCreated > 0,
+      skippedReasons: Object.keys(result.skippedReasons),
+    })
+  }
+  const { safeDebug: _safeDebug, ...publicResult } = result
+  return NextResponse.json({ success: true, ...publicResult })
 }

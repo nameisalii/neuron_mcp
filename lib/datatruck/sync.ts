@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding } from '@/lib/pinecone'
+import { safelySuggestTasksFromKnowledgeItem } from '@/lib/tasks/service'
 import {
   getDatatruckEndpointConfigs,
   getDatatruckFullAccountEndpointConfigs,
@@ -213,6 +214,16 @@ export async function upsertKnowledgeItem(params: {
         ...(existing.typeOverriddenByUser ? {} : { category }),
       },
     })
+    await safelySuggestTasksFromKnowledgeItem({
+      id: existing.id,
+      workspaceId,
+      content,
+      source: 'datatruck',
+      sourceExternalId: externalId,
+      sourceUrl: item.sourceUrl,
+      sourceTitle: item.title,
+      sourceCreatedAt: item.sourceCreatedAt,
+    })
     counters.updated++
     return
   }
@@ -236,6 +247,17 @@ export async function upsertKnowledgeItem(params: {
     select: { id: true },
   })
   counters.created++
+
+  await safelySuggestTasksFromKnowledgeItem({
+    id: created.id,
+    workspaceId,
+    content,
+    source: 'datatruck',
+    sourceExternalId: externalId,
+    sourceUrl: item.sourceUrl,
+    sourceTitle: item.title,
+    sourceCreatedAt: item.sourceCreatedAt,
+  })
 
   try {
     const embedding = await generateEmbedding(content)

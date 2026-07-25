@@ -98,7 +98,7 @@ export default function DecisionTimeline({ decisions }: DecisionTimelineProps) {
       {visible.length === 0 ? (
         <Card padding="lg" className="text-center text-gray-500 text-sm">
           {decisions.length === 0
-            ? 'No decisions captured yet. Decisions are automatically extracted from your Slack messages during sync.'
+            ? 'No decisions yet. Neuron will surface important decisions from synced conversations, or you can add one manually.'
             : 'No decisions in this time range.'}
         </Card>
       ) : (

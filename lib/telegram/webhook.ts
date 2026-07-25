@@ -5,6 +5,7 @@ import { extractKnowledgeDetailed, type ExtractionDiagnostics } from '@/lib/extr
 import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding } from '@/lib/pinecone'
 import type { SlackMessage } from '@/types'
+import { extractAndCreateSuggestedTaskFromKnowledgeItem } from '@/lib/tasks/service'
 
 const chatSchema = z.object({
   id: z.union([z.number(), z.string()]),
@@ -25,7 +26,9 @@ const messageSchema = z.object({
 const updateSchema = z.object({
   update_id: z.number().optional(),
   message: messageSchema.optional(),
+  edited_message: messageSchema.optional(),
   channel_post: messageSchema.optional(),
+  edited_channel_post: messageSchema.optional(),
 }).passthrough()
 
 export type TelegramSkippedReason =
@@ -56,6 +59,17 @@ export interface TelegramWebhookResult {
   workspaceId?: string
   integrationId?: string
   chatIdHash?: string
+  safeDebug?: {
+    updateId?: number
+    messagePresent: boolean
+    chatType?: string
+    textLength: number
+    isStartCommand: boolean
+    bindingFound: boolean
+    taskExtractionCalled?: boolean
+    taskCreated?: boolean
+    taskSkippedReason?: string
+  }
 }
 
 type TelegramMessage = z.infer<typeof messageSchema>
@@ -80,42 +94,6 @@ const SMALL_TALK = new Set([
   'whats up',
   'lol',
   'haha',
-])
-
-const ACTION_WORDS = new Set([
-  'ship',
-  'launch',
-  'fix',
-  'build',
-  'deploy',
-  'release',
-  'decide',
-  'decided',
-  'decision',
-  'rule',
-  'process',
-  'owner',
-  'deadline',
-  'customer',
-  'pricing',
-  'invoice',
-  'bug',
-  'auth',
-  'onboarding',
-  'integration',
-  'api',
-  'contract',
-  'meeting',
-  'follow-up',
-  'followup',
-  'todo',
-  'task',
-  'due',
-  'blocked',
-  'approved',
-  'reject',
-  'refund',
-  'churn',
 ])
 
 export type TelegramTextSkipReason =
@@ -152,11 +130,10 @@ export function shouldSkipTelegramText(text: string): { skip: boolean; reason?: 
   if (/^(?:https?:\/\/|www\.)\S+$/iu.test(normalized)) return { skip: true, reason: 'url_only' }
 
   const words = normalized.match(/[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*/gu) ?? []
-  if (words.length <= 1) return { skip: true, reason: 'too_short' }
+  if (words.length === 0) return { skip: true, reason: 'too_short' }
 
-  const hasActionWord = words.some((word) => ACTION_WORDS.has(word.toLocaleLowerCase()))
-  if (normalized.length < 8 && !hasActionWord) return { skip: true, reason: 'too_short' }
-
+  // Known small talk is filtered above. Preserve other short text because a
+  // one-word update such as "Roadmap" or "Invoice" can be useful company knowledge.
   return { skip: false }
 }
 
@@ -248,6 +225,7 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
     extractionErrors: 0,
     embeddingErrors: 0,
     databaseErrors: 0,
+    safeDebug: { messagePresent: false, textLength: 0, isStartCommand: false, bindingFound: false },
   }
 
   const parsed = updateSchema.safeParse(payload)
@@ -256,11 +234,14 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
     return result
   }
 
-  const message = parsed.data.message ?? parsed.data.channel_post
+  result.safeDebug!.updateId = parsed.data.update_id
+  const message = parsed.data.message ?? parsed.data.edited_message ?? parsed.data.channel_post ?? parsed.data.edited_channel_post
   if (!message) {
     skipped(result, 'unsupported_update')
     return result
   }
+  result.safeDebug!.messagePresent = true
+  result.safeDebug!.chatType = message.chat.type
   result.messagesReceived = 1
 
   if (message.from?.is_bot) {
@@ -270,6 +251,7 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
 
   const rawText = message.text ?? ''
   const text = normalizeTelegramText(rawText)
+  result.safeDebug!.textLength = text.length
   if (!text) {
     const hasMedia = Object.keys(message).some((key) =>
       ['photo', 'video', 'audio', 'voice', 'document', 'sticker', 'animation'].includes(key))
@@ -278,9 +260,13 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
   }
 
   const code = bindingCode(text)
+  result.safeDebug!.isStartCommand = Boolean(code)
   if (code) {
     try {
-      if (await bindChat(message, code, result)) skipped(result, 'binding_command')
+      if (await bindChat(message, code, result)) {
+        result.safeDebug!.bindingFound = true
+        skipped(result, 'binding_command')
+      }
       else skipped(result, 'unbound_chat')
     } catch {
       result.databaseErrors++
@@ -307,6 +293,7 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
   }
   result.workspaceId = integration.workspaceId
   result.integrationId = integration.id
+  result.safeDebug!.bindingFound = true
 
   const sourceExternalId = externalId(message)
   const existing = await prisma.knowledgeItem.findFirst({
@@ -314,6 +301,13 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
     select: { id: true },
   })
   if (existing) {
+    const taskResult = await extractAndCreateSuggestedTaskFromKnowledgeItem({
+      knowledgeItemId: existing.id,
+      workspaceId: integration.workspaceId,
+    })
+    result.safeDebug!.taskExtractionCalled = true
+    result.safeDebug!.taskCreated = taskResult.status === 'created'
+    result.safeDebug!.taskSkippedReason = taskResult.reason
     skipped(result, 'duplicate')
     return result
   }
@@ -331,6 +325,14 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
         source: 'telegram',
         sourceExternalId,
         sourceUrl,
+        sourceMetadata: {
+          telegram: true,
+          chatType: message.chat.type ?? 'unknown',
+          chatTitle: message.chat.title?.trim() || null,
+          chatUsername: message.chat.username?.trim() || null,
+          messageId: message.message_id,
+          updateId: parsed.data.update_id ?? null,
+        },
         owner: null,
         confidence: 0.55,
         visibility: 'team',
@@ -340,6 +342,13 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
     })
     result.knowledgeCreated++
     result.messagesProcessed++
+    const taskResult = await extractAndCreateSuggestedTaskFromKnowledgeItem({
+      knowledgeItemId: item.id,
+      workspaceId: integration.workspaceId,
+    })
+    result.safeDebug!.taskExtractionCalled = true
+    result.safeDebug!.taskCreated = taskResult.status === 'created'
+    result.safeDebug!.taskSkippedReason = taskResult.reason
   } catch (error) {
     if ((error as { code?: string })?.code === 'P2002') {
       skipped(result, 'duplicate')

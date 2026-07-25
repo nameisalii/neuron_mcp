@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
     await prisma.knowledgeItem.update({
       where: { id: item.id },
-      data: { verified: true, verifiedAt: new Date(), verifiedBy: user.email },
+      data: { verified: true, verifiedAt: new Date(), verifiedBy: user.email, frozen: true },
     })
 
     return NextResponse.json({ id: item.id, verified: true })

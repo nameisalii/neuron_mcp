@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { ArrowRight, FileText, Loader2, Paperclip, Plus, SendHorizontal, X } from 'lucide-react'
+import { FileText, Loader2, Paperclip, Plus, SendHorizontal, X } from 'lucide-react'
 import ConversationHistory from './ConversationHistory'
 import QueryResults, { type DocumentResultItem } from './QueryResults'
 import type { SourceItem } from './SourceCard'
@@ -44,27 +44,17 @@ function validateUploadFile(file: File): string | null {
 const STATUS_MSGS = [
   'Searching your Notion pages...',
   'Scanning Slack conversations...',
-  'Cross-referencing knowledge...',
-  'Checking sources...',
+  'Checking saved context...',
+  'Checking integrations...',
 ]
 
-const QUERY_EXAMPLES = [
-  'What changed in Telegram today?',
-  'What tasks were assigned to me?',
-  'Find the BOL for load 12345.',
-  'What is in Slack this week?',
-  'Show me customer rules from Datatruck.',
-  'Which loads need follow-up?',
-  'Summarize new Gmail threads from today.',
-  'What did we say about the pricing change?',
-  'Find documents attached to this load.',
-  'What should I work on next?',
-]
+const STARTER_QUESTIONS = ['What changed today?', 'What tasks do I have?', 'What did we decide?', 'What needs attention?']
 
 interface Props {
   workspaceType: WorkspaceType
   recentQueries: { id: string; query: string; createdAt: string }[]
   initialConversationId?: string | null
+  initialPrompt?: string
 }
 
 function createMessageId(prefix: string) {
@@ -79,10 +69,10 @@ function coerceDocuments(value: unknown): DocumentResultItem[] {
   return Array.isArray(value) ? (value as DocumentResultItem[]) : []
 }
 
-export default function QueryClient({ recentQueries, initialConversationId = null }: Props) {
+export default function QueryClient({ recentQueries, initialConversationId = null, initialPrompt = '' }: Props) {
   const [storyMode, setStoryMode] = useState(false)
   const [queryState, setQueryState] = useState<QueryState>('idle')
-  const [composerValue, setComposerValue] = useState('')
+  const [composerValue, setComposerValue] = useState(initialPrompt)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
   const [error, setError] = useState<string | null>(null)
@@ -91,7 +81,6 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
   const [statusIndex, setStatusIndex] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
-  const [exampleIndex, setExampleIndex] = useState(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const threadScrollRef = useRef<HTMLDivElement | null>(null)
@@ -106,15 +95,6 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
     }, 1500)
     return () => clearInterval(interval)
   }, [queryState])
-
-  useEffect(() => {
-    if (messages.length > 0) return
-    if (shouldReduceMotion) return
-    const interval = setInterval(() => {
-      setExampleIndex((prev) => (prev + 1) % QUERY_EXAMPLES.length)
-    }, 4000)
-    return () => clearInterval(interval)
-  }, [messages.length, shouldReduceMotion])
 
   async function loadConversation(id: string, options: { switchToSearch?: boolean; updateUrl?: boolean } = {}) {
     try {
@@ -394,8 +374,11 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
 
   const isActive = queryState !== 'idle'
   const canSend = composerValue.trim().length > 0 && !isActive
-  const emptyStateCopy = QUERY_EXAMPLES[exampleIndex % QUERY_EXAMPLES.length]
-
+  const uniqueRecentQuestions = [...new Map(recentQueries.map((item) => {
+    const question = item.query.trim().replace(/\s+/g, ' ')
+    return [question.toLocaleLowerCase(), question]
+  })).values()].slice(0, 6)
+  const questionChips = uniqueRecentQuestions.length > 0 ? uniqueRecentQuestions : STARTER_QUESTIONS
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <div data-testid="query-header-controls" className="flex shrink-0 flex-wrap items-center justify-between gap-3">
@@ -441,31 +424,8 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
             <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-center gap-5">
               {messages.length === 0 && (
                 <div className="flex min-h-[220px] flex-col items-center justify-center px-4 text-center">
-                  <p className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Ask your Brain</p>
-                  <AnimatePresence initial={false} mode="wait">
-                    <motion.div
-                      key={emptyStateCopy}
-                      initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -8 }}
-                      transition={{ duration }}
-                      className="max-w-2xl"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setComposerValue(emptyStateCopy)}
-                        className="mt-4 inline-flex max-w-full items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-left text-sm leading-6 text-gray-600 shadow-sm transition-colors hover:border-indigo-200 hover:text-gray-900"
-                      >
-                        <span className="max-w-full truncate sm:text-base">{emptyStateCopy}</span>
-                        <ArrowRight className="h-4 w-4 shrink-0 text-indigo-500" aria-hidden="true" />
-                      </button>
-                      {!shouldReduceMotion && (
-                        <p className="mt-2 text-xs text-gray-400">
-                          Example changes every few seconds.
-                        </p>
-                      )}
-                    </motion.div>
-                  </AnimatePresence>
+                  <p className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">How can I help you?</p>
+                  <p className="mt-2 text-sm text-gray-500">Ask about your tasks, decisions, integrations, or saved context.</p>
                 </div>
               )}
 
@@ -498,10 +458,11 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
                       ) : (
                         <div className="w-full max-w-[92%] sm:max-w-[78%]">
                           <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-500">
-                            <span className="inline-flex h-4 w-4 items-center justify-center overflow-hidden rounded-full bg-black">
+                            <span className="inline-flex h-4 w-4 items-center justify-center overflow-hidden rounded-full bg-black" aria-label="Neuron assistant">
                               <img src="/neuron-assistant-logo.png" alt="" className="h-full w-full object-cover" />
                             </span>
-                            <span>Neuron · {new Date(message.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                            <span aria-hidden="true">·</span>
+                            <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</time>
                           </div>
                           {message.content || message.complete || (message.sources?.length ?? 0) > 0 ? (
                             <QueryResults
@@ -540,17 +501,24 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
             </div>
           )}
 
-          {messages.length === 0 && recentQueries.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {recentQueries.map((q) => (
+          {messages.length === 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1" aria-label={uniqueRecentQuestions.length > 0 ? 'Recent questions' : 'Try asking'}>
+              <span className="shrink-0 text-xs font-medium text-gray-400">{uniqueRecentQuestions.length > 0 ? 'Recent' : 'Try asking'}</span>
+              {questionChips.map((question) => (
                 <button
-                  key={q.id}
+                  key={question.toLowerCase()}
                   type="button"
-                  onClick={() => void executeQuery(q.query)}
-                  className="max-w-xs truncate rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-200"
-                  title={q.query}
+                  onClick={() => {
+                    setComposerValue(question)
+                    requestAnimationFrame(() => {
+                      resizeComposer(question)
+                      textareaRef.current?.focus()
+                    })
+                  }}
+                  className="max-w-xs shrink-0 truncate rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-200"
+                  title={question}
                 >
-                  {q.query}
+                  {question}
                 </button>
               ))}
             </div>
@@ -590,8 +558,8 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
                 requestAnimationFrame(() => resizeComposer(nextValue))
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything..."
-              aria-label="Ask anything"
+              placeholder="Ask Neuron anything…"
+              aria-label="Ask Neuron anything"
               disabled={isActive}
               rows={1}
               className="query-composer-input max-h-[220px] min-h-11 w-full resize-none border-0 bg-transparent px-1 py-2 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 disabled:text-gray-400 focus:ring-0"

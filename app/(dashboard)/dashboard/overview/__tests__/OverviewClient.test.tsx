@@ -7,6 +7,10 @@ const items = [
   {
     id: 'item-1',
     content: 'Refund policy',
+    displayTitle: 'Refund policy',
+    displaySummary: 'Refund policy',
+    displayStatus: 'unverified',
+    displayTags: [],
     category: 'rule',
     aiSuggestedCategory: 'rule',
     source: 'slack',

@@ -203,12 +203,13 @@ beforeEach(() => {
 it('renders the analytics dashboard and recent feed', () => {
   renderActivity()
 
-  expect(screen.getByText('Team Activity')).toBeInTheDocument()
-  expect(screen.getByText('Workspace brain health, usage, and recent changes.')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Activity' })).toBeInTheDocument()
+  expect(screen.getByText('Recent updates from your workspace.')).toBeInTheDocument()
+  expect(screen.queryByText('Workspace brain health, usage, and recent changes.')).not.toBeInTheDocument()
   expect(screen.getByText('Knowledge items')).toBeInTheDocument()
   expect(screen.getByText('27')).toBeInTheDocument()
   expect(screen.getByText('Brain activity')).toBeInTheDocument()
-  expect(screen.getByText('Most used sources')).toBeInTheDocument()
+  expect(screen.getByText('Most used integrations')).toBeInTheDocument()
   expect(screen.getByText('Frequent questions')).toBeInTheDocument()
   expect(screen.getByText('Recent activity')).toBeInTheDocument()
   expect(screen.getByText('Recent knowledge')).toBeInTheDocument()
@@ -257,7 +258,7 @@ it('shows empty states cleanly when the workspace has no activity', () => {
   })
 
   expect(screen.getAllByText('No activity yet.').length).toBeGreaterThan(0)
-  expect(screen.getByText('Connect integrations to see source activity.')).toBeInTheDocument()
+  expect(screen.getByText('Connect integrations to see activity.')).toBeInTheDocument()
   expect(screen.getByText('Questions will appear here.')).toBeInTheDocument()
   expect(screen.getByText('No active users yet.')).toBeInTheDocument()
   expect(screen.getByText('All clear. No issues found.')).toBeInTheDocument()

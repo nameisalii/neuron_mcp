@@ -12,7 +12,12 @@ jest.mock('@clerk/nextjs/server', () => ({
 }))
 
 jest.mock('@/lib/db', () => ({
-  prisma: { user: { update: jest.fn() } },
+  prisma: {
+    user: { update: jest.fn() },
+    activityEvent: { count: jest.fn() },
+    integration: { count: jest.fn() },
+    knowledgeItem: { count: jest.fn() },
+  },
 }))
 
 jest.mock('@/lib/provision-user', () => ({
@@ -29,7 +34,7 @@ beforeEach(() => {
     emailAddresses: [{ emailAddress: 'alice@example.com' }],
   })
   ;(provisionUser as jest.Mock).mockResolvedValue({
-    user: { id: 'user_1' },
+    user: { id: 'user_1', onboardingCompleted: false },
     workspace: { id: 'workspace_1' },
   })
 })
@@ -43,7 +48,10 @@ describe('POST /api/onboarding', () => {
     expect(provisionUser).not.toHaveBeenCalled()
   })
 
-  it('provisions all required records and completes onboarding', async () => {
+  it('provisions records but keeps onboarding open before three sourced answers', async () => {
+    jest.mocked(prisma.activityEvent.count).mockResolvedValue(0)
+    jest.mocked(prisma.integration.count).mockResolvedValue(1)
+    jest.mocked(prisma.knowledgeItem.count).mockResolvedValue(0)
     const response = await POST()
 
     expect(response.status).toBe(200)
@@ -53,14 +61,21 @@ describe('POST /api/onboarding', () => {
       name: 'Alice Smith',
       imageUrl: 'https://example.com/alice.png',
     })
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'user_1' },
-      data: { onboardingCompleted: true },
-    })
+    expect(prisma.user.update).not.toHaveBeenCalled()
     expect(await response.json()).toEqual({
-      completed: true,
-      redirectTo: '/dashboard/overview',
+      completed: false,
+      progress: { questionsAsked: 0, sourcedAnswers: 0, required: 3 },
+      redirectTo: '/dashboard',
       workspaceId: 'workspace_1',
     })
+  })
+
+  it('completes onboarding after three sourced answers and connected context', async () => {
+    jest.mocked(prisma.activityEvent.count).mockResolvedValue(3)
+    jest.mocked(prisma.integration.count).mockResolvedValue(1)
+    jest.mocked(prisma.knowledgeItem.count).mockResolvedValue(0)
+    const response = await POST()
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'user_1' }, data: { onboardingCompleted: true } })
+    expect((await response.json()).completed).toBe(true)
   })
 })

@@ -7,6 +7,15 @@ export const KNOWLEDGE_CATEGORY_OPTIONS = [
   { value: 'reference', apiValue: 'REFERENCE', label: 'Reference' },
   { value: 'status_update', apiValue: 'STATUS_UPDATE', label: 'Status Update' },
   { value: 'note', apiValue: 'NOTE', label: 'Note' },
+  { value: 'task', apiValue: 'TASK', label: 'Task' },
+  { value: 'customer_update', apiValue: 'CUSTOMER_UPDATE', label: 'Customer Update' },
+  { value: 'project_update', apiValue: 'PROJECT_UPDATE', label: 'Project Update' },
+  { value: 'document', apiValue: 'DOCUMENT', label: 'Document' },
+  { value: 'meeting_note', apiValue: 'MEETING_NOTE', label: 'Meeting Note' },
+  { value: 'issue', apiValue: 'ISSUE', label: 'Issue' },
+  { value: 'question', apiValue: 'QUESTION', label: 'Question' },
+  { value: 'policy', apiValue: 'POLICY', label: 'Policy' },
+  { value: 'other', apiValue: 'OTHER', label: 'Other' },
 ] as const
 
 export type EditableKnowledgeCategory = typeof KNOWLEDGE_CATEGORY_OPTIONS[number]['value']

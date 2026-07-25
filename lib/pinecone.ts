@@ -83,6 +83,8 @@ export async function searchSimilar(
   topK = 5,
   minScore = 0.5
 ): Promise<Array<{ id: string; score: number }>> {
+  // VALIDATION BLOCKER: team vectors still rely on this mandatory workspace
+  // metadata filter in the shared namespace. Namespace migration is deferred.
   const results = await index.query({
     vector: embedding,
     topK,

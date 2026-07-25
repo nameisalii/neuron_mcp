@@ -4,6 +4,7 @@ import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding } from '@/lib/pinecone'
 import { extractDocumentText } from '@/lib/documents/extractText'
 import { deleteDocumentFile, sanitizeFileName, saveUploadedDocument } from '@/lib/storage/documents'
+import { safelySuggestTasksFromKnowledgeItem } from '@/lib/tasks/service'
 
 const EXTRACTED_SNIPPET_CHARS = 1_500
 
@@ -108,6 +109,16 @@ export async function createManualKnowledgeItemWithOptionalDocument(
       confidence: 1,
     },
     select: { id: true, content: true, category: true, source: true, sourceExternalId: true, createdAt: true },
+  })
+
+  await safelySuggestTasksFromKnowledgeItem({
+    id: item.id,
+    workspaceId,
+    content,
+    source,
+    sourceExternalId,
+    sourceUrl: documentAttachment?.storageUrl ?? null,
+    sourceTitle: title.trim() || 'Manual knowledge',
   })
 
   try {

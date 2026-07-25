@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { integrationPrimaryClass, integrationResetClass } from './IntegrationCardUi'
@@ -79,6 +80,22 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
   const [loading, setLoading] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [result, setResult] = useState<SyncResult | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [statusHost, setStatusHost] = useState<HTMLSpanElement | null>(null)
+
+  useEffect(() => {
+    const actionRow = rootRef.current?.parentElement
+    if (!actionRow) return
+    const host = document.createElement('span')
+    host.className = 'inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-left'
+    host.dataset.syncStatusHost = 'true'
+    actionRow.appendChild(host)
+    setStatusHost(host)
+    return () => {
+      setStatusHost(null)
+      host.remove()
+    }
+  }, [])
 
   async function handleSync() {
     setLoading(true)
@@ -161,8 +178,25 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
     return 'Sync failed. Try again.'
   }
 
+  const status = (
+    <span aria-live="polite" className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+      {loading && <span className="text-xs font-medium text-gray-500">Syncing integration…</span>}
+      {resetting && <span className="text-xs font-medium text-gray-500">Resetting integration…</span>}
+      {result && !result.error && (
+        <>
+          <span className="whitespace-normal text-xs font-medium text-gray-500 sm:whitespace-nowrap">{normalizedSyncMessage(result)}</span>
+          {gmailNeedsReconfigure && onNeedsReconfigure && (
+            <button type="button" onClick={onNeedsReconfigure} className="text-xs font-medium text-indigo-600 hover:text-indigo-700">Change Gmail filters</button>
+          )}
+          {result.lastSyncedAt && <span className="text-xs text-gray-400">Last synced {new Date(result.lastSyncedAt).toLocaleString()}</span>}
+        </>
+      )}
+      {result?.error && <span className="whitespace-normal text-xs font-medium text-red-600 sm:whitespace-nowrap">{normalizedErrorMessage(result)}</span>}
+    </span>
+  )
+
   return (
-    <div className="flex flex-col items-start gap-1">
+    <div ref={rootRef} className="flex items-center gap-3">
       <div className="flex items-center gap-3">
         <button
           onClick={syncEnabled ? handleSync : onNeedsReconfigure}
@@ -185,24 +219,7 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
           </button>
         )}
       </div>
-      {result && !result.error && (
-        <div className="max-w-sm text-left">
-          <p className="text-xs font-medium text-gray-700">{normalizedSyncMessage(result)}</p>
-          {gmailNeedsReconfigure && onNeedsReconfigure && (
-            <button
-              type="button"
-              onClick={onNeedsReconfigure}
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-            >
-              Change Gmail filters
-            </button>
-          )}
-          {result.lastSyncedAt && <p className="text-xs text-gray-400">Last synced {new Date(result.lastSyncedAt).toLocaleString()}</p>}
-        </div>
-      )}
-      {result?.error && (
-        <p className="text-xs text-red-600">{normalizedErrorMessage(result)}</p>
-      )}
+      {statusHost && createPortal(status, statusHost)}
     </div>
   )
 }

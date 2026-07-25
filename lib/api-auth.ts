@@ -1,6 +1,8 @@
 import { timingSafeEqual } from 'crypto'
 
 export function validateApiKey(req: Request): string | null {
+  // VALIDATION BLOCKER: this env-backed key/workspace pair is intentionally
+  // single-tenant. See docs/validation-first-plan.md before expanding MCP use.
   const apiKey = process.env.NEURON_API_KEY
   const workspaceId = process.env.NEURON_WORKSPACE_ID
   if (!apiKey || !workspaceId) return null

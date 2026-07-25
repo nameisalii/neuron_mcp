@@ -4,6 +4,9 @@ export interface TelegramWebhookInfo {
   url: string
   pendingUpdateCount: number
   lastErrorDate: number | null
+  lastErrorMessage: string | null
+  allowedUpdates: string[]
+  hasCustomCertificate: boolean
 }
 
 export async function setTelegramWebhook(
@@ -17,7 +20,7 @@ export async function setTelegramWebhook(
     body: JSON.stringify({
       url: webhookUrl,
       secret_token: webhookSecret,
-      allowed_updates: ['message', 'channel_post'],
+      allowed_updates: ['message', 'edited_message', 'channel_post', 'edited_channel_post'],
       drop_pending_updates: false,
     }),
   })
@@ -34,7 +37,7 @@ export async function getTelegramWebhookInfo(botToken: string): Promise<Telegram
 
   const payload = await response.json() as {
     ok?: boolean
-    result?: { url?: unknown; pending_update_count?: unknown; last_error_date?: unknown }
+    result?: { url?: unknown; pending_update_count?: unknown; last_error_date?: unknown; last_error_message?: unknown; allowed_updates?: unknown; has_custom_certificate?: unknown }
   }
   if (!payload.ok || !payload.result) throw new Error('Telegram getWebhookInfo returned an invalid response')
 
@@ -42,5 +45,8 @@ export async function getTelegramWebhookInfo(botToken: string): Promise<Telegram
     url: typeof payload.result.url === 'string' ? payload.result.url : '',
     pendingUpdateCount: typeof payload.result.pending_update_count === 'number' ? payload.result.pending_update_count : 0,
     lastErrorDate: typeof payload.result.last_error_date === 'number' ? payload.result.last_error_date : null,
+    lastErrorMessage: typeof payload.result.last_error_message === 'string' ? payload.result.last_error_message : null,
+    allowedUpdates: Array.isArray(payload.result.allowed_updates) ? payload.result.allowed_updates.filter((value): value is string => typeof value === 'string') : [],
+    hasCustomCertificate: payload.result.has_custom_certificate === true,
   }
 }

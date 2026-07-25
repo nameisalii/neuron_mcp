@@ -20,14 +20,20 @@ export async function POST() {
     imageUrl: clerkUser.imageUrl,
   })
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { onboardingCompleted: true },
-  })
+  const [sourcedAnswers, connectedIntegrations, savedContext] = await Promise.all([
+    prisma.activityEvent.count({ where: { workspaceId: workspace.id, eventType: 'onboarding_question_answered' } }),
+    prisma.integration.count({ where: { workspaceId: workspace.id } }),
+    prisma.knowledgeItem.count({ where: { workspaceId: workspace.id } }),
+  ])
+  const completed = sourcedAnswers >= 3 && (connectedIntegrations > 0 || savedContext > 0)
+  if (completed && !user.onboardingCompleted) {
+    await prisma.user.update({ where: { id: user.id }, data: { onboardingCompleted: true } })
+  }
 
   return NextResponse.json({
-    completed: true,
-    redirectTo: '/dashboard/overview',
+    completed,
+    progress: { questionsAsked: sourcedAnswers, sourcedAnswers, required: 3 },
+    redirectTo: '/dashboard',
     workspaceId: workspace.id,
   })
 }
