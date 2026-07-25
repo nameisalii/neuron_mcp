@@ -1,0 +1,7 @@
+{
+  "name": "neuron-integration-tutorials",
+  "private": true,
+  "type": "module",
+  "description": "Step-by-step integration tutorial videos (data-driven motion graphics).",
+  "dependencies": { "playwright-core": "1.49.1" }
+}

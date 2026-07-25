@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation'
 import { provisionUser } from '@/lib/provision-user'
 import OnboardingClient from './OnboardingClient'
 
+// Reads the signed-in user at request time; must not be prerendered at build.
+export const dynamic = 'force-dynamic'
+
 export default async function OnboardingPage() {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
