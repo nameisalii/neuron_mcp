@@ -14,6 +14,7 @@ import { escapeXml } from '@/lib/utils'
 import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/persistence'
 import { searchDocumentAttachments, type DocumentResult } from '@/lib/documents/search'
 import { answerTtEldLocationQuestion, isTtEldLiveQuestion } from '@/lib/tteld/query'
+import { validateApiKey } from '@/lib/api-auth'
 import {
   applyDocumentAssignment,
   attachedDocumentContext,
@@ -117,6 +118,7 @@ function metadataDateToIso(metadata: Record<string, unknown> | null, keys = ['me
 
 type KnowledgeItemResult = {
   id: string
+  title: string | null
   content: string
   source: string
   sourceUrl: string | null
@@ -146,6 +148,7 @@ async function findKnowledgeItems(
 ): Promise<KnowledgeItemResult[]> {
   const baseSelect = {
     id: true,
+    title: true,
     content: true,
     source: true,
     sourceUrl: true,
@@ -247,6 +250,10 @@ function formatSourceForModel(source: QuerySource, index: number): string {
     date ? `Date: ${date}` : null,
     typeof metadata.channelName === 'string' ? `Channel: ${metadata.channelName}` : null,
     typeof metadata.loadNumber === 'string' ? `Load: ${metadata.loadNumber}` : null,
+    source.source === 'linked_page' && typeof metadata.parentSource === 'string'
+      ? `Linked from: ${metadata.parentSource}${typeof metadata.parentSourceExternalId === 'string' ? ` (${metadata.parentSourceExternalId})` : ''}`
+      : null,
+    source.source === 'linked_page' && source.sourceUrl ? `Linked page URL: ${source.sourceUrl}` : null,
   ].filter(Boolean).join(' · ')
   return `[${index + 1}] [${sourceLabel}]${meta ? ` ${meta}` : ''}\n${source.content}`
 }
@@ -292,6 +299,15 @@ function summarizeSourceUpdates(sources: QuerySource[], intent: QueryIntent): st
   const lines = [`## Recent ${display} updates`]
   const selected = sources.filter((source) => !intent.requestedSources.length || intent.requestedSources.includes(source.source)).slice(0, 8)
   if (selected.length === 0) {
+    // Never present another integration's data as if it answered this question.
+    // DataTruck and Five ELD are separate products; naming the mismatch out loud
+    // is the difference between "no data" and a wrong answer.
+    const otherSources = Array.from(new Set(
+      sources.map((source) => source.source).filter(Boolean))) as string[]
+    if (otherSources.length > 0) {
+      const otherNames = otherSources.map(sourceDisplayName).join(', ')
+      return `I don’t see recent ${display} updates in Neuron yet. I did find data from ${otherNames}, but that is separate from ${display}.`
+    }
     return `I couldn’t find ${display} updates matching that request in your connected workspace.`
   }
   selected.forEach((source, index) => {
@@ -444,16 +460,30 @@ export async function POST(req: Request) {
   const startedAt = Date.now()
   let failureContext: { workspaceId: string; userId: string; displayName: string; queryLength: number } | null = null
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const apiWorkspaceId = validateApiKey(req)
+    let userId: string
+    let workspaceId: string
 
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { workspace: { select: { id: true } } },
-    })
-    if (!user?.workspace) return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    if (apiWorkspaceId) {
+      const workspace = await prisma.workspace.findUnique({
+        where: { id: apiWorkspaceId },
+        select: { owner: { select: { clerkId: true } } },
+      })
+      if (!workspace) return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+      userId = workspace.owner.clerkId
+      workspaceId = apiWorkspaceId
+    } else {
+      const session = await auth()
+      if (!session.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      userId = session.userId
 
-    const { id: workspaceId } = user.workspace
+      const user = await prisma.user.findUnique({
+        where: { clerkId: userId },
+        select: { workspace: { select: { id: true } } },
+      })
+      if (!user?.workspace) return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+      workspaceId = user.workspace.id
+    }
 
     const member = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
@@ -628,7 +658,9 @@ export async function POST(req: Request) {
     }
 
     if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0) {
-      const noInfoAnswer = "I don't have verified information about this yet."
+      const noInfoAnswer = intent.requestedSources.includes('slack')
+        ? "I don’t see synced Slack messages yet. Connect Slack Personal Access and choose channels to sync."
+        : "I don't have verified information about this yet."
       if (conversationId) {
         void storeAssistantMessage({
           workspaceId,
@@ -711,7 +743,9 @@ export async function POST(req: Request) {
       return {
       chunkId: item.id,
       pageId: null,
-      pageTitle: item.source === 'gmail'
+      pageTitle: item.source === 'linked_page'
+        ? item.title ?? item.notionPageTitle ?? item.category
+        : item.source === 'gmail'
         ? (item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.subject : null) ?? item.notionPageTitle ?? item.category
         : item.notionPageTitle ?? item.category,
       notionPageId: null,
@@ -739,6 +773,7 @@ export async function POST(req: Request) {
           ?? null
         : item.sourceCreatedAt?.toISOString() ?? metadataDateToIso(sourceMetadata) ?? null,
       updatedAt: item.updatedAt?.toISOString() ?? null,
+      visibility: item.visibility,
       relevanceScore: scoreMap.get(item.id) ?? 0,
       verified: item.verified,
       conflictNote: item.conflictNote,

@@ -1,3 +1,5 @@
+import { detectRequestedSources } from './sourceIntent'
+
 export type TemporalIntentType = 'latest' | 'today' | 'yesterday' | 'this_week' | 'last_7_days' | 'all_time'
 
 export interface QueryIntent {
@@ -9,21 +11,6 @@ export interface QueryIntent {
   }
   queryType: 'summary' | 'lookup' | 'document' | 'calculation' | 'general'
 }
-
-const SOURCE_ALIASES: Array<[string, string[]]> = [
-  ['five_eld', ['five eld', 'fiveeld', 'tt eld', 'tteld', 'eld', 'truck gps', 'truck location', 'driver location', 'fleet location']],
-  ['telegram', ['telegram', 'tg']],
-  ['slack', ['slack']],
-  ['linear', ['linear']],
-  ['gmail', ['gmail', 'email', 'emails', 'mail']],
-  ['notion', ['notion']],
-  ['discord', ['discord']],
-  ['jira', ['jira']],
-  ['teams', ['teams', 'microsoft teams', 'ms teams']],
-  ['datatruck', ['datatruck', 'data truck', 'tms']],
-  ['granola', ['granola']],
-  ['whatsapp', ['whatsapp', 'whats app']],
-]
 
 function startOfLocalDay(now: Date): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -39,9 +26,7 @@ function startOfWeek(now: Date): Date {
 
 export function detectQueryIntent(query: string, now: Date = new Date()): QueryIntent {
   const normalized = query.toLowerCase()
-  const requestedSources = SOURCE_ALIASES
-    .filter(([, aliases]) => aliases.some((alias) => new RegExp(`\\b${alias.replace(/\s+/g, '\\s+')}\\b`, 'i').test(normalized)))
-    .map(([source]) => source)
+  const requestedSources: string[] = detectRequestedSources(query)
 
   let temporalIntent: QueryIntent['temporalIntent'] = { type: 'all_time' }
   if (/\b(today|this morning|this afternoon|tonight)\b/i.test(normalized)) {

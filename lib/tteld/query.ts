@@ -4,8 +4,25 @@ import { loadTtEldConnection } from './credentials'
 
 export interface TtEldLiveAnswer { answer: string; sources: QuerySource[] }
 
+/**
+ * DataTruck (TMS) vocabulary. If any of these appear, the question is about
+ * DataTruck and must NEVER be short-circuited into the live Five ELD branch —
+ * they are separate products with separate data.
+ */
+const DATATRUCK_GUARD = /\b(datatruck|data[\s-]*truck|truck\s*tms|tms|dispatch\s*board|work\s*orders|drivers?\s*list|trucks?\s*list|trailers?\s*list)\b/i
+
+/**
+ * Five ELD live-telemetry signals.
+ *
+ * The truck-identifier alternative is `truck\s*[#-]?\s*[a-z]?\d+` — it requires
+ * DIGITS. The previous `[a-z0-9]+` matched any word, so "data truck any updates"
+ * matched on "truck any" and hijacked every DataTruck question.
+ */
+const FIVE_ELD_SIGNALS = /\b(five\s*eld|tt\s*eld|eld|truck\s*gps|truck\s*location|truck\s*assignments|driver\s*location|fleet\s*location|live\s*gps|stale\s*gps|gps|vin|hours\s*of\s*service|hos|truck\s*[#-]?\s*[a-z]?\d+|driver.+(?:where|location)|where.+driver|route today|currently moving|active.+72 hours)\b/i
+
 export function isTtEldLiveQuestion(query: string): boolean {
-  return /\b(five\s*eld|tt\s*eld|eld|truck\s*gps|truck\s*location|driver\s*location|fleet\s*location|gps|vin|truck\s*[#-]?\s*[a-z0-9]+|driver.+(?:where|location)|where.+driver|route today|currently moving|stale gps|active.+72 hours)\b/i.test(query)
+  if (DATATRUCK_GUARD.test(query)) return false
+  return FIVE_ELD_SIGNALS.test(query)
 }
 
 function fullName(person: TtEldCurrentUnit['driver']): string {
