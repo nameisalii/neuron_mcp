@@ -169,11 +169,11 @@ export default function TelegramIntegrationCard({
         </section>
 
         {publicImportEnabled ? <section className="flex flex-col rounded-xl border border-sky-100 bg-sky-50/50 p-4 lg:col-span-2">
-          <h4 className="font-semibold text-ink">Public channel import</h4>
-          <p className="mt-1 text-sm text-muted">Paste a public Telegram channel link. Neuron can import public posts without adding the bot.</p>
+          <h4 className="font-semibold text-ink">Import a public Telegram channel</h4>
+          <p className="mt-1 text-sm text-muted">Public channel import works only for public Telegram channels. To sync private chats/groups, use Account Sync with your phone number.</p>
           <label className="mt-4 block text-xs font-medium text-ink">
             Public channel link
-            <input value={publicUrl} onChange={(event) => setPublicUrl(event.target.value)} placeholder="https://t.me/channelname" className="mt-1 w-full rounded-lg border border-warm bg-white px-3 py-2 text-sm" />
+            <input value={publicUrl} onChange={(event) => setPublicUrl(event.target.value)} placeholder="@channelname or https://t.me/channelname" className="mt-1 w-full rounded-lg border border-warm bg-white px-3 py-2 text-sm" />
           </label>
           <div className="mt-auto flex flex-wrap gap-2 pt-4">
             <button type="button" disabled={!publicImportEnabled || !publicUrl.trim() || Boolean(publicBusy)} onClick={() => void publicChannelAction('preview')} className={integrationActionClass}>Preview channel</button>

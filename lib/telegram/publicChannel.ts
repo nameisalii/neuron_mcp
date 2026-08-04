@@ -26,7 +26,9 @@ export function normalizePublicTelegramChannelUrl(input: string): {
   previewUrl: string
 } {
   const raw = input.trim()
-  const candidate = /^t\.me\//i.test(raw) ? `https://${raw}` : raw
+  const candidate = raw.startsWith('@')
+    ? `https://t.me/${raw.slice(1)}`
+    : /^t\.me\//i.test(raw) ? `https://${raw}` : raw
   let parsed: URL
   try {
     parsed = new URL(candidate)

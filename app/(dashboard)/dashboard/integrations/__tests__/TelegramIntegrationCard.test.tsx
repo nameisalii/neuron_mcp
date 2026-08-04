@@ -23,11 +23,34 @@ describe('TelegramIntegrationCard', () => {
     expect(screen.getByText(/Connect your Telegram account to choose chats/)).toBeInTheDocument()
     expect(screen.getByText(/Old Telegram history cannot be imported through the official bot API/)).toBeInTheDocument()
     expect(screen.getByText('Telegram Bot Mode')).toBeInTheDocument()
-    expect(screen.queryByText('Public channel import')).not.toBeInTheDocument()
+    expect(screen.queryByText('Import a public Telegram channel')).not.toBeInTheDocument()
     expect(screen.getByText(/cannot read chats where the bot has not been added/i)).toBeInTheDocument()
     expect(screen.getByText('Telegram Account Sync')).toBeInTheDocument()
     expect(screen.getByText(/Primary mode/)).toBeInTheDocument()
     expect(screen.getByText(/accounts you own or are authorized/i)).toBeInTheDocument()
+  })
+
+  it('shows Change phone number during pending code and resets without a reload', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, status: 'not_connected' }) } as Response)
+    render(<TelegramIntegrationCard connected={false} configured botUsername="neuron_mcp_bot" accountSyncEnabled accountStatus="pending_code" />)
+    expect(screen.getByText(/Code sent/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Change phone number' }))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/integrations/telegram/account/reset-pending', { method: 'POST' }))
+    expect(await screen.findByPlaceholderText('+12065550123')).toBeInTheDocument()
+  })
+
+  it('shows Change phone number and Cancel login during pending password', () => {
+    render(<TelegramIntegrationCard connected={false} configured botUsername="neuron_mcp_bot" accountSyncEnabled accountStatus="pending_password" />)
+    expect(screen.getByRole('button', { name: 'Change phone number' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel login' })).toBeInTheDocument()
+    expect(screen.getByText(/never stores this password/i)).toBeInTheDocument()
+  })
+
+  it('explains that enabled public import is public-only', () => {
+    render(<TelegramIntegrationCard connected={false} configured botUsername="neuron_mcp_bot" publicImportEnabled />)
+    expect(screen.getByText('Import a public Telegram channel')).toBeInTheDocument()
+    expect(screen.getByText(/works only for public Telegram channels/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/@channelname/)).toBeInTheDocument()
   })
 
   it('renders connected controls', () => {

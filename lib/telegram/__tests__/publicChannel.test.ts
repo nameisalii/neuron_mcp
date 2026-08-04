@@ -15,6 +15,11 @@ it('normalizes public Telegram usernames', () => {
     url: 'https://t.me/public_news',
     previewUrl: 'https://t.me/s/public_news',
   })
+  expect(normalizePublicTelegramChannelUrl('@public_news')).toEqual({
+    username: 'public_news',
+    url: 'https://t.me/public_news',
+    previewUrl: 'https://t.me/s/public_news',
+  })
 })
 
 it('imports only the bounded most recent public posts', async () => {
