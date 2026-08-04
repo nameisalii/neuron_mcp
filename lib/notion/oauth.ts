@@ -5,7 +5,17 @@ export function getNotionAppUrl(): string {
 }
 
 export function getNotionRedirectUri(): string {
+  const configured = process.env.NOTION_REDIRECT_URI?.trim()
+  if (configured) return configured
   return `${getNotionAppUrl()}/api/integrations/notion/callback`
+}
+
+export function getNotionOAuthMismatchMessage(
+  redirectUri = getNotionRedirectUri(),
+): string {
+  return 'Notion connection failed because the OAuth client or redirect URL does not match. '
+    + 'Check that the same Notion app credentials are used in .env.local/Vercel and that '
+    + `this redirect URL is added in Notion: ${redirectUri}`
 }
 
 export function isNotionOAuthConfigured(): boolean {

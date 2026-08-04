@@ -24,6 +24,8 @@ beforeEach(() => {
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
   process.env.NOTION_CLIENT_ID = 'notion-client'
   process.env.NOTION_CLIENT_SECRET = 'notion-secret'
+  delete process.env.NOTION_REDIRECT_URI
+  process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000'
   ;(auth as unknown as jest.Mock).mockResolvedValue({ userId: 'user-1' })
   ;(prisma.user.findUnique as jest.Mock).mockResolvedValue({ workspace: { id: 'workspace-1' } })
   ;(prisma.workspaceMember.findUnique as jest.Mock).mockResolvedValue({ role: 'owner', status: 'active' })
@@ -80,5 +82,14 @@ describe('GET /api/integrations/notion/connect', () => {
 
     expect(response.headers.get('location')).toContain('error=notion_not_configured')
     expect(setCookie).not.toHaveBeenCalled()
+  })
+
+  it('uses the explicit Notion redirect URI when configured', async () => {
+    process.env.NOTION_REDIRECT_URI = 'http://localhost:3000/api/integrations/notion/callback'
+
+    const response = await GET(request)
+    const location = new URL(response.headers.get('location')!)
+
+    expect(location.searchParams.get('redirect_uri')).toBe(process.env.NOTION_REDIRECT_URI)
   })
 })

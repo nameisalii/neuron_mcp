@@ -1,17 +1,11 @@
-import { randomBytes } from 'node:crypto'
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { setTelegramWebhook } from '@/lib/telegram/api'
 import { getTelegramBotUsername, getTelegramConfig, getTelegramWebhookUrl, isTelegramConfigured } from '@/lib/telegram/config'
+import { generateSetupCode } from '@/lib/telegram/setupCode'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin'])
-
-function existingSetupCode(metadata: unknown): string | null {
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
-  const code = (metadata as Record<string, unknown>).setupCode
-  return typeof code === 'string' && code.length >= 16 ? code : null
-}
 
 export async function GET() {
   const { userId } = await auth()
@@ -36,7 +30,9 @@ export async function GET() {
     where: { workspaceId_type: { workspaceId, type: 'telegram' } },
     select: { metadata: true, channels: true },
   })
-  const setupCode = existingSetupCode(current?.metadata) ?? randomBytes(18).toString('base64url')
+  // Always mint a fresh, expiring code. Reusing a stored code made it a
+  // permanent workspace-binding credential for anyone who ever saw it.
+  const { code: setupCode, expiresAt: setupCodeExpiresAt } = generateSetupCode()
   const configured = isTelegramConfigured()
   const webhookUrl = getTelegramWebhookUrl()
 
@@ -61,6 +57,7 @@ export async function GET() {
           ? current.metadata as Record<string, unknown>
           : {}),
         setupCode,
+        setupCodeExpiresAt,
         status: current?.channels.length ? 'connected' : 'pending',
       },
     },
@@ -69,7 +66,7 @@ export async function GET() {
       type: 'telegram',
       accessToken: 'telegram-webhook',
       channels: [],
-      metadata: { setupCode, status: 'pending' },
+      metadata: { setupCode, setupCodeExpiresAt, status: 'pending' },
     },
   })
 

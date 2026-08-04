@@ -177,6 +177,33 @@ describe('extractKnowledge', () => {
     }))
   })
 
+  it('stores personal Slack provenance and never promotes it to team visibility', async () => {
+    mockChatCreate.mockResolvedValue(extraction([
+      { content: 'Private launch date is Friday', category: 'decision', owner: null, confidence: 0.9 },
+    ]))
+
+    await extractKnowledgeDetailed(twoMessages, 'ws-1', 'slack', 'https://app.slack.com/client/T1/G1', 'user:U1:G1:2.0', undefined, {
+      namespace: 'ws-1:user-1',
+      visibility: 'personal',
+      visibilitySetBy: 'user-1',
+      sourceMetadata: {
+        connectionMode: 'user',
+        channelName: '#leaders',
+        conversationType: 'private_channel',
+      },
+    })
+
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        workspaceId: 'ws-1',
+        source: 'slack',
+        visibility: 'personal',
+        visibilitySetBy: 'user-1',
+        sourceMetadata: expect.objectContaining({ connectionMode: 'user', channelName: '#leaders' }),
+      }),
+    }))
+  })
+
   it('creates a fallback fact when LLM returns []', async () => {
     mockChatCreate.mockResolvedValue(extraction([]))
 

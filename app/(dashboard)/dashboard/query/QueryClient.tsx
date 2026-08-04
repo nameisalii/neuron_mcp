@@ -49,7 +49,6 @@ const STATUS_MSGS = [
 ]
 
 const STARTER_QUESTIONS = ['What changed today?', 'What tasks do I have?', 'What did we decide?', 'What needs attention?']
-
 interface Props {
   workspaceType: WorkspaceType
   recentQueries: { id: string; query: string; createdAt: string }[]
@@ -344,6 +343,14 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
     void executeQuery(composerValue)
   }
 
+  function selectSuggestedQuestion(question: string) {
+    setComposerValue(question)
+    requestAnimationFrame(() => {
+      resizeComposer(question)
+      textareaRef.current?.focus()
+    })
+  }
+
   async function handleCopy(message: ChatMessage) {
     await navigator.clipboard.writeText(message.content)
     setCopiedMessageId(message.id)
@@ -421,7 +428,7 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
             data-testid="query-thread-scroll"
             className="min-h-0 flex-1 overflow-y-auto rounded-2xl bg-gray-50/60 px-3 py-4 sm:px-5"
           >
-            <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-center gap-5">
+            <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col justify-center gap-5">
               {messages.length === 0 && (
                 <div className="flex min-h-[220px] flex-col items-center justify-center px-4 text-center">
                   <p className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">How can I help you?</p>
@@ -508,13 +515,7 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
                 <button
                   key={question.toLowerCase()}
                   type="button"
-                  onClick={() => {
-                    setComposerValue(question)
-                    requestAnimationFrame(() => {
-                      resizeComposer(question)
-                      textareaRef.current?.focus()
-                    })
-                  }}
+                  onClick={() => selectSuggestedQuestion(question)}
                   className="max-w-xs shrink-0 truncate rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-200"
                   title={question}
                 >

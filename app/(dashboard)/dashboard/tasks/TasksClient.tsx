@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 
 type Status = "suggested" | "active" | "completed" | "declined" | "archived";
+
+/** Suggested tasks shown before the user asks for more. */
+const SUGGESTED_PREVIEW_COUNT = 4;
 type Category = "work" | "school" | "startup" | "truck" | "personal" | "other";
 type Priority = "low" | "medium" | "high" | "urgent";
 type Task = {
@@ -828,7 +831,8 @@ export default function TasksClient({
     [modal, setModal] = useState<false | null | Task>(false),
     [selectedTask, setSelectedTask] = useState<Task | null>(null),
     [archiveCandidate, setArchiveCandidate] = useState<Task | null>(null),
-    [archiveNotice, setArchiveNotice] = useState(false);
+    [archiveNotice, setArchiveNotice] = useState(false),
+    [showAllSuggested, setShowAllSuggested] = useState(false);
   const nonArchivedTasks = tasks.filter((task) => task.status !== "archived");
   const activeTasks = nonArchivedTasks.filter(
     (task) => task.status === "active",
@@ -836,6 +840,9 @@ export default function TasksClient({
   const suggested = nonArchivedTasks.filter(
     (task) => task.status === "suggested",
   );
+  const visibleSuggested = showAllSuggested
+    ? suggested
+    : suggested.slice(0, SUGGESTED_PREVIEW_COUNT);
   const countFor = (value: Filter) =>
     value === "all"
       ? activeTasks.length
@@ -906,7 +913,7 @@ export default function TasksClient({
     }
   }
   return (
-    <div className="mx-auto max-w-7xl pb-12">
+    <div className="w-full pb-12">
       <header className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Tasks</h1>
@@ -986,28 +993,6 @@ export default function TasksClient({
           </button>
         ))}
       </div>
-      {filter !== "archived" && <section className="mt-8">
-        <div className="mb-3 flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-violet-500" />
-          <h2 className="text-lg font-semibold">Suggested tasks</h2>
-        </div>
-        {suggested.length ? (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {suggested.map((task) => (
-              <SuggestedCard
-                key={task.id}
-                task={task}
-                action={action}
-                edit={setModal}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-black/10 bg-white/50 px-5 py-8 text-center text-sm text-black/45">
-            No suggested tasks right now.
-          </div>
-        )}
-      </section>}
       <section className="mt-9">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{tableTitle}</h2>
@@ -1024,6 +1009,48 @@ export default function TasksClient({
           emptyMessage={emptyMessage}
         />
       </section>
+      {/* Suggested tasks sit AFTER active work: they are a review queue, not the job. */}
+      {filter !== "archived" && <section data-testid="suggested-tasks-section" className="mt-9">
+        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Sparkles className="h-5 w-5 text-violet-500" />
+          <h2 className="text-lg font-semibold">Suggested tasks</h2>
+          {suggested.length > 0 && (
+            <span className="text-xs text-black/35">{suggested.length} waiting for review</span>
+          )}
+          <p className="w-full text-xs text-black/45">
+            Review tasks Neuron found from your connected tools.
+          </p>
+        </div>
+        {suggested.length ? (
+          <>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {visibleSuggested.map((task) => (
+                <SuggestedCard
+                  key={task.id}
+                  task={task}
+                  action={action}
+                  edit={setModal}
+                />
+              ))}
+            </div>
+            {suggested.length > SUGGESTED_PREVIEW_COUNT && (
+              <button
+                type="button"
+                onClick={() => setShowAllSuggested((current) => !current)}
+                className="mt-3 w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm font-medium text-black/70 transition hover:bg-black/[.03] sm:w-auto"
+              >
+                {showAllSuggested
+                  ? "Hide"
+                  : `See more (${suggested.length - SUGGESTED_PREVIEW_COUNT})`}
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-black/10 bg-white/50 px-5 py-4 text-center text-sm text-black/45">
+            No suggested tasks waiting.
+          </div>
+        )}
+      </section>}
       {selectedTask && (
         <TaskDetailDrawer
           task={selectedTask}

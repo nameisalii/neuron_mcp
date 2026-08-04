@@ -15,6 +15,7 @@ import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/pe
 import { searchDocumentAttachments, type DocumentResult } from '@/lib/documents/search'
 import { answerTtEldLocationQuestion, isTtEldLiveQuestion } from '@/lib/tteld/query'
 import { validateApiKey } from '@/lib/api-auth'
+import { telegramModeCapabilityAnswer } from '@/lib/telegram/product'
 import {
   applyDocumentAssignment,
   attachedDocumentContext,
@@ -542,6 +543,28 @@ export async function POST(req: Request) {
     })
     const workspaceName = workspace?.name ?? 'your workspace'
 
+    const telegramCapabilityAnswer = telegramModeCapabilityAnswer(question)
+    if (telegramCapabilityAnswer) {
+      const ranked = splitRankedSources([], 3, { query: question })
+      void safeSaveQueryLog(workspaceId, userId, displayName, question, telegramCapabilityAnswer, [])
+      if (conversationId) {
+        void storeAssistantMessage({
+          workspaceId,
+          userId,
+          conversationId,
+          answer: telegramCapabilityAnswer,
+          sourceReferences: [],
+          documentReferences: [],
+          relatedLoadId,
+          metadata: { confidence: 100, source: 'telegram_product' },
+        }).catch(() => null)
+      }
+      await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: [], resultCount: 0, hasAnswer: true, confidence: 100, latencyMs: Date.now() - startedAt })
+      return new Response(makeStaticAnswerStream({ answer: telegramCapabilityAnswer, ranked, documents: [], conversationId, confidence: 100 }), {
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
+
     if (isTaskQuery(question)) {
       const answer = await answerTaskQuery(workspaceId, question)
       const ranked = splitRankedSources([], 3, { query: question })
@@ -660,6 +683,8 @@ export async function POST(req: Request) {
     if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0) {
       const noInfoAnswer = intent.requestedSources.includes('slack')
         ? "I don’t see synced Slack messages yet. Connect Slack Personal Access and choose channels to sync."
+        : intent.requestedSources.includes('telegram')
+          ? "I don’t see synced Telegram messages yet. Connect Telegram Account Sync, choose chats, and sync selected messages."
         : "I don't have verified information about this yet."
       if (conversationId) {
         void storeAssistantMessage({

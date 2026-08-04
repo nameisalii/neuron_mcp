@@ -10,7 +10,7 @@ export default async function FiveEldPage() {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
   const user = await prisma.user.findUnique({ where: { clerkId: userId }, select: { workspace: { select: { id: true } } } })
-  if (!user?.workspace?.id) redirect('/onboarding')
+  if (!user?.workspace?.id) redirect('/setup')
   const connector = await prisma.apiConnector.findUnique({ where: { workspaceId_sourceKey: { workspaceId: user.workspace.id, sourceKey: 'five_eld' } }, select: { status: true, lastSyncAt: true, metadata: true } })
   const metadata = connector?.metadata && typeof connector.metadata === 'object' && !Array.isArray(connector.metadata) ? connector.metadata as Record<string, unknown> : {}
   const capabilities = metadata.capabilities && typeof metadata.capabilities === 'object' && !Array.isArray(metadata.capabilities) ? metadata.capabilities as Record<string, unknown> : {}

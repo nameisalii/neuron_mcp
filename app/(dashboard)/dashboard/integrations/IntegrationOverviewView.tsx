@@ -206,7 +206,7 @@ export default function IntegrationOverviewView({ data }: Props) {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="w-full space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-3">
           <Link href="/dashboard/integrations" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
@@ -536,7 +536,7 @@ export default function IntegrationOverviewView({ data }: Props) {
               {data.notionProjects.map((project) => (
                 <Link
                   key={project.id}
-                  href={`/dashboard/notion/${project.id}`}
+                  href="/dashboard/knowledge"
                   className="group flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-4 hover:border-gray-300 hover:shadow-sm transition-all"
                 >
                   <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">

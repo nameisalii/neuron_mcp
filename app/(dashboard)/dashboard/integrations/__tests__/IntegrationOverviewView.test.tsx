@@ -111,8 +111,8 @@ describe('IntegrationOverviewView', () => {
     })} />)
 
     expect(screen.getByText('All Notion projects')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Product Plan/ })).toHaveAttribute('href', '/dashboard/notion/page-1')
-    expect(screen.getByRole('link', { name: /Launch Notes/ })).toHaveAttribute('href', '/dashboard/notion/page-2')
+    expect(screen.getByRole('link', { name: /Product Plan/ })).toHaveAttribute('href', '/dashboard/knowledge')
+    expect(screen.getByRole('link', { name: /Launch Notes/ })).toHaveAttribute('href', '/dashboard/knowledge')
   })
 
   it('renders a Datatruck connect button that opens the setup flow when not connected', () => {

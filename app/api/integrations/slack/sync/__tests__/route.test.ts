@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import { syncSlackMessagesDetailed } from '@/lib/slack/sync'
 import { extractKnowledgeDetailed } from '@/lib/extraction/extractor'
+import { syncSlackUserConnection } from '@/lib/slack/userSync'
 
 jest.mock('@clerk/nextjs/server', () => ({ auth: jest.fn() }))
 jest.mock('@/lib/db', () => ({
@@ -16,6 +17,7 @@ jest.mock('@/lib/db', () => ({
 }))
 jest.mock('@/lib/slack/sync', () => ({ syncSlackMessagesDetailed: jest.fn() }))
 jest.mock('@/lib/extraction/extractor', () => ({ extractKnowledgeDetailed: jest.fn() }))
+jest.mock('@/lib/slack/userSync', () => ({ syncSlackUserConnection: jest.fn() }))
 
 const diagnostics = {
   extractorCalled: 1,
@@ -104,4 +106,43 @@ it('returns a clear reason when Slack has no accessible messages', async () => {
     message: expect.stringContaining('Invite the Neuron bot'),
     skippedReasons: expect.objectContaining({ no_joined_channels: 1 }),
   })
+})
+
+it('syncs only the authenticated member personal Slack connection in user mode', async () => {
+  ;(syncSlackUserConnection as jest.Mock).mockResolvedValue({
+    conversationsDiscovered: 4,
+    conversationsScanned: 2,
+    messagesFetched: 7,
+    knowledgeCreated: 3,
+    skippedConversations: 2,
+  })
+
+  const res = await POST(new Request('http://localhost/api/integrations/slack/sync?mode=user', { method: 'POST' }))
+  expect(res.status).toBe(200)
+  expect(syncSlackUserConnection).toHaveBeenCalledWith({ workspaceId: 'ws-1', userId: 'user-1' })
+  expect(await res.json()).toMatchObject({
+    success: true,
+    mode: 'user',
+    fetched: 7,
+    knowledgeCreated: 3,
+    conversationsScanned: 2,
+  })
+  expect(syncSlackMessagesDetailed).not.toHaveBeenCalled()
+})
+
+it('does not sync all accessible conversations when personal selection is empty', async () => {
+  ;(syncSlackUserConnection as jest.Mock).mockResolvedValue({
+    conversationsDiscovered: 0,
+    conversationsScanned: 0,
+    messagesFetched: 0,
+    knowledgeCreated: 0,
+    skippedConversations: 0,
+  })
+
+  const res = await POST(new Request('http://localhost/api/integrations/slack/sync?mode=user', { method: 'POST' }))
+  expect(await res.json()).toMatchObject({
+    success: true,
+    message: 'Choose Slack conversations before syncing.',
+  })
+  expect(syncSlackMessagesDetailed).not.toHaveBeenCalled()
 })

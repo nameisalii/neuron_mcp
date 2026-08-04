@@ -90,6 +90,15 @@ it('shows starter prompts once and copies a chip into the composer', () => {
   expect(screen.getByRole('textbox', { name: 'Ask Neuron anything' })).toHaveValue('What changed today?')
 })
 
+it('copies a suggested question into the composer', async () => {
+  renderQueryClient()
+
+  fireEvent.click(screen.getByRole('button', { name: 'What tasks do I have?' }))
+
+  expect(screen.getByRole('textbox', { name: 'Ask Neuron anything' })).toHaveValue('What tasks do I have?')
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Ask Neuron anything' })).toHaveFocus())
+})
+
 it('deduplicates recent questions by normalized text', () => {
   render(<QueryClient workspaceType="solo" recentQueries={[
     { id: '1', query: 'What changed today?', createdAt: '2026-07-24T10:00:00.000Z' },
@@ -131,7 +140,7 @@ it('sends on Enter and renders chat bubbles with collapsed sources', async () =>
 
   fireEvent.click(screen.getByRole('button', { name: 'From integrations (1)' }))
   expect(screen.getByText('Load board update')).toBeInTheDocument()
-  expect(screen.getByText(/@dispatch_updates · Telegram ·/)).toBeInTheDocument()
+  expect(screen.getByText(/Telegram · Bot Mode · @dispatch_updates ·/)).toBeInTheDocument()
 })
 
 it('keeps Shift+Enter as a newline action instead of submitting', () => {

@@ -3,11 +3,14 @@ type KnowledgeDisplayInput = {
   summary?: string | null
   reason?: string | null
   label?: string | null
+  category?: string | null
+  source?: string | null
   notionPageTitle?: string | null
   verified?: boolean | null
   frozen?: boolean | null
   conflictNote?: string | null
   createdAt?: Date | string | null
+  updatedAt?: Date | string | null
   sourceMetadata?: unknown
 }
 
@@ -30,11 +33,40 @@ export function getKnowledgeDisplayTitle(item: KnowledgeDisplayInput) {
     ?? text(excerpt(item.summary?.split(/[.!?](?:\s|$)/)[0], 80))
     ?? text(item.notionPageTitle)
     ?? text(excerpt(item.content, 80))
-    ?? 'Untitled knowledge'
+    ?? 'Untitled context'
 }
 
 export function getKnowledgeDisplaySummary(item: KnowledgeDisplayInput) {
-  return text(item.summary) ?? text(item.reason) ?? excerpt(item.content, 240)
+  return text(item.summary) ?? text(excerpt(item.content, 220)) ?? text(item.reason) ?? ''
+}
+
+export type KnowledgeDisplayCategory = 'rules' | 'decisions' | 'ideas' | 'facts' | 'processes' | 'other'
+
+export function getKnowledgeDisplayCategory(item: KnowledgeDisplayInput): KnowledgeDisplayCategory {
+  const metadata = metadataRecord(item.sourceMetadata)
+  const raw = (text(item.category) ?? text(metadata.knowledgeType) ?? text(metadata.type) ?? 'fact').toLowerCase()
+  if (raw === 'rule' || raw === 'rules') return 'rules'
+  if (raw === 'decision' || raw === 'decisions') return 'decisions'
+  if (raw === 'idea' || raw === 'ideas') return 'ideas'
+  if (raw === 'fact' || raw === 'facts') return 'facts'
+  if (raw === 'process' || raw === 'processes') return 'processes'
+  return 'other'
+}
+
+export function getKnowledgeDisplayIntegration(item: KnowledgeDisplayInput) {
+  const metadata = metadataRecord(item.sourceMetadata)
+  return text(item.source) ?? text(metadata.sourceType) ?? text(metadata.integration) ?? 'manual'
+}
+
+export const getKnowledgeDisplaySource = getKnowledgeDisplayIntegration
+
+export function getKnowledgeDisplayDate(item: KnowledgeDisplayInput) {
+  return item.updatedAt ?? item.createdAt ?? null
+}
+
+export function getKnowledgeIsArchived(item: KnowledgeDisplayInput) {
+  const metadata = metadataRecord(item.sourceMetadata)
+  return text(metadata.knowledgeStatus)?.toLowerCase() === 'archived' || metadata.archived === true
 }
 
 export function getKnowledgeStatus(item: KnowledgeDisplayInput) {
@@ -73,6 +105,11 @@ export function normalizeKnowledgeItem<T extends KnowledgeDisplayInput>(item: T)
     ...item,
     displayTitle: getKnowledgeDisplayTitle(item),
     displaySummary: getKnowledgeDisplaySummary(item),
+    displayCategory: getKnowledgeDisplayCategory(item),
+    displayIntegration: getKnowledgeDisplayIntegration(item),
+    displaySource: getKnowledgeDisplayIntegration(item),
+    displayDate: getKnowledgeDisplayDate(item),
+    displayArchived: getKnowledgeIsArchived(item),
     displayStatus: getKnowledgeStatus(item),
     displayTags: getKnowledgeTags(item),
     displaySourceUrl: getKnowledgeSourceUrl(item),

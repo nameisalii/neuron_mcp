@@ -12,6 +12,7 @@ export interface QuerySource {
   sourceMetadata?: Record<string, unknown> | null
   sourceCreatedAt: string | null
   updatedAt: string | null
+  visibility?: string | null
   relevanceScore: number
   verified?: boolean
   conflictNote?: string | null

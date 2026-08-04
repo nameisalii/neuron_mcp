@@ -6,6 +6,7 @@ import { upsertEmbedding, upsertEmbeddingInNamespace, searchSimilar, searchInNam
 import { EXTRACTION_SYSTEM_PROMPT, GMAIL_EXTRACTION_SYSTEM_PROMPT, CONFLICT_SYSTEM_PROMPT } from './prompts'
 import { escapeXml } from '@/lib/utils'
 import type { SlackMessage, ExtractedItem } from '@/types'
+import type { Prisma } from '@prisma/client'
 
 const CHUNK_SIZE = 20
 const CONFIDENCE_THRESHOLD = 0.4
@@ -121,6 +122,7 @@ export interface ExtractionPrivacyOptions {
   namespace?: string
   visibility?: 'team' | 'personal'
   visibilitySetBy?: string
+  sourceMetadata?: Record<string, unknown>
 }
 
 export async function extractKnowledge(
@@ -198,7 +200,11 @@ export async function extractKnowledgeDetailed(
 
     for (const item of items) {
       try {
-        const contentHash = computeContentHash(item.content)
+        const contentHash = computeContentHash(
+          privacy?.visibility === 'personal' && privacy.visibilitySetBy
+            ? `personal:${privacy.visibilitySetBy}:${item.content}`
+            : item.content,
+        )
         const hashExists = await prisma.knowledgeItem.findUnique({
           where: { workspaceId_contentHash: { workspaceId, contentHash } },
           select: { id: true },
@@ -261,6 +267,7 @@ export async function extractKnowledgeDetailed(
               source,
               sourceUrl,
               sourceExternalId,
+              sourceMetadata: privacy?.sourceMetadata as Prisma.InputJsonValue | undefined,
               notionPageId: notionPage?.id,
               notionPageTitle: notionPage?.title,
               owner: item.owner,

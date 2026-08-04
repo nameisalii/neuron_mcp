@@ -9,6 +9,7 @@ import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { trackValidationEvent } from '@/lib/activity'
 import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/persistence'
 import { searchDocumentAttachments } from '@/lib/documents/search'
+import { validateApiKey } from '@/lib/api-auth'
 
 jest.mock('@clerk/nextjs/server', () => ({ auth: jest.fn() }))
 jest.mock('@/lib/db', () => ({
@@ -34,6 +35,7 @@ jest.mock('@/lib/chat/persistence', () => ({
   storeAssistantMessage: jest.fn(),
 }))
 jest.mock('@/lib/documents/search', () => ({ searchDocumentAttachments: jest.fn() }))
+jest.mock('@/lib/api-auth', () => ({ validateApiKey: jest.fn() }))
 
 const mockAuth = jest.mocked(auth)
 const mockUserFind = jest.mocked(prisma.user.findUnique)
@@ -51,6 +53,7 @@ const mockEmailThreadFindMany = jest.mocked(prisma.emailThread.findMany)
 const mockCreateOrAppendConversation = jest.mocked(createOrAppendConversation)
 const mockStoreAssistantMessage = jest.mocked(storeAssistantMessage)
 const mockSearchDocumentAttachments = jest.mocked(searchDocumentAttachments)
+const mockValidateApiKey = jest.mocked(validateApiKey)
 
 const CLERK_ID = 'user-clerk-1'
 const WORKSPACE_ID = 'ws-1'
@@ -96,6 +99,7 @@ const mockChunk = {
 beforeEach(() => {
   jest.clearAllMocks()
   mockAuth.mockResolvedValue({ userId: CLERK_ID } as never)
+  mockValidateApiKey.mockReturnValue(null)
   mockUserFind.mockResolvedValue({ workspace: { id: WORKSPACE_ID } } as never)
   mockMemberFind.mockResolvedValue({ role: 'member', status: 'active', displayName: DISPLAY_NAME, department: 'Engineering' } as never)
   mockWorkspaceFind.mockResolvedValue({ id: WORKSPACE_ID, name: WORKSPACE_NAME, type: 'team' } as never)
@@ -122,6 +126,21 @@ describe('POST /api/query', () => {
     expect(res.status).toBe(401)
     const data = await res.json()
     expect(data.error).toBe('Unauthorized')
+  })
+
+  it('accepts a valid API key and queries as the workspace owner', async () => {
+    mockValidateApiKey.mockReturnValue(WORKSPACE_ID)
+    mockAuth.mockResolvedValue({ userId: null } as never)
+    mockWorkspaceFind
+      .mockResolvedValueOnce({ owner: { clerkId: CLERK_ID } } as never)
+      .mockResolvedValueOnce({ name: WORKSPACE_NAME } as never)
+
+    const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
+
+    expect(res.status).toBe(200)
+    expect(mockMemberFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workspaceId_userId: { workspaceId: WORKSPACE_ID, userId: CLERK_ID } },
+    }))
   })
 
   it('returns 400 when question is fewer than 3 characters', async () => {

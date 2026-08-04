@@ -60,6 +60,9 @@ jest.mock('@/lib/db', () => ({
     integration: {
       upsert: jest.fn(),
     },
+    slackUserConnection: {
+      upsert: jest.fn(),
+    },
   },
 }))
 
@@ -157,13 +160,29 @@ describe('GET /api/integrations/slack/callback', () => {
   })
 
   describe('Slack token exchange failure', () => {
+    it('surfaces Slack admin approval errors without storing credentials', async () => {
+      const result = await callGET({ error: 'app_not_approved', state: VALID_STATE })
+      expect(result).toEqual({ redirectedTo: '/dashboard/integrations?error=slack_admin_approval&reason=app_not_approved' })
+      expect(prisma.integration.upsert).not.toHaveBeenCalled()
+      expect(prisma.slackUserConnection.upsert).not.toHaveBeenCalled()
+    })
+
+    it('surfaces a friendly non-distributed Slack app error', async () => {
+      const result = await callGET({ error: 'invalid_team_for_non_distributed_app', state: VALID_STATE })
+      expect(result).toEqual({
+        redirectedTo: '/dashboard/integrations?error=slack_distribution_required&reason=invalid_team_for_non_distributed_app',
+      })
+      expect(prisma.integration.upsert).not.toHaveBeenCalled()
+      expect(prisma.slackUserConnection.upsert).not.toHaveBeenCalled()
+    })
+
     it('redirects to /dashboard?error=slack_failed when token.ok is false', async () => {
       mockFetchOk({ ok: false, error: 'invalid_code' })
       ;(prisma.user.findUnique as jest.Mock).mockResolvedValue(DB_USER_WITH_WORKSPACE)
 
       const result = await callGET({ code: 'bad_code', state: VALID_STATE })
 
-      expect(result).toEqual({ redirectedTo: '/dashboard?error=slack_failed' })
+      expect(result).toEqual({ redirectedTo: '/dashboard/integrations?error=slack_failed&reason=invalid_code' })
       expect(prisma.integration.upsert).not.toHaveBeenCalled()
     })
 
@@ -239,6 +258,40 @@ describe('GET /api/integrations/slack/callback', () => {
           channels: [],
         },
       })
+    })
+
+    it('stores a personal Slack token encrypted without replacing bot mode', async () => {
+      mockCookieGet.mockReturnValue({
+        value: JSON.stringify({ state: VALID_STATE, userId: CLERK_ID, mode: 'user' }),
+      })
+      mockFetchOk({
+        ok: true,
+        team: { id: 'T98765', name: 'Acme Corp' },
+        authed_user: {
+          id: 'U123',
+          access_token: 'xoxp-user-secret',
+          refresh_token: 'xoxe-refresh-secret',
+          expires_in: 3600,
+          scope: 'channels:read,channels:history',
+        },
+      })
+      ;(prisma.user.findUnique as jest.Mock).mockResolvedValue(DB_USER_WITH_WORKSPACE)
+      ;(prisma.slackUserConnection.upsert as jest.Mock).mockResolvedValue({})
+
+      const result = await callGET({ code: 'auth_code_123', state: VALID_STATE })
+
+      expect(result).toEqual({ redirectedTo: '/dashboard/integrations?success=slack_user' })
+      expect(prisma.integration.upsert).not.toHaveBeenCalled()
+      expect(prisma.slackUserConnection.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        where: { workspaceId_connectedByUserId: { workspaceId: 'ws_1', connectedByUserId: CLERK_ID } },
+        create: expect.objectContaining({
+          encryptedAccessToken: 'encrypted_token',
+          encryptedRefreshToken: 'encrypted_token',
+          connectedByUserId: CLERK_ID,
+          settings: expect.objectContaining({ publicChannels: true, privateChannels: false, dms: false }),
+        }),
+      }))
+      expect(JSON.stringify((prisma.slackUserConnection.upsert as jest.Mock).mock.calls[0][0])).not.toContain('xoxp-user-secret')
     })
 
     it('redirects to /dashboard/integrations?success=slack on success', async () => {

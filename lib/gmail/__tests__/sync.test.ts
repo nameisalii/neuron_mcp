@@ -505,6 +505,23 @@ describe('syncGmail thread grouping and chunks', () => {
     expect(result.extractionDiagnostics.skippedPromotional).toBeGreaterThan(0)
   })
 
+  it('does not create fallback memory for automated domain contact reminders', async () => {
+    ;(prisma.knowledgeItem.findFirst as jest.Mock).mockResolvedValue(null)
+    setupGmailApi([{
+      id: 'msg_1',
+      threadId: 'thread_a',
+      subject: 'Reminder: Update your domain contact information',
+      from: 'Namecheap Support <support@namecheap.com>',
+      body: 'Please review and update the contact information associated with your domain before the listed deadline.',
+    }])
+
+    const result = await syncGmail(baseInput())
+
+    expect(result.fallbackKnowledgeItems).toBe(0)
+    expect(result.extractionDiagnostics.skippedPromotional).toBeGreaterThan(0)
+    expect(prisma.knowledgeItem.create).not.toHaveBeenCalled()
+  })
+
   it('separates AI extraction from fallback counters', async () => {
     ;(extractKnowledgeDetailed as jest.Mock).mockResolvedValue({
       items: [{ content: 'Product Hunt launch is delayed', category: 'decision', owner: null, confidence: 0.9 }],

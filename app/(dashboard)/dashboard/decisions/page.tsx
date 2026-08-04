@@ -9,7 +9,7 @@ export default async function DecisionsPage() {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
   const user = await prisma.user.findUnique({ where: { clerkId: userId }, select: { workspace: { select: { id: true } } } })
-  if (!user?.workspace) redirect('/onboarding')
+  if (!user?.workspace) redirect('/setup')
   const decisions = await prisma.decision.findMany({ where: { workspaceId: user.workspace.id }, orderBy: { createdAt: 'desc' }, take: 100 })
 
   return <DecisionsClient initialDecisions={decisions.map(decision => ({

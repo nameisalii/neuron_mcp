@@ -31,6 +31,7 @@ export type ActivityEventType =
   | 'settings_change'
   | 'conflict_detected'
   | 'page_viewed'
+  | 'link_enrichment'
 
 export interface LabeledByEntry {
   userId: string
@@ -104,11 +105,21 @@ export interface WorkspaceStats {
 
 export interface SlackOAuthToken {
   ok: boolean
-  access_token: string
-  bot_user_id: string
-  team: {
+  access_token?: string
+  bot_user_id?: string
+  scope?: string
+  token_type?: string
+  team?: {
     id: string
     name: string
+  }
+  authed_user?: {
+    id?: string
+    scope?: string
+    access_token?: string
+    token_type?: string
+    refresh_token?: string
+    expires_in?: number
   }
   error?: string
 }

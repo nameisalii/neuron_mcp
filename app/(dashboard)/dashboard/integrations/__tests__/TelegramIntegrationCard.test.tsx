@@ -20,8 +20,14 @@ describe('TelegramIntegrationCard', () => {
     expect(screen.getByText('Telegram')).toBeInTheDocument()
     expect(screen.getByText('Not configured')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Configure' })).toBeInTheDocument()
-    expect(screen.getAllByText(/Telegram is not connected yet/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Connect your Telegram account to choose chats/)).toBeInTheDocument()
     expect(screen.getByText(/Old Telegram history cannot be imported through the official bot API/)).toBeInTheDocument()
+    expect(screen.getByText('Telegram Bot Mode')).toBeInTheDocument()
+    expect(screen.queryByText('Public channel import')).not.toBeInTheDocument()
+    expect(screen.getByText(/cannot read chats where the bot has not been added/i)).toBeInTheDocument()
+    expect(screen.getByText('Telegram Account Sync')).toBeInTheDocument()
+    expect(screen.getByText(/Primary mode/)).toBeInTheDocument()
+    expect(screen.getByText(/accounts you own or are authorized/i)).toBeInTheDocument()
   })
 
   it('renders connected controls', () => {
@@ -34,14 +40,33 @@ describe('TelegramIntegrationCard', () => {
     )
 
     expect(screen.getByText('Connected', { selector: 'span' })).toBeInTheDocument()
-    expect(screen.getByText(/Telegram is connected. Neuron will capture new useful messages/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/telegram')
-    expect(screen.getByText('Sync Now')).toBeInTheDocument()
+    expect(screen.getByText(/Telegram Bot Mode is connected/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Manage discovered chats' })).toHaveAttribute('href', '/dashboard/integrations/telegram')
+    expect(screen.getByText('Sync selected')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
     expect(screen.getByText('Nuclear Reset')).toBeInTheDocument()
   })
 
-  it('does not render raw sync counters or duplicated bot copy after Sync Now', async () => {
+  it('shows connected account controls and selected summary', () => {
+    render(
+      <TelegramIntegrationCard
+        connected={false}
+        configured
+        botUsername="neuron_mcp_bot"
+        accountSyncEnabled
+        accountStatus="connected"
+        accountDisplayName="Ali"
+        accountSelectedCount={3}
+        accountLastSyncAt="2026-07-30T00:00:00.000Z"
+      />,
+    )
+    expect(screen.getByText('Connected as Ali')).toBeInTheDocument()
+    expect(screen.getByText(/3 chats selected/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Manage chats' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Sync selected' }).length).toBeGreaterThan(0)
+  })
+
+  it('does not render raw sync counters or duplicated bot copy after syncing selected chats', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -52,6 +77,8 @@ describe('TelegramIntegrationCard', () => {
         knowledgeCreated: 0,
         synced: 0,
         extracted: 0,
+        deliveryMode: 'webhook',
+        webhookHealthy: true,
       }),
     } as Response)
 
@@ -63,9 +90,9 @@ describe('TelegramIntegrationCard', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sync Now' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sync selected' }))
 
-    expect(await screen.findByText('No new items found.')).toBeInTheDocument()
+    expect(await screen.findByText('Connection healthy. New messages import automatically.')).toBeInTheDocument()
     const visibleText = document.body.textContent ?? ''
     expect(visibleText).not.toContain('0 fetched')
     expect(visibleText).not.toContain('0 processed')
@@ -88,7 +115,7 @@ describe('TelegramIntegrationCard', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sync Now' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sync selected' }))
 
     expect(await screen.findByText('Connection needs setup.')).toBeInTheDocument()
     expect(document.body.textContent).not.toContain('Long provider token/scope/debug failure')

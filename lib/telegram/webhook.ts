@@ -6,6 +6,7 @@ import { generateEmbedding } from '@/lib/openai'
 import { upsertEmbedding } from '@/lib/pinecone'
 import type { SlackMessage } from '@/types'
 import { extractAndCreateSuggestedTaskFromKnowledgeItem } from '@/lib/tasks/service'
+import { clearSetupCode, isSetupCodeUsable } from '@/lib/telegram/setupCode'
 
 const chatSchema = z.object({
   id: z.union([z.number(), z.string()]),
@@ -18,6 +19,7 @@ const messageSchema = z.object({
   message_id: z.number(),
   date: z.number().optional(),
   text: z.string().optional(),
+  caption: z.string().optional(),
   chat: chatSchema,
   from: z.object({ is_bot: z.boolean().optional() }).passthrough().optional(),
   sender_chat: z.object({ id: z.union([z.number(), z.string()]).optional() }).passthrough().optional(),
@@ -178,18 +180,14 @@ function bindingCode(text: string): string | null {
   return match?.[1] ?? null
 }
 
-function metadataCode(metadata: unknown): string | null {
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
-  const code = (metadata as Record<string, unknown>).setupCode
-  return typeof code === 'string' ? code : null
-}
 
 async function bindChat(message: TelegramMessage, code: string, result: TelegramWebhookResult): Promise<boolean> {
   const candidates = await prisma.integration.findMany({
     where: { type: 'telegram' },
     select: { id: true, workspaceId: true, channels: true, metadata: true },
   })
-  const integration = candidates.find((candidate) => metadataCode(candidate.metadata) === code)
+  // Match on code AND expiry. An expired or already-consumed code must never bind.
+  const integration = candidates.find((candidate) => isSetupCodeUsable(candidate.metadata, code))
   if (!integration) return false
 
   const chatId = String(message.chat.id)
@@ -201,9 +199,9 @@ async function bindChat(message: TelegramMessage, code: string, result: Telegram
       teamId: chatId,
       teamName: message.chat.title?.trim() || 'Telegram chat',
       metadata: {
-        ...(integration.metadata && typeof integration.metadata === 'object' && !Array.isArray(integration.metadata)
-          ? integration.metadata as Record<string, unknown>
-          : {}),
+        // Consume the code in the same write that binds the chat, so it cannot
+        // be replayed to bind a second chat.
+        ...clearSetupCode(integration.metadata),
         status: 'connected',
         connectedAt: new Date().toISOString(),
       },
@@ -215,86 +213,18 @@ async function bindChat(message: TelegramMessage, code: string, result: Telegram
   return true
 }
 
-export async function processTelegramUpdate(payload: unknown): Promise<TelegramWebhookResult> {
-  const result: TelegramWebhookResult = {
-    messagesReceived: 0,
-    messagesProcessed: 0,
-    knowledgeCreated: 0,
-    knowledgeUpdated: 0,
-    skippedReasons: {},
-    extractionErrors: 0,
-    embeddingErrors: 0,
-    databaseErrors: 0,
-    safeDebug: { messagePresent: false, textLength: 0, isStartCommand: false, bindingFound: false },
-  }
+type BoundTelegramIntegration = {
+  id: string
+  workspaceId: string
+}
 
-  const parsed = updateSchema.safeParse(payload)
-  if (!parsed.success) {
-    skipped(result, 'unsupported_update')
-    return result
-  }
-
-  result.safeDebug!.updateId = parsed.data.update_id
-  const message = parsed.data.message ?? parsed.data.edited_message ?? parsed.data.channel_post ?? parsed.data.edited_channel_post
-  if (!message) {
-    skipped(result, 'unsupported_update')
-    return result
-  }
-  result.safeDebug!.messagePresent = true
-  result.safeDebug!.chatType = message.chat.type
-  result.messagesReceived = 1
-
-  if (message.from?.is_bot) {
-    skipped(result, 'bot_message')
-    return result
-  }
-
-  const rawText = message.text ?? ''
-  const text = normalizeTelegramText(rawText)
-  result.safeDebug!.textLength = text.length
-  if (!text) {
-    const hasMedia = Object.keys(message).some((key) =>
-      ['photo', 'video', 'audio', 'voice', 'document', 'sticker', 'animation'].includes(key))
-    skipped(result, hasMedia ? 'unsupported_media' : 'empty_text')
-    return result
-  }
-
-  const code = bindingCode(text)
-  result.safeDebug!.isStartCommand = Boolean(code)
-  if (code) {
-    try {
-      if (await bindChat(message, code, result)) {
-        result.safeDebug!.bindingFound = true
-        skipped(result, 'binding_command')
-      }
-      else skipped(result, 'unbound_chat')
-    } catch {
-      result.databaseErrors++
-      skipped(result, 'database_error')
-    }
-    return result
-  }
-
-  const quality = shouldSkipTelegramText(text)
-  if (quality.skip) {
-    skipped(result, quality.reason ?? 'too_short')
-    return result
-  }
-
-  const chatId = String(message.chat.id)
-  result.chatIdHash = hashTelegramChatId(chatId)
-  const integration = await prisma.integration.findFirst({
-    where: { type: 'telegram', channels: { has: chatId } },
-    select: { id: true, workspaceId: true },
-  })
-  if (!integration) {
-    skipped(result, 'unbound_chat')
-    return result
-  }
-  result.workspaceId = integration.workspaceId
-  result.integrationId = integration.id
-  result.safeDebug!.bindingFound = true
-
+async function processMessageForIntegration(
+  message: TelegramMessage,
+  text: string,
+  updateId: number | undefined,
+  integration: BoundTelegramIntegration,
+  result: TelegramWebhookResult,
+): Promise<void> {
   const sourceExternalId = externalId(message)
   const existing = await prisma.knowledgeItem.findFirst({
     where: { workspaceId: integration.workspaceId, source: 'telegram', sourceExternalId },
@@ -309,7 +239,7 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
     result.safeDebug!.taskCreated = taskResult.status === 'created'
     result.safeDebug!.taskSkippedReason = taskResult.reason
     skipped(result, 'duplicate')
-    return result
+    return
   }
 
   const sourceUrl = publicSourceUrl(message)
@@ -319,19 +249,21 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
       data: {
         workspaceId: integration.workspaceId,
         content: text,
-        contentHash: contentHash(sourceExternalId),
+        contentHash: contentHash(`${integration.workspaceId}:${sourceExternalId}`),
         category: 'fact',
         aiSuggestedCategory: 'fact',
         source: 'telegram',
         sourceExternalId,
         sourceUrl,
         sourceMetadata: {
+          provider: 'telegram',
+          mode: 'telegram_bot',
           telegram: true,
           chatType: message.chat.type ?? 'unknown',
           chatTitle: message.chat.title?.trim() || null,
           chatUsername: message.chat.username?.trim() || null,
           messageId: message.message_id,
-          updateId: parsed.data.update_id ?? null,
+          updateId: updateId ?? null,
         },
         owner: null,
         confidence: 0.55,
@@ -356,7 +288,7 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
       result.databaseErrors++
       skipped(result, 'database_error')
     }
-    return result
+    return
   }
 
   try {
@@ -395,6 +327,93 @@ export async function processTelegramUpdate(payload: unknown): Promise<TelegramW
     })
   } catch {
     result.databaseErrors++
+  }
+}
+
+export async function processTelegramUpdate(payload: unknown): Promise<TelegramWebhookResult> {
+  const result: TelegramWebhookResult = {
+    messagesReceived: 0,
+    messagesProcessed: 0,
+    knowledgeCreated: 0,
+    knowledgeUpdated: 0,
+    skippedReasons: {},
+    extractionErrors: 0,
+    embeddingErrors: 0,
+    databaseErrors: 0,
+    safeDebug: { messagePresent: false, textLength: 0, isStartCommand: false, bindingFound: false },
+  }
+
+  const parsed = updateSchema.safeParse(payload)
+  if (!parsed.success) {
+    skipped(result, 'unsupported_update')
+    return result
+  }
+
+  result.safeDebug!.updateId = parsed.data.update_id
+  const message = parsed.data.message ?? parsed.data.edited_message ?? parsed.data.channel_post ?? parsed.data.edited_channel_post
+  if (!message) {
+    skipped(result, 'unsupported_update')
+    return result
+  }
+  result.safeDebug!.messagePresent = true
+  result.safeDebug!.chatType = message.chat.type
+  result.messagesReceived = 1
+
+  if (message.from?.is_bot) {
+    skipped(result, 'bot_message')
+    return result
+  }
+
+  const rawText = message.text ?? message.caption ?? ''
+  const text = normalizeTelegramText(rawText)
+  result.safeDebug!.textLength = text.length
+  if (!text) {
+    const hasMedia = Object.keys(message).some((key) =>
+      ['photo', 'video', 'audio', 'voice', 'document', 'sticker', 'animation'].includes(key))
+    skipped(result, hasMedia ? 'unsupported_media' : 'empty_text')
+    return result
+  }
+
+  const code = bindingCode(text)
+  result.safeDebug!.isStartCommand = Boolean(code)
+  if (code) {
+    try {
+      if (await bindChat(message, code, result)) {
+        result.safeDebug!.bindingFound = true
+        skipped(result, 'binding_command')
+      }
+      else skipped(result, 'unbound_chat')
+    } catch {
+      result.databaseErrors++
+      skipped(result, 'database_error')
+    }
+    return result
+  }
+
+  const quality = shouldSkipTelegramText(text)
+  if (quality.skip) {
+    skipped(result, quality.reason ?? 'too_short')
+    return result
+  }
+
+  const chatId = String(message.chat.id)
+  result.chatIdHash = hashTelegramChatId(chatId)
+  const integrations = await prisma.integration.findMany({
+    where: { type: 'telegram', channels: { has: chatId } },
+    select: { id: true, workspaceId: true },
+  })
+  if (integrations.length === 0) {
+    skipped(result, 'unbound_chat')
+    return result
+  }
+  if (integrations.length === 1) {
+    result.workspaceId = integrations[0].workspaceId
+    result.integrationId = integrations[0].id
+  }
+  result.safeDebug!.bindingFound = true
+
+  for (const integration of integrations) {
+    await processMessageForIntegration(message, text, parsed.data.update_id, integration, result)
   }
 
   return result

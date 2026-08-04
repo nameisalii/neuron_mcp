@@ -239,7 +239,7 @@ function boundedEmailText(text: string, maxChars: number): string {
 
 const PROMOTIONAL_SIGNAL = /\b(unsubscribe|view in browser|special offer|limited time|shop now|sale ends|marketing preferences|edit settings|job alert|be the first to apply|recommended for you)\b/i
 const AUTOMATED_SENDER = /\b(no-?reply|donotreply|notifications?|mailer-daemon|newsletter|marketing)\b/i
-const SENSITIVE_AUTOMATED_SUBJECT = /\b(password reset|verification code|security code|secure verification|two[- ]step verification|one[- ]time code|login code|receipt|invoice|order confirmation)\b/i
+const AUTOMATED_TRANSACTIONAL_SUBJECT = /\b(password reset|verification code|security code|secure verification|two[- ]step verification|one[- ]time code|login code|receipt|invoice|order confirmation|domain contact information|domain (?:renewal|expiration)|payment (?:received|failed)|shipping confirmation|delivery update|subscription (?:renewal|confirmation)|account notice)\b/i
 
 function firstUsefulSentence(body: string): string | null {
   const sentence = body
@@ -257,7 +257,7 @@ function fallbackMemoryContent(message: ParsedEmailMessage, diagnostics: GmailEx
     diagnostics.contentTooShort++
     return null
   }
-  if (AUTOMATED_SENDER.test(message.from) || PROMOTIONAL_SIGNAL.test(`${subject} ${body}`) || SENSITIVE_AUTOMATED_SUBJECT.test(subject)) {
+  if (AUTOMATED_SENDER.test(message.from) || PROMOTIONAL_SIGNAL.test(`${subject} ${body}`) || AUTOMATED_TRANSACTIONAL_SUBJECT.test(subject)) {
     diagnostics.skippedPromotional++
     return null
   }

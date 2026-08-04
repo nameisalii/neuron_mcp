@@ -32,7 +32,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
 
-  if (!user?.workspace) redirect('/onboarding')
+  if (!user?.workspace) redirect('/setup')
 
   // Safety net: owner existed but WorkspaceMember row was never created (e.g. webhook missed)
   if (user?.workspace) {
@@ -49,48 +49,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     })
   }
 
-  if (!user.onboardingCompleted) redirect('/onboarding')
-
-  const workspaceId = user?.workspace?.id
-  const visibleKnowledge = workspaceId && userId
-    ? {
-        workspaceId,
-        OR: [
-          { visibility: 'team' },
-          { visibility: 'personal', visibilitySetBy: userId },
-        ],
-      }
-    : null
-  let categoryCounts: Array<{ category: string; _count: { _all: number } }> = []
-  if (workspaceId) {
-    try {
-      const visibleCategoryCounts = await prisma.knowledgeItem.groupBy({
-        by: ['category'],
-        where: visibleKnowledge!,
-        _count: { _all: true },
-      })
-      categoryCounts = visibleCategoryCounts
-    } catch (err) {
-      if (!(err instanceof Error) || !/Unknown argument `visibility`|Unknown argument `visibilitySetBy`/.test(err.message)) {
-        throw err
-      }
-      const fallbackCategoryCounts = await prisma.knowledgeItem.groupBy({
-        by: ['category'],
-        where: { workspaceId },
-        _count: { _all: true },
-      })
-      categoryCounts = fallbackCategoryCounts
-    }
-  }
-
-  const knowledgeCount = categoryCounts.reduce((total, row) => total + row._count._all, 0)
-  const decisionCount = categoryCounts.find((row) => row.category === 'decision')?._count._all ?? 0
-  const ideaCount = categoryCounts.find((row) => row.category === 'idea')?._count._all ?? 0
+  if (!user.onboardingCompleted) redirect('/setup')
 
   return (
     <DashboardShell
-      counts={{ brain: knowledgeCount, decisions: decisionCount, ideas: ideaCount }}
-      workspaceId={workspaceId ?? undefined}
+      workspaceId={user.workspace.id}
     >
       {children}
     </DashboardShell>

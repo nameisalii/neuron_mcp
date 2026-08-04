@@ -33,6 +33,10 @@ model Workspace {
   ideas           Idea[]
   clients         Client[]
   integrations    Integration[]
+  slackUserConnections SlackUserConnection[]
+  slackSelectedConversations SlackSelectedConversation[]
+  telegramAccountConnections TelegramAccountConnection[]
+  telegramSelectedChats TelegramSelectedChat[]
   notionPages     NotionPage[]
   emailThreads    EmailThread[]
   members         WorkspaceMember[]
@@ -60,7 +64,13 @@ model KnowledgeItem {
   workspaceId      String
   workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   content          String
+  title            String?
   summary          String?
+  status           String      @default("unverified")
+  tags             String[]    @default([])
+  archivedAt       DateTime?
+  statusUpdatedAt  DateTime?
+  statusUpdatedByUserId String?
   category         String
   aiSuggestedCategory String?
   source           String
@@ -96,9 +106,29 @@ model KnowledgeItem {
 
   @@unique([workspaceId, contentHash])
   @@index([workspaceId, category])
+  @@index([workspaceId, status])
   @@index([workspaceId, verified])
   @@index([workspaceId, notionPageId])
   @@index([workspaceId, source, sourceExternalId])
+}
+
+model CrawledPage {
+  id            String   @id @default(cuid())
+  url           String   @unique
+  normalizedUrl String   @unique
+  title         String?
+  content       String?
+  fetchedAt     DateTime
+  status        String
+  httpStatus    Int?
+  contentHash   String?
+  errorCode     String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([fetchedAt])
+  @@index([status])
 }
 
 enum TaskStatus {
@@ -272,6 +302,118 @@ model Integration {
   createdAt   DateTime  @default(now())
 
   @@unique([workspaceId, type])
+}
+
+model SlackUserConnection {
+  id                    String    @id @default(cuid())
+  workspaceId           String
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedByUserId     String
+  encryptedAccessToken  String
+  encryptedRefreshToken String?
+  teamId                String
+  teamName              String?
+  externalUserId        String
+  externalUserName      String?
+  scopes                String[]  @default([])
+  settings              Json
+  tokenExpiresAt        DateTime?
+  installedAt           DateTime  @default(now())
+  lastSyncAt            DateTime?
+  lastErrorCode         String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  selectedConversations SlackSelectedConversation[]
+
+  @@unique([workspaceId, connectedByUserId])
+  @@index([workspaceId])
+  @@index([connectedByUserId])
+  @@index([teamId])
+}
+
+model SlackSelectedConversation {
+  id                    String              @id @default(cuid())
+  workspaceId           String
+  workspace             Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId                String
+  slackUserConnectionId String
+  slackUserConnection   SlackUserConnection @relation(fields: [slackUserConnectionId], references: [id], onDelete: Cascade)
+  slackTeamId           String
+  conversationId        String
+  conversationName      String?
+  conversationType      String?
+  selected              Boolean             @default(false)
+  syncEnabled           Boolean             @default(false)
+  visibility            String              @default("personal")
+  lastSyncedAt          DateTime?
+  lastMessageAt         DateTime?
+  metadata              Json?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([slackUserConnectionId, conversationId])
+  @@index([workspaceId, userId])
+  @@index([slackUserConnectionId])
+  @@index([selected])
+  @@index([syncEnabled])
+  @@index([conversationType])
+}
+
+model TelegramAccountConnection {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId              String
+  phoneHash           String?
+  externalUserId      String?
+  externalUsername    String?
+  externalDisplayName String?
+  encryptedSession    String?
+  status              String    @default("pending_code")
+  lastSyncAt          DateTime?
+  lastError           String?
+  metadata            Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  selectedChats       TelegramSelectedChat[]
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId, userId])
+  @@index([status])
+}
+
+model TelegramSelectedChat {
+  id                          String                    @id @default(cuid())
+  workspaceId                 String
+  workspace                   Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId                      String
+  telegramAccountConnectionId String
+  telegramAccountConnection   TelegramAccountConnection @relation(fields: [telegramAccountConnectionId], references: [id], onDelete: Cascade)
+  chatId                      String
+  accessHash                  String?
+  title                       String?
+  username                    String?
+  chatType                    String?
+  selected                    Boolean                   @default(false)
+  syncEnabled                 Boolean                   @default(false)
+  visibility                  String                    @default("personal")
+  visibilitySetBy             String?
+  lastSyncedAt                DateTime?
+  lastMessageAt               DateTime?
+  oldestSyncedMessageId       String?
+  newestSyncedMessageId       String?
+  syncCursor                  Json?
+  status                      String                    @default("discovered")
+  metadata                    Json?
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+
+  @@unique([telegramAccountConnectionId, chatId])
+  @@index([workspaceId, userId])
+  @@index([selected])
+  @@index([syncEnabled])
+  @@index([chatType])
+  @@index([status])
 }
 
 model NotionPage {

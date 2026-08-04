@@ -53,7 +53,7 @@ export function renderDigestEmail(content: DigestContent, userName: string, type
   </td></tr>
   ${highlightsHtml ? `<tr><td style="padding:24px 0 8px;"><h2 style="margin:0 0 12px;font-size:15px;font-weight:600;color:#111827;">Highlights</h2>${highlightsHtml}</td></tr>` : ''}
   <tr><td style="padding:28px 0;">
-    <a href="${esc(appUrl + '/dashboard/digest')}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">View full digest &rarr;</a>
+    <a href="${esc(appUrl + '/dashboard')}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">Open dashboard &rarr;</a>
   </td></tr>
   <tr><td style="padding-top:20px;border-top:1px solid #f3f4f6;">
     <p style="margin:0;font-size:12px;color:#d1d5db;">You&rsquo;re receiving this because email digest is enabled in your Neuron preferences.</p>

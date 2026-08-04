@@ -9,7 +9,7 @@ export default async function TasksPage() {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
   const user = await prisma.user.findUnique({ where: { clerkId: userId }, select: { workspace: { select: { id: true } } } })
-  if (!user?.workspace) redirect('/onboarding')
+  if (!user?.workspace) redirect('/setup')
   const tasks = await prisma.task.findMany({ where: { workspaceId: user.workspace.id }, orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'desc' }] })
   return <TasksClient initialTasks={tasks.map((task) => ({ ...task, dueAt: task.dueAt?.toISOString() ?? null, completedAt: task.completedAt?.toISOString() ?? null, createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString() }))} />
 }

@@ -9,7 +9,6 @@ import { extractAndCreateSuggestedTaskFromKnowledgeItem } from '@/lib/tasks/serv
 jest.mock('@/lib/db', () => ({
   prisma: {
     integration: {
-      findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
     },
@@ -58,7 +57,7 @@ function request(body: unknown, suppliedSecret = secret) {
 beforeEach(() => {
   jest.clearAllMocks()
   process.env.TELEGRAM_WEBHOOK_SECRET = secret
-  ;(prisma.integration.findFirst as jest.Mock).mockResolvedValue(integration)
+  ;(prisma.integration.findMany as jest.Mock).mockResolvedValue([integration])
   ;(prisma.integration.update as jest.Mock).mockResolvedValue(integration)
   ;(prisma.knowledgeItem.findFirst as jest.Mock).mockResolvedValue(null)
   ;(prisma.knowledgeItem.create as jest.Mock).mockResolvedValue({ id: 'ki-1' })
@@ -89,7 +88,7 @@ afterEach(() => {
 it('rejects a wrong secret token', async () => {
   const response = await POST(request(textUpdate(), 'wrong-secret'))
   expect(response.status).toBe(401)
-  expect(prisma.integration.findFirst).not.toHaveBeenCalled()
+  expect(prisma.integration.findMany).not.toHaveBeenCalled()
 })
 
 it('accepts the correct secret token', async () => {
@@ -155,7 +154,11 @@ it.each([
     id: 'int-setup',
     workspaceId: 'ws-setup',
     channels: [],
-    metadata: { setupCode: 'abcdefghijklmnop' },
+    // Setup codes are single-use and expiring; an unexpired code is required to bind.
+    metadata: {
+      setupCode: 'abcdefghijklmnop',
+      setupCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    },
   }])
 
   const response = await POST(request(textUpdate({ text, chat: { id: -1009999, type, title: 'Test team' } })))
@@ -197,7 +200,7 @@ it('skips small talk with a safe reason', async () => {
   const body = await response.json()
 
   expect(body.skippedReasons).toEqual({ small_talk: 1 })
-  expect(prisma.integration.findFirst).not.toHaveBeenCalled()
+  expect(prisma.integration.findMany).not.toHaveBeenCalled()
   expect(prisma.knowledgeItem.create).not.toHaveBeenCalled()
 })
 
@@ -219,6 +222,22 @@ it('normalizes whitespace before creating knowledge', async () => {
   })
 })
 
+it('creates knowledge from a media caption', async () => {
+  await POST(request(textUpdate({
+    text: undefined,
+    caption: 'The signed customer proposal is ready',
+    document: { file_id: 'private-file-id' },
+  })))
+
+  expect(prisma.knowledgeItem.create).toHaveBeenCalledWith({
+    data: expect.objectContaining({
+      content: 'The signed customer proposal is ready',
+      source: 'telegram',
+    }),
+    select: { id: true },
+  })
+})
+
 it('skips a URL-only message', async () => {
   const response = await POST(request(textUpdate({ text: 'https://example.com/private-document' })))
   const body = await response.json()
@@ -228,13 +247,40 @@ it('skips a URL-only message', async () => {
 })
 
 it('keeps useful-message unbound chat behavior', async () => {
-  ;(prisma.integration.findFirst as jest.Mock).mockResolvedValue(null)
+  ;(prisma.integration.findMany as jest.Mock).mockResolvedValue([])
 
   const response = await POST(request(textUpdate({ text: 'Launch Friday' })))
   const body = await response.json()
 
   expect(body.skippedReasons).toEqual({ unbound_chat: 1 })
   expect(prisma.knowledgeItem.create).not.toHaveBeenCalled()
+})
+
+it('creates a separate knowledge item for every workspace that connected the same chat', async () => {
+  ;(prisma.integration.findMany as jest.Mock).mockResolvedValue([
+    { id: 'int-1', workspaceId: 'ws-1' },
+    { id: 'int-2', workspaceId: 'ws-2' },
+  ])
+
+  const response = await POST(request(textUpdate()))
+  const body = await response.json()
+
+  expect(body.messagesProcessed).toBe(2)
+  expect(prisma.knowledgeItem.create).toHaveBeenCalledTimes(2)
+  expect(prisma.knowledgeItem.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    data: expect.objectContaining({ workspaceId: 'ws-1' }),
+  }))
+  expect(prisma.knowledgeItem.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    data: expect.objectContaining({ workspaceId: 'ws-2' }),
+  }))
+  expect(prisma.integration.update).toHaveBeenCalledWith({
+    where: { id: 'int-1' },
+    data: { lastSyncAt: expect.any(Date) },
+  })
+  expect(prisma.integration.update).toHaveBeenCalledWith({
+    where: { id: 'int-2' },
+    data: { lastSyncAt: expect.any(Date) },
+  })
 })
 
 it('skips messages sent by bots', async () => {

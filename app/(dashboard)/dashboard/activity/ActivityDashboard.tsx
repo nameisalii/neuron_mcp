@@ -687,7 +687,7 @@ export default function ActivityDashboard({ members, currentUserId, analytics }:
   const canShowLess = visibleFeedCount > FEED_DEFAULT_VISIBLE && events.length > FEED_DEFAULT_VISIBLE
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-col gap-6 overflow-hidden">
+    <div className="flex min-h-0 w-full flex-col gap-6 overflow-hidden">
       <div>
         <h1 className="text-[32px] font-semibold tracking-tight text-ink-primary sm:text-[40px]">Activity</h1>
         <p className="mt-1 text-sm text-ink-secondary">Recent updates from your workspace.</p>

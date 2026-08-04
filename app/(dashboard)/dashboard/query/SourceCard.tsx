@@ -53,6 +53,15 @@ function formatDate(value: string | null) {
   }).format(date)
 }
 
+function sourceDomain(value: string | null): string | null {
+  if (!value) return null
+  try {
+    return new URL(value).hostname
+  } catch {
+    return null
+  }
+}
+
 export function getSourceTitle(source: SourceItem) {
   const primaryMetadataTitle = getMetadataValue(source, [
     'title',
@@ -75,6 +84,31 @@ export function getSourceTitle(source: SourceItem) {
 
 export function getSourceSubtitle(source: SourceItem) {
   if (source.source === 'five_eld' && source.sourceMetadata?.live === true) return 'Live Five ELD API'
+  if (source.source === 'linked_page') {
+    const metadata = source.sourceMetadata ?? {}
+    const linkedFrom = metadata.linkedFrom && typeof metadata.linkedFrom === 'object' && !Array.isArray(metadata.linkedFrom)
+      ? metadata.linkedFrom as Record<string, unknown>
+      : {}
+    const parentAccount = [
+      'channelName',
+      'channel',
+      'chatTitle',
+      'groupName',
+      'authorName',
+      'username',
+      'senderName',
+    ].map((key) => linkedFrom[key]).find((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+    const parentSource = typeof metadata.parentSource === 'string' ? titleCase(metadata.parentSource) : 'source'
+    const domain = sourceDomain(source.sourceUrl)
+    const fetchedAt = typeof metadata.fetchedAt === 'string' ? formatDate(metadata.fetchedAt) : null
+    return [
+      'Linked page',
+      domain,
+      `Linked from ${parentAccount ?? parentSource}`,
+      parentAccount ? parentSource : null,
+      fetchedAt ? `Fetched ${fetchedAt}` : null,
+    ].filter((part): part is string => Boolean(part)).join(' · ')
+  }
   const manualMetadata = source.sourceMetadata ?? {}
   if (manualMetadata.manual === true) {
     const creator = getMetadataValue(source, ['createdByName']) ?? source.owner
@@ -108,6 +142,26 @@ export function getSourceSubtitle(source: SourceItem) {
               : source.pageTitle ?? 'record'
     return ['Datatruck', summaryLabel].join(' · ')
   }
+  if (source.source === 'telegram') {
+    const mode = getMetadataValue(source, ['mode'])
+    const account = getMetadataValue(source, [
+      'channelName',
+      'chatTitle',
+      'channelUsername',
+      'chatUsername',
+      'groupName',
+      'username',
+    ]) || source.owner
+    const modeLabel = mode === 'telegram_public_channel_import'
+      ? 'Public Channel'
+      : mode === 'telegram_account_sync' || mode === 'account_sync'
+        ? 'Account Sync'
+        : 'Bot Mode'
+    const date = formatDate(source.sourceCreatedAt ?? source.updatedAt)
+    return ['Telegram', modeLabel, account, date]
+      .filter((part): part is string => Boolean(part && part !== 'undefined' && part !== 'null'))
+      .join(' · ')
+  }
   const account = getMetadataValue(source, [
     'channelName',
     'channel',
@@ -125,11 +179,17 @@ export function getSourceSubtitle(source: SourceItem) {
   ]) || source.owner
   const integration = titleCase(source.source)
   const date = formatDate(source.sourceCreatedAt ?? source.updatedAt)
-  return [account, integration, date].filter((part): part is string => Boolean(part && part !== 'undefined' && part !== 'null')).join(' · ')
+  const privacy = source.source === 'slack'
+    ? source.visibility === 'personal' ? 'Personal' : 'Team'
+    : null
+  const parts = source.source === 'slack'
+    ? [integration, account, date, privacy]
+    : [account, integration, date]
+  return parts.filter((part): part is string => Boolean(part && part !== 'undefined' && part !== 'null')).join(' · ')
 }
 
 export default function SourceCard({ source, i, variants }: Props) {
-  const sourceUrl = source.sourceUrl ?? (source.source === 'notion' && source.pageId ? `/dashboard/notion/${source.pageId}` : null)
+  const sourceUrl = source.sourceUrl ?? (source.source === 'notion' && source.pageId ? '/dashboard/knowledge' : null)
   const label = titleCase(source.labels[0] ?? source.source)
   const excerpt = source.content.trim()
 

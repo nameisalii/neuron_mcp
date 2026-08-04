@@ -8,9 +8,9 @@ const root = process.cwd()
 const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
 
 describe('onboarding routing', () => {
-  it('defines a real /onboarding page and completion API', () => {
+  it('keeps the legacy onboarding URL as a redirect to setup', () => {
     expect(fs.existsSync(path.join(root, 'app/onboarding/page.tsx'))).toBe(true)
-    expect(fs.existsSync(path.join(root, 'app/api/onboarding/route.ts'))).toBe(true)
+    expect(read('app/onboarding/page.tsx')).toContain("redirect('/setup')")
   })
 
   it('uses supported Clerk fallback redirects', () => {
@@ -19,8 +19,8 @@ describe('onboarding routing', () => {
 
     expect(signIn).toContain('fallbackRedirectUrl="/dashboard"')
     expect(signIn).toContain('forceRedirectUrl="/dashboard"')
-    expect(signUp).toContain('fallbackRedirectUrl="/onboarding"')
-    expect(signUp).toContain('forceRedirectUrl="/onboarding"')
+    expect(signUp).toContain('fallbackRedirectUrl="/setup"')
+    expect(signUp).toContain('forceRedirectUrl="/setup"')
     expect(`${signIn}${signUp}`).not.toMatch(/afterSignInUrl|afterSignUpUrl/)
   })
 

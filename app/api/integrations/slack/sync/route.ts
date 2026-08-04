@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { syncSlackMessagesDetailed } from '@/lib/slack/sync'
 import { extractKnowledgeDetailed, type ExtractionDiagnostics } from '@/lib/extraction/extractor'
+import { syncSlackUserConnection } from '@/lib/slack/userSync'
+import { SlackUserAccessError } from '@/lib/slack/userClient'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 
@@ -14,8 +16,9 @@ function extractionErrorCount(diagnostics: ExtractionDiagnostics) {
     + diagnostics.itemProcessingFailed
 }
 
-export async function POST() {
+export async function POST(req?: Request) {
   try {
+    const mode = new URL(req?.url ?? 'http://localhost/api/integrations/slack/sync').searchParams.get('mode') === 'user' ? 'user' : 'bot'
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -34,10 +37,6 @@ export async function POST() {
     if (!user?.workspace) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
-    if (!user.workspace.integrations.length) {
-      return NextResponse.json({ error: 'No Slack integration found' }, { status: 404 })
-    }
-
     const workspaceId = user.workspace.id
 
     const member = await prisma.workspaceMember.findUnique({
@@ -48,6 +47,37 @@ export async function POST() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    if (mode === 'user') {
+      const personal = await syncSlackUserConnection({ workspaceId, userId })
+      console.info('[slack/user-sync] summary', {
+        workspaceId,
+        userId,
+        conversationsDiscovered: personal.conversationsDiscovered,
+        conversationsScanned: personal.conversationsScanned,
+        messagesFetched: personal.messagesFetched,
+        knowledgeCreated: personal.knowledgeCreated,
+      })
+      return NextResponse.json({
+        success: true,
+        mode: 'user',
+        fetched: personal.messagesFetched,
+        processed: personal.messagesFetched,
+        knowledgeCreated: personal.knowledgeCreated,
+        knowledgeUpdated: 0,
+        conversationsDiscovered: personal.conversationsDiscovered,
+        conversationsScanned: personal.conversationsScanned,
+        skipped: personal.skippedConversations,
+        message: personal.messagesFetched === 0
+          ? personal.conversationsScanned === 0
+            ? 'Choose Slack conversations before syncing.'
+            : 'No recent messages were found in your selected conversations.'
+          : undefined,
+      })
+    }
+
+    if (!user.workspace.integrations.length) {
+      return NextResponse.json({ error: 'No Slack bot integration found' }, { status: 404 })
+    }
     const integration = user.workspace.integrations[0]
     const secondsSinceSync = integration.lastSyncAt
       ? Math.floor((Date.now() - integration.lastSyncAt.getTime()) / 1000)
@@ -129,7 +159,11 @@ export async function POST() {
           : undefined,
     })
   } catch (err) {
-    console.error('[slack/sync]', err)
+    const accessError = err instanceof SlackUserAccessError ? err : null
+    console.error('[slack/sync]', {
+      errorCode: accessError?.code ?? 'sync_failed',
+      requiresAdmin: accessError?.requiresAdmin ?? false,
+    })
     return NextResponse.json({
       success: false,
       fetched: 0,
@@ -138,7 +172,10 @@ export async function POST() {
       knowledgeUpdated: 0,
       skipped: 0,
       extracted: 0,
-      error: err instanceof Error ? `Sync failed — ${err.message}` : 'Sync failed',
-    }, { status: 500 })
+      error: accessError?.message ?? (err instanceof Error ? `Sync failed — ${err.message}` : 'Sync failed'),
+      errorCode: accessError?.code,
+      requiresAdminApproval: accessError?.requiresAdmin ?? false,
+      requiresReconnect: accessError?.requiresReconnect ?? false,
+    }, { status: accessError ? 403 : 500 })
   }
 }

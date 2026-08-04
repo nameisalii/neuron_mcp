@@ -106,7 +106,7 @@ export default function ConversationHistory({ onOpenConversation }: Props) {
   }
 
   return (
-    <section className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col gap-4 overflow-hidden">
+    <section className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-4 overflow-hidden">
       <div>
         <div className="flex items-start justify-between gap-3">
           <div>

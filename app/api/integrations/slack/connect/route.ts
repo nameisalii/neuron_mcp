@@ -2,29 +2,20 @@ import { auth } from '@clerk/nextjs/server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import crypto from 'node:crypto'
-import { getAppUrl } from '@/lib/app-url'
+import { buildSlackAuthorizeUrl, getSlackRedirectUri, parseSlackMode } from '@/lib/slack/oauth'
 
-const SLACK_SCOPES = [
-  'channels:history',
-  'channels:read',
-  'users:read',
-  'team:read',
-  'chat:write',
-  'commands',
-].join(',')
-
-export async function GET() {
+export async function GET(req: Request) {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
 
-  const appUrl = getAppUrl()
   const clientId = process.env.SLACK_CLIENT_ID
   if (!clientId) throw new Error('Missing SLACK_CLIENT_ID')
 
   const state = crypto.randomBytes(32).toString('hex')
+  const mode = parseSlackMode(new URL(req.url).searchParams.get('mode'))
 
   const cookieStore = await cookies()
-  cookieStore.set('slack_oauth_state', JSON.stringify({ state, userId }), {
+  cookieStore.set('slack_oauth_state', JSON.stringify({ state, userId, mode }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -32,12 +23,11 @@ export async function GET() {
     path: '/',
   })
 
-  const params = new URLSearchParams({
-    client_id: clientId,
-    scope: SLACK_SCOPES,
-    redirect_uri: `${appUrl}/api/integrations/slack/callback`,
+  redirect(buildSlackAuthorizeUrl({
+    clientId,
+    redirectUri: getSlackRedirectUri(),
     state,
-  })
-
-  redirect(`https://slack.com/oauth/v2/authorize?${params}`)
+    mode,
+    teamId: process.env.SLACK_ALLOWED_TEAM_ID,
+  }))
 }

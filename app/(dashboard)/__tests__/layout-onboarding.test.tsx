@@ -26,7 +26,6 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     user: { findUnique: jest.fn() },
     workspaceMember: { upsert: jest.fn() },
-    knowledgeItem: { groupBy: jest.fn() },
   },
 }))
 
@@ -45,7 +44,7 @@ describe('DashboardLayout onboarding guard', () => {
     await expect(DashboardLayout({ children: null })).rejects.toThrow('REDIRECT:/sign-in')
   })
 
-  it('provisions a brand-new Clerk user and redirects to onboarding without counting knowledge', async () => {
+  it('provisions a brand-new Clerk user and redirects to setup', async () => {
     ;(auth as unknown as jest.Mock).mockResolvedValue({ userId: 'clerk_1' })
     ;(currentUser as unknown as jest.Mock).mockResolvedValue({
       firstName: 'Alice',
@@ -62,10 +61,9 @@ describe('DashboardLayout onboarding guard', () => {
         workspace: { id: 'workspace_1' },
       })
 
-    await expect(DashboardLayout({ children: null })).rejects.toThrow('REDIRECT:/onboarding')
+    await expect(DashboardLayout({ children: null })).rejects.toThrow('REDIRECT:/setup')
 
     expect(provisionUser).toHaveBeenCalled()
     expect(prisma.workspaceMember.upsert).toHaveBeenCalled()
-    expect(prisma.knowledgeItem.groupBy).not.toHaveBeenCalled()
   })
 })

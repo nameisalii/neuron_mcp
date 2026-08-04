@@ -16,9 +16,11 @@ import WhatsAppIntegrationCard from './WhatsAppIntegrationCard'
 import DatatruckIntegrationCard from './DatatruckIntegrationCard'
 import TtEldIntegrationCard from './TtEldIntegrationCard'
 import UpcomingIntegrationCard from './UpcomingIntegrationCard'
+import SlackIntegrationCard from './SlackIntegrationCard'
 import { BrandTile } from '@/components/BrandLogo'
 import { StatusBadge, ResetLink, IntegrationViewLink, DisconnectIntegrationButton, integrationConnectClass } from './IntegrationCardUi'
 import { isIntegrationConnected } from '@/lib/integrations/connection'
+import { getNotionOAuthMismatchMessage } from '@/lib/notion/oauth'
 import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 import { getTelegramBotUsername, isTelegramConfigured } from '@/lib/telegram/config'
 
@@ -56,8 +58,6 @@ function IntegrationSection({ title, description, children }: { title: string; d
 }
 
 const statTileClass = 'bg-cream rounded-xl px-3.5 py-2.5 border border-warm/60'
-const notionOAuthAdminMessage =
-  'Notion OAuth client mismatch. Check NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, and redirect URI in Vercel/Notion.'
 const notionOAuthMismatchReasons = new Set([
   'invalid_client',
   'invalid_request',
@@ -91,6 +91,31 @@ async function loadTtEldConnector(workspaceId: string | undefined) {
   } catch { return null }
 }
 
+async function loadTelegramAccount(workspaceId: string | undefined, userId: string) {
+  if (!workspaceId) return null
+  // A long-running dev server can temporarily retain a Prisma Client generated
+  // before the additive Telegram models existed. Keep Integrations usable until
+  // that process is restarted; Account Sync remains unavailable in that state.
+  const delegate = (prisma as typeof prisma & {
+    telegramAccountConnection?: typeof prisma.telegramAccountConnection
+  }).telegramAccountConnection
+  if (!delegate) return null
+  try {
+    return await delegate.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: {
+        status: true,
+        externalDisplayName: true,
+        externalUsername: true,
+        lastSyncAt: true,
+        _count: { select: { selectedChats: { where: { selected: true, syncEnabled: true } } } },
+      },
+    })
+  } catch {
+    return null
+  }
+}
+
 export default async function IntegrationsPage(
   props: {
     searchParams: Promise<{ success?: string; error?: string; connected?: string; reason?: string }>
@@ -114,12 +139,30 @@ export default async function IntegrationsPage(
 
   const workspaceId = user?.workspace?.id
   const slack = user?.workspace?.integrations.find((i) => i.type === 'slack') ?? null
+  const slackUser = workspaceId ? await prisma.slackUserConnection.findUnique({
+    where: { workspaceId_connectedByUserId: { workspaceId, connectedByUserId: userId } },
+    select: {
+      teamName: true,
+      externalUserName: true,
+      lastSyncAt: true,
+      scopes: true,
+      settings: true,
+      _count: {
+        select: {
+          selectedConversations: {
+            where: { selected: true, syncEnabled: true },
+          },
+        },
+      },
+    },
+  }) : null
   const notion = user?.workspace?.integrations.find((i) => i.type === 'notion') ?? null
   const linear = user?.workspace?.integrations.find((i) => i.type === 'linear') ?? null
   const gmail = user?.workspace?.integrations.find((i) => i.type === 'gmail') ?? null
   const granola = user?.workspace?.integrations.find((i) => i.type === 'granola') ?? null
   const discord = user?.workspace?.integrations.find((i) => i.type === 'discord') ?? null
   const telegram = user?.workspace?.integrations.find((i) => i.type === 'telegram') ?? null
+  const telegramAccount = await loadTelegramAccount(workspaceId, userId)
   const teams = user?.workspace?.integrations.find((i) => i.type === 'teams') ?? null
   const jira = user?.workspace?.integrations.find((i) => i.type === 'jira') ?? null
   const whatsapp = user?.workspace?.integrations.find((i) => i.type === 'whatsapp') ?? null
@@ -192,13 +235,14 @@ export default async function IntegrationsPage(
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-3xl font-display font-semibold text-ink">Integrations</h1>
         <p className="text-sm text-muted mt-1">Connect the tools your team already uses. Neuron turns them into your company brain.</p>
       </div>
 
       {searchParams.success === 'slack' && <SuccessBanner>Slack connected successfully.</SuccessBanner>}
+      {searchParams.success === 'slack_user' && <SuccessBanner>Personal Slack Access connected. Choose the conversations Neuron should sync.</SuccessBanner>}
       {(searchParams.success === 'linear' || searchParams.connected === 'linear') && (
         <SuccessBanner>Linear connected successfully.</SuccessBanner>
       )}
@@ -212,15 +256,27 @@ export default async function IntegrationsPage(
       {searchParams.connected === 'whatsapp' && <SuccessBanner>WhatsApp Business connected. New inbound messages will import through the webhook.</SuccessBanner>}
       {searchParams.error && (
         <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
-          <p className="text-sm text-red-800">
+          <div className="text-sm text-red-800">
             {searchParams.error === 'slack_failed' && 'Slack connection failed. Please try again.'}
+            {searchParams.error === 'slack_admin_approval' && 'Your Slack workspace requires admin approval for Personal Slack Access. Admin request: Please approve the Neuron Slack app for channel history, private-channel history, and optional DM history scopes. Neuron only reads conversations the connecting user can access.'}
+            {searchParams.error === 'slack_distribution_required' && (
+              <span className="space-y-2">
+                <span className="block font-medium">This Slack app is not distributed yet. For local testing, authorize it in the same Slack workspace where the app was created. For other workspaces, enable Slack app distribution in the Slack API dashboard.</span>
+                <span className="block">Setup checklist:</span>
+                <ol className="list-decimal space-y-1 pl-5">
+                  <li>Open api.slack.com/apps and select the Neuron Slack app.</li>
+                  <li>Confirm the app was created in the workspace you are authorizing.</li>
+                  <li>Add both callback URLs: http://localhost:3000/api/integrations/slack/callback and https://app.tryneuron.net/api/integrations/slack/callback.</li>
+                  <li>For customer workspaces, enable Manage Distribution / Public Distribution.</li>
+                  <li>Reinstall or re-authorize the app.</li>
+                </ol>
+              </span>
+            )}
             {searchParams.error === 'linear_failed' && 'Linear connection failed. Please try again.'}
             {searchParams.error === 'gmail_failed' && 'Gmail connection failed. Please try again.'}
             {searchParams.error === 'notion_failed' && (
               searchParams.reason && notionOAuthMismatchReasons.has(searchParams.reason)
-                ? process.env.NODE_ENV === 'development'
-                  ? `${notionOAuthAdminMessage} For local development, update .env.local and restart the development server.`
-                  : notionOAuthAdminMessage
+                ? getNotionOAuthMismatchMessage()
                 : 'Notion connection failed. Please try again.'
             )}
             {searchParams.error === 'notion_not_configured' && (
@@ -253,85 +309,35 @@ export default async function IntegrationsPage(
             {searchParams.error === 'granola_failed' && 'Granola connection failed. Please try again.'}
             {searchParams.error === 'whatsapp_failed' && 'WhatsApp Business connection failed. Please try again.'}
             {searchParams.error === 'no_workspace' && 'No workspace found. Please contact support.'}
-          </p>
+          </div>
         </div>
       )}
 
-      <div className="flex justify-end">
-        <Link
-          href="/dashboard/email-preview"
-          className="px-3 py-1.5 rounded-[10px] border border-warm text-sm text-muted hover:bg-white hover:text-ink transition-colors"
-        >
-          Email Preview
-        </Link>
-      </div>
-
       <IntegrationSection title="General">
-        {/* Slack */}
-        <Card padding="md" className="flex h-full flex-col">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3.5 min-w-0">
-              <BrandTile brand="slack" className="h-12 w-12" />
-              <div className="min-w-0">
-                <h3 className="text-lg font-display font-semibold text-ink">Slack</h3>
-                <p className="text-xs text-muted mt-0.5 truncate">
-                  {slackConnected && slack ? `Connected to ${slack.teamName ?? 'your workspace'}` : 'Connect your Slack workspace'}
-                </p>
-              </div>
-            </div>
-            <StatusBadge connected={slackConnected} />
-          </div>
-
-          <div className="mt-5 flex-1 text-sm text-muted">
-            {slackConnected && slack ? (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className={statTileClass}>
-                    <p className="text-xs text-muted mb-0.5">Connected</p>
-                    <p className="font-medium text-ink">{slack.createdAt.toLocaleDateString()}</p>
-                  </div>
-                  <div className={statTileClass}>
-                    <p className="text-xs text-muted mb-0.5">Last synced</p>
-                    <p className="font-medium text-ink">
-                      {slack.lastSyncAt ? slack.lastSyncAt.toLocaleDateString() : 'Never'}
-                    </p>
-                  </div>
-                </div>
-                {slack.channels.length > 0 && (
-                  <div>
-                    <p className="text-xs text-muted mb-1.5">Monitored channels ({slack.channels.length})</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {slack.channels.map((ch) => (
-                        <span key={ch} className="px-2 py-0.5 rounded-md text-xs bg-accent-soft text-navy font-mono">
-                          #{ch}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p>
-                Neuron reads your Slack messages and extracts rules, decisions, processes, and ideas automatically.
-              </p>
-            )}
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-warm/60 pt-4">
-            {slackConnected ? (
-              <>
-                <div className="flex flex-wrap items-center gap-3">
-                  <IntegrationViewLink href="/dashboard/integrations/slack" />
-                  <SyncButton endpoint="/api/integrations/slack/sync" resultLabel="messages" hideReset />
-                  <DisconnectIntegrationButton type="slack" />
-                </div>
-                <ResetLink resetType="slack" />
-              </>
-            ) : (
-              <a href="/api/integrations/slack/connect" className={integrationConnectClass}>Connect</a>
-            )}
-          </div>
-        </Card>
+        <SlackIntegrationCard
+          botConnection={slackConnected && slack ? {
+            teamName: slack.teamName,
+            createdAt: slack.createdAt.toISOString(),
+            lastSyncAt: slack.lastSyncAt?.toISOString() ?? null,
+            channels: slack.channels,
+          } : null}
+          userConnection={slackUser ? {
+            teamName: slackUser.teamName,
+            externalUserName: slackUser.externalUserName,
+            lastSyncAt: slackUser.lastSyncAt?.toISOString() ?? null,
+            scopes: slackUser.scopes,
+            selectedCount: slackUser._count.selectedConversations,
+            settings: {
+              publicChannels: !(slackUser.settings && typeof slackUser.settings === 'object' && !Array.isArray(slackUser.settings) && (slackUser.settings as Record<string, unknown>).publicChannels === false),
+              privateChannels: Boolean(slackUser.settings && typeof slackUser.settings === 'object' && !Array.isArray(slackUser.settings) && (slackUser.settings as Record<string, unknown>).privateChannels === true),
+              groupDms: Boolean(slackUser.settings && typeof slackUser.settings === 'object' && !Array.isArray(slackUser.settings) && (slackUser.settings as Record<string, unknown>).groupDms === true),
+              dms: Boolean(slackUser.settings && typeof slackUser.settings === 'object' && !Array.isArray(slackUser.settings) && (slackUser.settings as Record<string, unknown>).dms === true),
+              excludedConversationNames: slackUser.settings && typeof slackUser.settings === 'object' && !Array.isArray(slackUser.settings) && Array.isArray((slackUser.settings as Record<string, unknown>).excludedConversationNames)
+                ? ((slackUser.settings as Record<string, unknown>).excludedConversationNames as unknown[]).filter((item): item is string => typeof item === 'string')
+                : [],
+            },
+          } : null}
+        />
 
         {/* Linear */}
         <Card padding="md" className="flex h-full flex-col">
@@ -423,6 +429,13 @@ export default async function IntegrationsPage(
           botUsername={getTelegramBotUsername()}
           createdAt={telegram?.createdAt.toISOString() ?? null}
           lastSyncAt={telegram?.lastSyncAt?.toISOString() ?? null}
+          publicImportEnabled={process.env.TELEGRAM_PUBLIC_IMPORT_ENABLED === 'true'}
+          accountSyncEnabled={process.env.TELEGRAM_ACCOUNT_SYNC_ENABLED === 'true'}
+          accountStatus={telegramAccount?.status ?? null}
+          accountDisplayName={telegramAccount?.externalDisplayName ?? null}
+          accountUsername={telegramAccount?.externalUsername ?? null}
+          accountSelectedCount={telegramAccount?._count.selectedChats ?? 0}
+          accountLastSyncAt={telegramAccount?.lastSyncAt?.toISOString() ?? null}
         />
 
         {upcomingIntegrationTestingEnabled ? <TeamsIntegrationCard

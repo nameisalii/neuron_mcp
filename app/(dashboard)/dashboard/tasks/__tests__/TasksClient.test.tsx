@@ -171,3 +171,66 @@ test('reminder action stores a selected reminder without changing the schema', a
     headers: { 'content-type': 'application/json' },
   })))
 })
+
+// --- Suggested-tasks layout: order, preview limit, See more / Hide ---
+
+const manySuggested: any[] = [
+  { ...base, id: 'active-x', title: 'Write launch plan', status: 'active' },
+  ...Array.from({ length: 7 }, (_, index) => ({
+    ...base,
+    id: `sug-${index}`,
+    title: `Suggested task ${index}`,
+    status: 'suggested',
+    sourceType: 'telegram',
+    sourceTitle: 'Dispatch',
+  })),
+]
+
+test('active tasks render before suggested tasks', () => {
+  const { container } = render(<TasksClient initialTasks={manySuggested}/>)
+  const html = container.innerHTML
+  expect(html.indexOf('Write launch plan')).toBeLessThan(html.indexOf('Suggested tasks'))
+})
+
+test('suggested tasks show only 4 by default', () => {
+  render(<TasksClient initialTasks={manySuggested}/>)
+  const section = screen.getByTestId('suggested-tasks-section')
+  expect(within(section).getByText('Suggested task 0')).toBeInTheDocument()
+  expect(within(section).getByText('Suggested task 3')).toBeInTheDocument()
+  expect(within(section).queryByText('Suggested task 4')).not.toBeInTheDocument()
+})
+
+test('See more appears when suggested count exceeds 4 and reveals the rest', () => {
+  render(<TasksClient initialTasks={manySuggested}/>)
+  const section = screen.getByTestId('suggested-tasks-section')
+  fireEvent.click(within(section).getByRole('button', { name: /see more/i }))
+  expect(within(section).getByText('Suggested task 6')).toBeInTheDocument()
+})
+
+test('Hide appears when expanded and collapses back to 4', () => {
+  render(<TasksClient initialTasks={manySuggested}/>)
+  const section = screen.getByTestId('suggested-tasks-section')
+  fireEvent.click(within(section).getByRole('button', { name: /see more/i }))
+  fireEvent.click(within(section).getByRole('button', { name: /^hide$/i }))
+  expect(within(section).queryByText('Suggested task 4')).not.toBeInTheDocument()
+  expect(within(section).getByText('Suggested task 3')).toBeInTheDocument()
+})
+
+test('no See more button when 4 or fewer suggested tasks', () => {
+  const few = [manySuggested[0], ...manySuggested.slice(1, 4)]
+  render(<TasksClient initialTasks={few}/>)
+  const section = screen.getByTestId('suggested-tasks-section')
+  expect(within(section).queryByRole('button', { name: /see more/i })).not.toBeInTheDocument()
+})
+
+test('empty suggested section shows the waiting copy', () => {
+  render(<TasksClient initialTasks={[manySuggested[0]]}/>)
+  expect(screen.getByText('No suggested tasks waiting.')).toBeInTheDocument()
+})
+
+test('suggested count and subtext render', () => {
+  render(<TasksClient initialTasks={manySuggested}/>)
+  const section = screen.getByTestId('suggested-tasks-section')
+  expect(within(section).getByText('7 waiting for review')).toBeInTheDocument()
+  expect(within(section).getByText(/Review tasks Neuron found from your connected tools/i)).toBeInTheDocument()
+})

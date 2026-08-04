@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import QueryResults from '../QueryResults'
 import type { SourceItem } from '../SourceCard'
+import { getSourceSubtitle } from '../SourceCard'
 
 function source(index: number, overrides: Partial<SourceItem> = {}): SourceItem {
   return {
@@ -32,6 +33,32 @@ it('renders the answer without duplicated inner Neuron branding before collapsed
   expect(answer.querySelector('img[src="/neuron-assistant-logo.png"]')).toBeNull()
   expect(answer.querySelector('h2')).toBeNull()
   expect(container.textContent).not.toContain('Neuron')
+})
+
+it('shows Slack conversation, date, and personal visibility in source attribution', () => {
+  const slackSource = {
+    ...source(1),
+    source: 'slack',
+    visibility: 'personal',
+    sourceCreatedAt: '2026-07-30T12:00:00.000Z',
+    sourceMetadata: { channelName: '#eng', connectionMode: 'user' },
+  } as SourceItem
+
+  expect(getSourceSubtitle(slackSource)).toMatch(/^Slack · #eng · .+ · Personal$/)
+})
+
+it.each([
+  ['telegram_bot', 'Telegram · Bot Mode · #dispatch'],
+  ['telegram_public_channel_import', 'Telegram · Public Channel · public_news'],
+  ['telegram_account_sync', 'Telegram · Account Sync · Private updates'],
+])('distinguishes Telegram source mode %s', (mode, expected) => {
+  expect(getSourceSubtitle({
+    ...source(1),
+    source: 'telegram',
+    sourceMetadata: mode === 'telegram_public_channel_import'
+      ? { mode, channelUsername: 'public_news' }
+      : { mode, chatTitle: mode === 'telegram_bot' ? '#dispatch' : 'Private updates' },
+  } as SourceItem)).toContain(expected)
 })
 
 it('shows lightweight confidence and conflict guidance', () => {
@@ -79,7 +106,7 @@ it('shows source account metadata in the subtitle without empty placeholders', (
     />,
   )
   fireEvent.click(screen.getByRole('button', { name: 'From integrations (1)' }))
-  expect(screen.getByText(/@dispatch_updates · Telegram ·/)).toBeInTheDocument()
+  expect(screen.getByText(/Telegram · Bot Mode · @dispatch_updates ·/)).toBeInTheDocument()
   expect(screen.queryByText(/undefined|null/)).not.toBeInTheDocument()
 })
 
@@ -151,4 +178,34 @@ it('uses content previews instead of generic source titles', () => {
   fireEvent.click(screen.getByRole('button', { name: 'From integrations (1)' }))
   expect(screen.getAllByText('Load 2543 ETA moved to 3:30 PM after the dispatcher update.')).toHaveLength(2)
   expect(screen.queryByRole('heading', { name: 'fact' })).not.toBeInTheDocument()
+})
+
+it('shows honest linked-page attribution and parent source context', () => {
+  render(
+    <QueryResults
+      answer="The architecture is approved."
+      sources={[source(1, {
+        pageTitle: 'Product specification',
+        source: 'linked_page',
+        sourceUrl: 'https://example.com/spec',
+        content: 'The architecture is approved.',
+        labels: ['reference'],
+        sourceMetadata: {
+          parentSource: 'slack',
+          parentSourceExternalId: 'message-1',
+          linkedFrom: { channelName: '#eng-decisions' },
+          fetchedAt: '2026-07-28T12:00:00.000Z',
+        },
+      })]}
+      complete
+      copied={false}
+      onCopy={jest.fn()}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'From integrations (1)' }))
+  expect(screen.getByText('Product specification')).toBeInTheDocument()
+  expect(screen.getByText(/Linked page · example.com/)).toBeInTheDocument()
+  expect(screen.getByText(/Linked from #eng-decisions · Slack/)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Open source' })).toHaveAttribute('href', 'https://example.com/spec')
 })

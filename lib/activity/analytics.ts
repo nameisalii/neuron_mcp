@@ -317,9 +317,7 @@ function detectIntegrationStatus(
 
 function buildKnowledgeHref(item: KnowledgeItemRow): string | null {
   if (item.sourceUrl) return item.sourceUrl
-  if (item.source === 'notion' && item.sourceExternalId) {
-    return `/dashboard/notion/${encodeURIComponent(item.sourceExternalId)}`
-  }
+  if (item.source === 'notion' && item.sourceExternalId) return '/dashboard/knowledge'
   return `/dashboard/integrations/${encodeURIComponent(item.source)}`
 }
 
@@ -628,7 +626,7 @@ export async function getBrainActivityAnalytics(
       description: 'Review unverified knowledge before relying on it in answers.',
       tone: 'warn',
       actionLabel: 'Review knowledge',
-      actionHref: '/dashboard/brain',
+      actionHref: '/dashboard/knowledge',
     })
   }
   if (conflictCount > 0) {
@@ -637,7 +635,7 @@ export async function getBrainActivityAnalytics(
       description: 'Conflicts need review before they spread through the brain.',
       tone: 'danger',
       actionLabel: 'View conflicts',
-      actionHref: '/dashboard/alerts',
+      actionHref: '/dashboard/knowledge',
     })
   }
   const disconnectedIntegrations = integrations.filter((integration) => {

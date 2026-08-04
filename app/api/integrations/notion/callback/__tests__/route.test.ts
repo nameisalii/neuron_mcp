@@ -30,6 +30,8 @@ beforeEach(() => {
   errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
   process.env.NOTION_CLIENT_ID = 'client'
   process.env.NOTION_CLIENT_SECRET = 'secret'
+  delete process.env.NOTION_REDIRECT_URI
+  process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000'
   ;(auth as unknown as jest.Mock).mockResolvedValue({ userId: 'user-a' })
   getCookie.mockReturnValue({
     value: JSON.stringify({ stateToken: 'state-1', userId: 'user-a', workspaceId: 'workspace-a' }),
@@ -117,6 +119,8 @@ it('rejects a user who is not an active member of the state workspace', async ()
 })
 
 it('surfaces an invalid Notion OAuth client configuration', async () => {
+  const previousNodeEnv = process.env.NODE_ENV
+  ;(process.env as Record<string, string | undefined>).NODE_ENV = 'development'
   global.fetch = jest.fn().mockResolvedValue({
     ok: false,
     status: 401,
@@ -138,4 +142,27 @@ it('surfaces an invalid Notion OAuth client configuration', async () => {
       clientIdPrefix: 'client',
     }),
   )
+  expect(errorSpy).toHaveBeenCalledWith(
+    '[notion/callback] Token exchange failed',
+    expect.objectContaining({
+      errorCode: 'invalid_client',
+      status: 401,
+      redirectUri: 'http://localhost:3000/api/integrations/notion/callback',
+      clientIdPresent: true,
+      clientSecretPresent: true,
+    }),
+  )
+  expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('code-1')
+  expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('secret')
+  ;(process.env as Record<string, string | undefined>).NODE_ENV = previousNodeEnv
+})
+
+it('uses the same explicit redirect URI during token exchange as the connect route', async () => {
+  process.env.NOTION_REDIRECT_URI = 'https://app.tryneuron.net/api/integrations/notion/callback'
+
+  await GET(makeRequest())
+
+  const [, options] = (global.fetch as jest.Mock).mock.calls[0]
+  expect(JSON.parse(String((options as RequestInit).body)).redirect_uri)
+    .toBe(process.env.NOTION_REDIRECT_URI)
 })

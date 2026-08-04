@@ -41,6 +41,8 @@ export async function POST() {
 
   return NextResponse.json({
     success: true,
+    deliveryMode: 'webhook',
+    webhookHealthy: webhook.configured && !webhook.hasRecentError,
     fetched: 0,
     processed: 0,
     knowledgeCreated: 0,

@@ -62,6 +62,10 @@ interface SyncResult {
   error?: string
   pagesDeleted?: number
   chunksDeleted?: number
+  deliveryMode?: 'webhook'
+  webhookHealthy?: boolean
+  requiresAdminApproval?: boolean
+  requiresReconnect?: boolean
 }
 
 interface SyncButtonProps {
@@ -73,9 +77,10 @@ interface SyncButtonProps {
   syncEnabled?: boolean
   hideReset?: boolean
   onNeedsReconfigure?: () => void
+  label?: string
 }
 
-export default function SyncButton({ endpoint, showReset = false, resetType, resultLabel = 'items', requestBody, syncEnabled = true, hideReset = false, onNeedsReconfigure }: SyncButtonProps) {
+export default function SyncButton({ endpoint, showReset = false, resetType, resultLabel = 'items', requestBody, syncEnabled = true, hideReset = false, onNeedsReconfigure, label = 'Sync Now' }: SyncButtonProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -164,12 +169,19 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
       || (syncResult.databaseErrors ?? 0) > 0
 
     if (hasErrors) return 'Sync completed with some skipped items.'
+    if (syncResult.deliveryMode === 'webhook') {
+      return syncResult.webhookHealthy
+        ? 'Connection healthy. New messages import automatically.'
+        : 'Connection needs setup.'
+    }
     if (created > 0 || updated > 0) return 'Sync complete.'
     if (fetched === 0) return 'No new items found.'
     return 'Sync complete.'
   }
 
   function normalizedErrorMessage(syncResult: SyncResult | null) {
+    if (syncResult?.requiresAdminApproval) return 'Your workspace requires admin approval.'
+    if (syncResult?.requiresReconnect) return 'Reconnect this integration.'
     const raw = syncResult?.error ?? syncResult?.message ?? ''
     if (/setup|configure|configured|credential|connect|auth|token|scope|permission|consent/i.test(raw)) {
       return 'Connection needs setup.'
@@ -205,7 +217,7 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
           title={!syncEnabled ? 'Finish setup before syncing' : undefined}
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Syncing…' : 'Sync Now'}
+          {loading ? 'Syncing…' : label}
         </button>
         {showReset && resetType && !hideReset && (
           <button

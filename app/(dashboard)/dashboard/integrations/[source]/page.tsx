@@ -23,7 +23,7 @@ export default async function IntegrationSourcePage({
     where: { clerkId: userId },
     select: { workspace: { select: { id: true } } },
   })
-  if (!user?.workspace) redirect('/onboarding')
+  if (!user?.workspace) redirect('/setup')
 
   const filter = parseIntegrationFilter((await searchParams).filter)
   const data = await loadIntegrationOverview(user.workspace.id, userId, source as IntegrationSource, filter)

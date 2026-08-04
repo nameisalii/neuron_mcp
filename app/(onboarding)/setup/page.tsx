@@ -88,8 +88,17 @@ export default function SetupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question }),
       })
-      const data = await res.json()
-      setAnswer(data.answer ?? '')
+      const body = await res.text()
+      if (!res.ok) {
+        const error = JSON.parse(body) as { error?: string }
+        throw new Error(error.error ?? 'Could not query the brain.')
+      }
+      const events = body
+        .split('\n\n')
+        .filter((block) => block.startsWith('data: '))
+        .map((block) => JSON.parse(block.slice(6)) as { type?: string; answer?: string })
+      const completed = events.findLast((event) => event.type === 'done')
+      setAnswer(completed?.answer ?? 'No answer was returned.')
     } catch {
       setAnswer('Could not reach the brain right now.')
     } finally {
@@ -98,8 +107,8 @@ export default function SetupPage() {
   }
 
   async function finish() {
-    await fetch('/api/onboarding', { method: 'POST' })
-    router.push('/dashboard/overview')
+    await fetch('/api/user/onboarding-complete', { method: 'PATCH' })
+    router.push('/dashboard')
   }
 
   return (

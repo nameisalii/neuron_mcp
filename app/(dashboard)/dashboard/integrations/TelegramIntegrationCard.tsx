@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, Copy, Loader2, Settings } from 'lucide-react'
+import { CheckCircle, Copy, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { BrandTile } from '@/components/BrandLogo'
 import SyncButton from './SyncButton'
+import TelegramAccountPanel from '@/components/integrations/TelegramAccountPanel'
 import {
-  IntegrationViewLink,
   ResetLink,
   DisconnectIntegrationButton,
   integrationActionClass,
@@ -20,6 +20,13 @@ interface TelegramIntegrationCardProps {
   botUsername: string
   createdAt?: string | null
   lastSyncAt?: string | null
+  publicImportEnabled?: boolean
+  accountSyncEnabled?: boolean
+  accountStatus?: string | null
+  accountDisplayName?: string | null
+  accountUsername?: string | null
+  accountSelectedCount?: number
+  accountLastSyncAt?: string | null
 }
 
 interface SetupData {
@@ -38,6 +45,13 @@ export default function TelegramIntegrationCard({
   botUsername,
   createdAt,
   lastSyncAt,
+  publicImportEnabled = false,
+  accountSyncEnabled = false,
+  accountStatus = null,
+  accountDisplayName = null,
+  accountUsername = null,
+  accountSelectedCount = 0,
+  accountLastSyncAt = null,
 }: TelegramIntegrationCardProps) {
   const router = useRouter()
   const [showSetup, setShowSetup] = useState(false)
@@ -45,6 +59,9 @@ export default function TelegramIntegrationCard({
   const [setup, setSetup] = useState<SetupData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [publicUrl, setPublicUrl] = useState('')
+  const [publicMessage, setPublicMessage] = useState<string | null>(null)
+  const [publicBusy, setPublicBusy] = useState<'preview' | 'import' | null>(null)
 
   async function openSetup() {
     setShowSetup(true)
@@ -69,6 +86,25 @@ export default function TelegramIntegrationCard({
     window.setTimeout(() => setCopied(null), 1500)
   }
 
+  async function publicChannelAction(action: 'preview' | 'import') {
+    setPublicBusy(action)
+    setPublicMessage(null)
+    const response = await fetch(`/api/integrations/telegram/public-channel/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: publicUrl, visibility: 'team' }),
+    }).catch(() => null)
+    const data = response ? await response.json().catch(() => ({})) : {}
+    setPublicBusy(null)
+    if (!response?.ok) return setPublicMessage(data.error ?? 'Public channel request failed.')
+    setPublicMessage(action === 'preview'
+      ? `Found ${data.recentPosts?.length ?? 0} recent public posts in @${data.username}.`
+      : `Imported ${data.created ?? 0} recent posts from @${data.username}.`)
+  }
+
+  const accountConnected = accountStatus === 'connected'
+  const anyConnected = connected || accountConnected
+
   return (
     <Card padding="md" className="flex h-full flex-col">
       <div className="flex items-start justify-between gap-3">
@@ -77,52 +113,80 @@ export default function TelegramIntegrationCard({
           <div className="min-w-0">
             <h3 className="text-lg font-display font-semibold text-ink">Telegram</h3>
             <p className="mt-0.5 truncate text-xs text-muted">
-              {connected
-                ? 'Telegram is connected. Neuron will capture new useful messages from connected groups/channels.'
-                : 'Telegram is not connected yet. Add the Neuron bot to a Telegram group or channel, then send the connection command there.'}
+              {accountConnected
+                ? 'Telegram Account Sync is connected. Neuron only reads chats you select.'
+                : connected
+                  ? 'Telegram Bot Mode is connected and captures future messages from configured chats.'
+                  : 'Connect your Telegram account to choose chats, or use Bot Mode as a fallback.'}
             </p>
           </div>
         </div>
         <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${
-          connected ? 'bg-[#E6F2EC] text-positive' : 'bg-cream text-muted'
+          anyConnected ? 'bg-[#E6F2EC] text-positive' : 'bg-cream text-muted'
         }`}>
-          {connected ? <CheckCircle className="h-3.5 w-3.5" /> : null}
-          {connected ? 'Connected' : 'Not configured'}
+          {anyConnected ? <CheckCircle className="h-3.5 w-3.5" /> : null}
+          {anyConnected ? 'Connected' : 'Not configured'}
         </span>
       </div>
 
-      <div className="mt-5 flex-1 text-sm text-muted">
-        {connected ? (
-          <div className="grid grid-cols-2 gap-3">
-            <div className={statTileClass}>
-              <p className="mb-0.5 text-xs text-muted">Connected</p>
-              <p className="font-medium text-ink">{createdAt ? new Date(createdAt).toLocaleDateString() : '—'}</p>
-            </div>
-            <div className={statTileClass}>
-              <p className="mb-0.5 text-xs text-muted">Last message</p>
-              <p className="font-medium text-ink">{lastSyncAt ? new Date(lastSyncAt).toLocaleDateString() : 'Waiting'}</p>
-            </div>
-          </div>
-        ) : (
-          <p>
-            Telegram is not connected yet. Add the Neuron bot to a Telegram group or channel, then send the connection command there.
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <TelegramAccountPanel
+          enabled={accountSyncEnabled}
+          initialStatus={accountStatus}
+          displayName={accountDisplayName}
+          username={accountUsername}
+          initialSelectedCount={accountSelectedCount}
+          initialLastSyncAt={accountLastSyncAt}
+        />
+        <section className="flex flex-col rounded-xl border border-warm/70 bg-cream p-4">
+          <h4 className="font-semibold text-ink">Telegram Bot Mode</h4>
+          <p className="mt-1 text-sm text-muted">Add @{botUsername} to groups/channels. Neuron will discover them and sync new messages after you choose them.</p>
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Telegram Bot API cannot read chats where the bot has not been added. To sync private groups/channels through Bot Mode, add the bot first.
           </p>
-        )}
-        <p className="mt-3 text-xs text-muted">
-          Neuron only captures new messages after setup. Old Telegram history cannot be imported through the official bot API.
-        </p>
+          <p className="mt-2 text-xs text-muted">
+            Old Telegram history cannot be imported through the official bot API. Bot Mode captures future messages after setup.
+          </p>
+          <div className="mt-3 flex-1 text-sm text-muted">
+            {connected ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className={statTileClass}>
+                  <p className="mb-0.5 text-xs text-muted">Connected</p>
+                  <p className="font-medium text-ink">{createdAt ? new Date(createdAt).toLocaleDateString() : '—'}</p>
+                </div>
+                <div className={statTileClass}>
+                  <p className="mb-0.5 text-xs text-muted">Last message</p>
+                  <p className="font-medium text-ink">{lastSyncAt ? new Date(lastSyncAt).toLocaleDateString() : 'Waiting'}</p>
+                </div>
+              </div>
+            ) : <p>Telegram is not connected yet.</p>}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-warm/60 pt-3">
+            <button type="button" onClick={() => void openSetup()} className={integrationActionClass}>View setup</button>
+            <a href="/dashboard/integrations/telegram" className={integrationActionClass}>Manage discovered chats</a>
+            <SyncButton endpoint="/api/integrations/telegram/sync" resultLabel="messages" hideReset label="Sync selected" />
+          </div>
+        </section>
+
+        {publicImportEnabled ? <section className="flex flex-col rounded-xl border border-sky-100 bg-sky-50/50 p-4 lg:col-span-2">
+          <h4 className="font-semibold text-ink">Public channel import</h4>
+          <p className="mt-1 text-sm text-muted">Paste a public Telegram channel link. Neuron can import public posts without adding the bot.</p>
+          <label className="mt-4 block text-xs font-medium text-ink">
+            Public channel link
+            <input value={publicUrl} onChange={(event) => setPublicUrl(event.target.value)} placeholder="https://t.me/channelname" className="mt-1 w-full rounded-lg border border-warm bg-white px-3 py-2 text-sm" />
+          </label>
+          <div className="mt-auto flex flex-wrap gap-2 pt-4">
+            <button type="button" disabled={!publicImportEnabled || !publicUrl.trim() || Boolean(publicBusy)} onClick={() => void publicChannelAction('preview')} className={integrationActionClass}>Preview channel</button>
+            <button type="button" disabled={!publicImportEnabled || !publicUrl.trim() || Boolean(publicBusy)} onClick={() => void publicChannelAction('import')} className={integrationConnectClass}>Import recent posts</button>
+          </div>
+          {publicMessage ? <p aria-live="polite" className="mt-2 text-xs text-muted">{publicMessage}</p> : null}
+        </section> : null}
       </div>
 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-warm/60 pt-4">
         {connected ? (
           <>
             <div className="flex flex-wrap items-center gap-3">
-              <IntegrationViewLink href="/dashboard/integrations/telegram" />
-              <SyncButton endpoint="/api/integrations/telegram/sync" resultLabel="messages" hideReset />
-              <button type="button" onClick={() => void openSetup()} className={integrationActionClass}>
-                <Settings className="h-3.5 w-3.5" />
-                Setup
-              </button>
               <DisconnectIntegrationButton type="telegram" />
             </div>
             <ResetLink resetType="telegram" />

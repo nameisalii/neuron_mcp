@@ -224,7 +224,7 @@ export default function UpgradeModal({ isOpen, onClose, onUpgradeComplete }: Upg
                   I&apos;ll share later
                 </button>
                 <button
-                  onClick={() => { handleClose(); window.location.href = '/dashboard/settings/team' }}
+                  onClick={() => { handleClose(); window.location.href = '/dashboard/settings/capture' }}
                   className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-colors"
                 >
                   Invite teammates

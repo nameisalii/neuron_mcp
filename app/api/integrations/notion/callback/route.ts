@@ -21,8 +21,11 @@ const NOTION_OAUTH_ERROR_CODES = new Set([
 ])
 
 class NotionTokenExchangeError extends Error {
-  constructor(readonly reason: string, message: string) {
-    super(message)
+  constructor(
+    readonly reason: string,
+    readonly status: number,
+  ) {
+    super('Notion token exchange rejected')
   }
 }
 
@@ -116,13 +119,21 @@ export async function GET(req: NextRequest) {
       })
       throw new NotionTokenExchangeError(
         reason,
-        `Notion token exchange failed: ${response.status} ${errorText}`.trim(),
+        response.status,
       )
     }
     tokenData = await response.json()
     if (!tokenData.access_token) throw new Error('Notion token response missing access_token')
   } catch (err) {
-    console.error('[notion/callback] Token exchange failed', err)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[notion/callback] Token exchange failed', {
+        errorCode: err instanceof NotionTokenExchangeError ? err.reason : 'token_exchange',
+        status: err instanceof NotionTokenExchangeError ? err.status : undefined,
+        redirectUri: getNotionRedirectUri(),
+        clientIdPresent: Boolean(process.env.NOTION_CLIENT_ID?.trim()),
+        clientSecretPresent: Boolean(process.env.NOTION_CLIENT_SECRET?.trim()),
+      })
+    }
     return redirectToIntegrations({
       error: 'notion_failed',
       reason: err instanceof NotionTokenExchangeError ? err.reason : 'token_exchange',
