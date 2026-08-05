@@ -36,6 +36,10 @@ interface GmailIntegrationCardProps {
   connected?: boolean
   autoOpenSetup?: boolean
   oauthBlocked?: boolean
+  available?: boolean
+  missingEnv?: string[]
+  betaGated?: boolean
+  betaUser?: boolean
 }
 
 const statTileClass = 'rounded-xl border border-warm/60 bg-cream px-3.5 py-2.5'
@@ -47,6 +51,10 @@ export default function GmailIntegrationCard({
   connected: connectedProp,
   autoOpenSetup = false,
   oauthBlocked = false,
+  available = true,
+  missingEnv = [],
+  betaGated = false,
+  betaUser = false,
 }: GmailIntegrationCardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
@@ -75,18 +83,24 @@ export default function GmailIntegrationCard({
             <BrandTile brand="gmail" className="h-12 w-12" />
             <div className="min-w-0">
               <h3 className="text-lg font-display font-semibold text-ink">Gmail</h3>
-              <p className="mt-0.5 text-xs text-muted">Sync selected emails into your private Neuron memory.</p>
+              <p className="mt-0.5 text-xs text-muted">Connect Gmail so Neuron can search and summarize your email context.</p>
             </div>
           </div>
-          <StatusBadge connected={connected} />
+          {connected ? <StatusBadge connected /> : (
+            <span className={`inline-flex shrink-0 rounded-full px-3 py-1 text-sm font-medium ${available ? 'bg-[#E6F2EC] text-positive' : 'bg-amber-50 text-amber-800'}`}>
+              {available ? (betaGated ? 'Beta access' : 'Available') : (betaGated ? 'Beta' : 'Setup needed')}
+            </span>
+          )}
         </div>
 
         {/* Body: metadata / messaging (grows so actions pin to the bottom) */}
         <div className="mt-5 flex-1 space-y-3 text-sm text-muted">
           {!connected && (
-            <><p>Neuron reads selected Gmail labels and turns important emails into private, searchable memory.</p><p className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${oauthBlocked ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{oauthBlocked ? 'Error' : 'Ready for test users · Verification needed for public users'}</p></>
+            <p>Neuron uses Gmail read-only access. It cannot send, modify, archive, label, or delete emails.</p>
           )}
-          {oauthBlocked && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"><p className="font-medium">Google blocked Gmail connection because this OAuth app is not verified for Gmail restricted scopes yet.</p><p className="mt-1">Basic Google Sign-In is separate and continues to work.</p></div>}
+          {!connected && betaGated && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"><p className="font-medium">Gmail is available to approved beta users while Google restricted-scope verification is finishing.</p>{!betaUser && <p className="mt-1">Your account is not currently on the approved beta list.</p>}</div>}
+          {!connected && !betaGated && !available && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"><p className="font-medium">Gmail setup is incomplete.</p><p className="mt-1">Missing configuration: {missingEnv.join(', ') || 'Gmail is disabled'}</p></div>}
+          {oauthBlocked && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"><p className="font-medium">Gmail connection failed. Check the safe error above and try again.</p><button type="button" onClick={() => setIsOpen(true)} className="mt-2 underline underline-offset-2">View setup help</button></div>}
           {connected && !configured && (
             <p>Choose labels before syncing. Gmail stays personal by default.</p>
           )}
@@ -123,6 +137,7 @@ export default function GmailIntegrationCard({
                     resultLabel="threads"
                     hideReset
                     onNeedsReconfigure={() => setIsOpen(true)}
+                    label="Sync Gmail"
                   />
                 )}
                 <button type="button" onClick={() => setIsOpen(true)} className={integrationActionClass}>
@@ -134,7 +149,7 @@ export default function GmailIntegrationCard({
               <ResetLink resetType="gmail" />
             </>
           ) : (
-            <button type="button" onClick={() => setIsOpen(true)} className={integrationConnectClass}>Connect</button>
+            <button type="button" onClick={() => setIsOpen(true)} className={integrationConnectClass} disabled={!available}>Connect Gmail</button>
           )}
         </div>
       </Card>

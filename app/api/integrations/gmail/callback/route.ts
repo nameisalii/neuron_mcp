@@ -3,11 +3,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
-import { DEFAULT_GMAIL_LABEL_NAMES, DEFAULT_GMAIL_LABELS } from '@/lib/gmail/config'
+import { getGmailDefaultLabels, getGmailLookbackDays, getGmailMaxThreadsPerRun } from '@/lib/gmail/config'
 import { trackEvent } from '@/lib/activity'
-import { getGmailClientId, getGmailClientSecret, getGmailRedirectUri, getGmailAppUrl } from '@/lib/gmail/config'
+import { getGmailClientId, getGmailClientSecret, getGmailRedirectUri, getGmailAppUrl, GMAIL_SCOPES, safeGoogleOAuthDebug } from '@/lib/gmail/config'
+import { GMAIL_OAUTH_FAILURE_REASONS } from '@/lib/gmail/oauth'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
+
+/**
+ * Map Google's OAuth `error` field onto a stable reason the integrations page can explain.
+ * Anything unrecognized collapses to a generic reason so we never surface raw provider text.
+ */
+function toGmailFailureReason(googleError: string | null | undefined, fallback: string): string {
+  const normalized = googleError?.trim()
+  if (!normalized) return fallback
+  if (normalized === 'admin_policy_enforced' || normalized === 'org_internal') return 'org_internal'
+  return GMAIL_OAUTH_FAILURE_REASONS.has(normalized) ? normalized : fallback
+}
 
 function gmailRedirect(params: Record<string, string>): NextResponse {
   const url = new URL('/dashboard/integrations', getGmailAppUrl())
@@ -30,7 +42,11 @@ export async function GET(req: NextRequest) {
   if (!returnedState || returnedState !== savedState) {
     return gmailRedirect({ error: 'gmail_failed', reason: 'invalid_state' })
   }
-  if (oauthError) return gmailRedirect({ error: 'gmail_failed', reason: oauthError === 'access_denied' ? 'access_denied' : 'oauth_error' })
+  if (oauthError) {
+    const reason = toGmailFailureReason(oauthError, 'oauth_error')
+    safeGoogleOAuthDebug({ flow: 'gmail', clientId: process.env.GMAIL_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID, redirectUri: getGmailRedirectUri(), scopes: GMAIL_SCOPES })
+    return gmailRedirect({ error: 'gmail_failed', reason })
+  }
   if (!code) return gmailRedirect({ error: 'gmail_failed', reason: 'missing_code' })
 
   const embeddedUserId = savedState.split('.')[1]
@@ -47,7 +63,7 @@ export async function GET(req: NextRequest) {
     return gmailRedirect({ error: 'gmail_failed', reason: 'misconfigured' })
   }
 
-  let tokenData: { access_token?: string; refresh_token?: string } | null = null
+  let tokenData: { access_token?: string; refresh_token?: string; scope?: string } | null = null
   try {
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -61,15 +77,30 @@ export async function GET(req: NextRequest) {
       }),
     })
     if (!tokenRes.ok) {
-      return gmailRedirect({ error: 'gmail_failed', reason: `token_exchange_${tokenRes.status}` })
+      // Google returns { error, error_description }. Keep the code so the UI can be specific
+      // about redirect/client/scope problems; never read or log the token payload itself.
+      let googleError: string | null = null
+      try {
+        const body = await tokenRes.json() as { error?: string }
+        googleError = body?.error ?? null
+      } catch {
+        googleError = null
+      }
+      const reason = toGmailFailureReason(googleError, 'token_exchange_failed')
+      safeGoogleOAuthDebug({ flow: 'gmail', clientId, redirectUri: getGmailRedirectUri(), scopes: GMAIL_SCOPES })
+      return gmailRedirect({ error: 'gmail_failed', reason })
     }
-    tokenData = await tokenRes.json() as { access_token?: string; refresh_token?: string }
+    tokenData = await tokenRes.json() as { access_token?: string; refresh_token?: string; scope?: string }
   } catch {
     return gmailRedirect({ error: 'gmail_failed', reason: 'token_exchange_failed' })
   }
 
   if (!tokenData?.refresh_token) {
     return gmailRedirect({ error: 'gmail_failed', reason: 'missing_refresh_token' })
+  }
+  const grantedScopes = new Set((tokenData.scope ?? '').split(/\s+/).filter(Boolean))
+  if (!grantedScopes.has(GMAIL_SCOPES[0])) {
+    return gmailRedirect({ error: 'gmail_failed', reason: 'insufficient_scope' })
   }
 
   const user = await prisma.user.findUnique({
@@ -88,17 +119,18 @@ export async function GET(req: NextRequest) {
   }
 
   const encryptedRefreshToken = encrypt(tokenData.refresh_token)
+  const defaultLabels = getGmailDefaultLabels()
   const metadata = {
     status: 'connected',
     configured: false,
     privacy: 'personal',
-    selectedLabels: [...DEFAULT_GMAIL_LABELS],
-    selectedLabelNames: [...DEFAULT_GMAIL_LABEL_NAMES],
-    timeWindow: 30,
+    selectedLabels: defaultLabels,
+    selectedLabelNames: defaultLabels.map((label) => label.charAt(0) + label.slice(1).toLowerCase()),
+    timeWindow: getGmailLookbackDays(),
     syncFrom: null,
     senderFilter: [],
     excludeFilter: [],
-    maxMessages: 200,
+    maxMessages: getGmailMaxThreadsPerRun(),
   }
 
   try {

@@ -2,11 +2,33 @@ import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { randomBytes } from 'crypto'
-import { getGmailRedirectUri, getGmailClientId, getGmailScopes, GMAIL_SCOPES, safeGoogleOAuthDebug } from '@/lib/gmail/config'
+import { prisma } from '@/lib/db'
+import { getGmailRedirectUri, getGmailClientId, getGmailScopes, GMAIL_SCOPES, safeGoogleOAuthDebug, getGmailAppUrl } from '@/lib/gmail/config'
+import { isGmailConnectAllowed, isGmailIntegrationEnabled } from '@/lib/gmail/access'
+
+function gmailRedirect(params: Record<string, string>): NextResponse {
+  const url = new URL('/dashboard/integrations', getGmailAppUrl())
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
+  return NextResponse.redirect(url)
+}
 
 export async function GET() {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (!isGmailIntegrationEnabled()) {
+    return gmailRedirect({ error: 'gmail_failed', reason: 'integration_disabled' })
+  }
+
+  // Public mode permits every signed-in user. While restricted-scope verification is
+  // pending, only the explicit Gmail test-user allowlist may start OAuth.
+  const account = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    select: { email: true },
+  })
+  if (!isGmailConnectAllowed(account?.email)) {
+    return gmailRedirect({ error: 'gmail_failed', reason: 'verification_pending' })
+  }
 
   let clientId: string
   try {

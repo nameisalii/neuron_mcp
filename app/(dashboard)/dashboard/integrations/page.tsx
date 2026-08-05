@@ -21,6 +21,8 @@ import { BrandTile } from '@/components/BrandLogo'
 import { StatusBadge, ResetLink, IntegrationViewLink, DisconnectIntegrationButton, integrationConnectClass } from './IntegrationCardUi'
 import { isIntegrationConnected } from '@/lib/integrations/connection'
 import { getNotionOAuthMismatchMessage } from '@/lib/notion/oauth'
+import { getGmailOAuthFailureMessage } from '@/lib/gmail/oauth'
+import { isGmailIntegrationEnabled, isGmailPublicEnabled, isGmailTestUser } from '@/lib/gmail/access'
 import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 import { getTelegramBotUsername, isTelegramConfigured } from '@/lib/telegram/config'
 
@@ -201,6 +203,16 @@ export default async function IntegrationsPage(
   const datatruckConnectionMode = datatruck?.authType === 'full_account' ? 'full_account' as const : 'open_api' as const
   const datatruckFullAccountEnabled = process.env.DATATRUCK_FULL_ACCOUNT_CONNECTOR_ENABLED === 'true'
   const upcomingIntegrationTestingEnabled = process.env.ENABLE_UPCOMING_INTEGRATION_TESTING === 'true'
+  const gmailIntegrationEnabled = isGmailIntegrationEnabled()
+  const gmailPublicEnabled = isGmailPublicEnabled()
+  const gmailBetaUser = isGmailTestUser(user?.email)
+  const gmailClientConfigured = Boolean(process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID)
+  const gmailSecretConfigured = Boolean(process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET)
+  const gmailMissingEnv = [
+    !gmailIntegrationEnabled ? 'GMAIL_INTEGRATION_ENABLED=true' : null,
+    !gmailClientConfigured ? 'GMAIL_CLIENT_ID' : null,
+    !gmailSecretConfigured ? 'GMAIL_CLIENT_SECRET' : null,
+  ].filter((value): value is string => Boolean(value))
   const ttEldMetadata = ttEld?.metadata && typeof ttEld.metadata === 'object' && !Array.isArray(ttEld.metadata) ? ttEld.metadata as Record<string, unknown> : {}
   const ttEldCounts = ttEldMetadata.counts && typeof ttEldMetadata.counts === 'object' && !Array.isArray(ttEldMetadata.counts) ? ttEldMetadata.counts as Record<string, number> : {}
   // Legacy connector statuses (e.g. needs_endpoint_mapping) fall back to the connect flow.
@@ -273,7 +285,7 @@ export default async function IntegrationsPage(
               </span>
             )}
             {searchParams.error === 'linear_failed' && 'Linear connection failed. Please try again.'}
-            {searchParams.error === 'gmail_failed' && 'Gmail connection failed. Please try again.'}
+            {searchParams.error === 'gmail_failed' && getGmailOAuthFailureMessage(searchParams.reason)}
             {searchParams.error === 'notion_failed' && (
               searchParams.reason && notionOAuthMismatchReasons.has(searchParams.reason)
                 ? getNotionOAuthMismatchMessage()
@@ -391,14 +403,18 @@ export default async function IntegrationsPage(
           </div>
         </Card>
 
-        {upcomingIntegrationTestingEnabled ? <GmailIntegrationCard
+        <GmailIntegrationCard
           createdAt={gmail?.createdAt.toISOString() ?? null}
           lastSyncAt={gmail?.lastSyncAt?.toISOString() ?? null}
           metadata={gmail?.metadata as GmailMetadata | null}
           connected={gmailConnected}
+          available={gmailIntegrationEnabled && (gmailPublicEnabled || gmailBetaUser) && gmailMissingEnv.length === 0}
+          betaGated={!gmailPublicEnabled}
+          betaUser={gmailBetaUser}
+          missingEnv={gmailMissingEnv}
           autoOpenSetup={searchParams.connected === 'gmail' || searchParams.error === 'gmail_failed'}
-          oauthBlocked={searchParams.error === 'gmail_failed' && ['access_denied', 'missing_code', 'oauth_error'].includes(searchParams.reason ?? '')}
-        /> : null}
+          oauthBlocked={searchParams.error === 'gmail_failed' && ['missing_code', 'oauth_error', 'redirect_uri_mismatch', 'invalid_client', 'invalid_scope', 'insufficient_scope', 'org_internal'].includes(searchParams.reason ?? '')}
+        />
 
         <NotionIntegrationCard
           connected={notionConnected}
@@ -478,20 +494,6 @@ export default async function IntegrationsPage(
         <p className="text-sm text-muted">These integrations are being prepared for public release. Some require third-party verification or admin approval before we can enable them for all workspaces.</p>
         {!upcomingIntegrationTestingEnabled ? (
           <>
-            <UpcomingIntegrationCard
-              brand="gmail"
-              name="Gmail"
-              status="Verification pending"
-              description="Gmail integration is waiting for Google restricted-scope verification. Gmail will let teams search and summarize Gmail threads inside Neuron once approved."
-              buttonLabel="View status"
-              modalTitle="Gmail is coming soon"
-              modalCopy="Gmail requires Google restricted-scope verification before users can connect smoothly. We are keeping Gmail in beta/test-user mode while verification is in progress."
-              requirements={[
-                { label: 'Required scope', value: 'gmail.readonly' },
-                { label: 'Status', value: 'Google verification pending' },
-                { label: 'Access', value: 'Approved test users only' },
-              ]}
-            />
             <UpcomingIntegrationCard
               brand="teams"
               name="Microsoft Teams"

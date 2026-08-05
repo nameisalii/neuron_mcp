@@ -45,7 +45,7 @@ beforeEach(() => {
   mockIntegrationUpsert.mockResolvedValue({} as never)
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({ access_token: 'access-token', refresh_token: 'refresh-token' }),
+    json: async () => ({ access_token: 'access-token', refresh_token: 'refresh-token', scope: 'https://www.googleapis.com/auth/gmail.readonly' }),
   }) as never
 })
 
@@ -73,7 +73,96 @@ it('rejects missing refresh tokens', async () => {
   expect(res.headers.get('location')).toContain('reason=missing_refresh_token')
 })
 
+it('rejects a token response that did not grant gmail.readonly', async () => {
+  ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ refresh_token: 'refresh-token', scope: 'openid email' }),
+  })
+  const res = await GET(makeRequest({ code: 'code', state: 'state.user-1' }))
+  expect(res.headers.get('location')).toContain('reason=insufficient_scope')
+  expect(mockIntegrationUpsert).not.toHaveBeenCalled()
+})
+
 it('rejects invalid state cookies', async () => {
   const res = await GET(makeRequest({ code: 'code', state: 'wrong' }))
   expect(res.headers.get('location')).toContain('reason=invalid_state')
+})
+
+describe('actionable OAuth failures', () => {
+  it.each([
+    ['redirect_uri_mismatch'],
+    ['invalid_client'],
+    ['invalid_grant'],
+    ['invalid_scope'],
+  ])('surfaces %s from the token exchange instead of a generic failure', async (googleError) => {
+    // Arrange — Google rejects the token exchange with a specific error code
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: googleError, error_description: 'ignored' }),
+    })
+
+    // Act
+    const res = await GET(makeRequest({ code: 'code', state: 'state.user-1' }))
+
+    // Assert
+    const location = res.headers.get('location')!
+    expect(location).toContain('error=gmail_failed')
+    expect(location).toContain(`reason=${googleError}`)
+  })
+
+  it('maps a Workspace admin block to org_internal', async () => {
+    const res = await GET(makeRequest({ state: 'state.user-1', error: 'admin_policy_enforced' }))
+    expect(res.headers.get('location')).toContain('reason=org_internal')
+  })
+
+  it('handles the user cancelling consent', async () => {
+    const res = await GET(makeRequest({ state: 'state.user-1', error: 'access_denied' }))
+    expect(res.headers.get('location')).toContain('reason=access_denied')
+  })
+
+  it('collapses an unrecognized provider error to a generic reason', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'something_new_from_google' }),
+    })
+    const res = await GET(makeRequest({ code: 'code', state: 'state.user-1' }))
+    const location = res.headers.get('location')!
+    expect(location).toContain('reason=token_exchange_failed')
+    expect(location).not.toContain('something_new_from_google')
+  })
+
+  it('still fails cleanly when the error body is not JSON', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      json: async () => { throw new Error('not json') },
+    })
+    const res = await GET(makeRequest({ code: 'code', state: 'state.user-1' }))
+    expect(res.headers.get('location')).toContain('reason=token_exchange_failed')
+  })
+
+  it('never leaks the authorization code, tokens, or the client secret', async () => {
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    process.env.GOOGLE_OAUTH_DEBUG_SAFE = 'true'
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'redirect_uri_mismatch' }),
+    })
+
+    const res = await GET(makeRequest({ code: 'super-secret-code', state: 'state.user-1' }))
+
+    const logged = [...infoSpy.mock.calls, ...errorSpy.mock.calls].map((call) => JSON.stringify(call)).join(' ')
+    expect(logged).not.toContain('super-secret-code')
+    expect(logged).not.toContain('google-secret')
+    expect(logged).not.toContain('refresh-token')
+    expect(res.headers.get('location')).not.toContain('super-secret-code')
+
+    delete process.env.GOOGLE_OAUTH_DEBUG_SAFE
+    infoSpy.mockRestore()
+    errorSpy.mockRestore()
+  })
 })

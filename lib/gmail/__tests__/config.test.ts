@@ -22,6 +22,35 @@ describe('Gmail OAuth configuration', () => {
     expect(config.getGmailRedirectUri()).toBe('http://localhost:3000/api/integrations/gmail/callback')
   })
 
+  it('falls back to NEXT_PUBLIC_APP_URL when no redirect override is set', async () => {
+    // Arrange — GMAIL_REDIRECT_URI intentionally absent
+    delete process.env.GMAIL_REDIRECT_URI
+
+    // Act
+    const config = await import('../config')
+
+    // Assert
+    expect(config.getGmailRedirectUri()).toBe('http://localhost:3000/api/integrations/gmail/callback')
+  })
+
+  it('derives the production callback from the production app URL', async () => {
+    delete process.env.GMAIL_REDIRECT_URI
+    process.env.NEXT_PUBLIC_APP_URL = 'https://app.tryneuron.net'
+
+    const config = await import('../config')
+
+    expect(config.getGmailRedirectUri()).toBe('https://app.tryneuron.net/api/integrations/gmail/callback')
+  })
+
+  it('gives the connect and callback routes the identical redirect URI', async () => {
+    delete process.env.GMAIL_REDIRECT_URI
+    const config = await import('../config')
+    const oauth = await import('../oauth')
+
+    // Both routes resolve the redirect through the same helper, so drift is impossible.
+    expect(oauth.getGmailRedirectUri()).toBe(config.getGmailRedirectUri())
+  })
+
   it('safe debug output excludes secrets, tokens, and the full client ID', async () => {
     process.env.GOOGLE_OAUTH_DEBUG_SAFE = 'true'
     const info = jest.spyOn(console, 'info').mockImplementation(() => undefined)

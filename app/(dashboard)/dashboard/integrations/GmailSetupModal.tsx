@@ -210,13 +210,13 @@ export default function GmailSetupModal({
             {step === 0 && (
               <div className="space-y-4">
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                  <h4 className="font-semibold">Gmail requires Google data-access verification</h4>
-                  <p className="mt-1">Google Sign-In and Gmail access are separate. Sign-In only verifies your identity. Gmail uses restricted Google scopes, so public Gmail access requires Google OAuth data-access verification. During testing, only approved test users should connect.</p>
+                  <h4 className="font-semibold">Gmail read-only access</h4>
+                  <p className="mt-1">Google Sign-In and Gmail access are separate. Gmail is limited to approved beta users while Google finishes restricted-scope verification.</p>
                   <p className="mt-2"><strong>Testing setup:</strong> Add your email in Google Cloud → <strong>Google Auth Platform → Audience → Test users</strong>.</p>
                   <p className="mt-2"><strong>Required Data Access scope:</strong> <code className="break-all">https://www.googleapis.com/auth/gmail.readonly</code></p>
-                  <p className="mt-2 text-xs">Unverified apps are limited and may show warnings until verification is complete.</p>
+                  <p className="mt-2 text-xs">Neuron cannot send, modify, archive, label, or delete emails.</p>
                 </div>
-                {oauthBlocked && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">Google blocked Gmail connection because this OAuth app is not verified for Gmail restricted scopes yet.</p>}
+                {oauthBlocked && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">Google could not complete the Gmail connection. Review the error on the integrations page and try again.</p>}
                 <p className="text-sm text-gray-600">
                   Neuron reads selected Gmail labels and turns important emails into private, searchable memory.
                 </p>

@@ -5,21 +5,39 @@ jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: jest.fn() }) 
 
 describe('GmailIntegrationCard', () => {
   it('shows the connect state when Gmail is not configured', () => {
-    render(<GmailIntegrationCard metadata={null} />)
-    expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument()
-    expect(screen.getByText('Not connected')).toBeInTheDocument()
+    render(<GmailIntegrationCard metadata={null} available />)
+    expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeInTheDocument()
+    expect(screen.getByText('Available')).toBeInTheDocument()
     expect(screen.queryByText('Sync Now')).not.toBeInTheDocument()
     expect(screen.queryByText('Nuclear Reset')).not.toBeInTheDocument()
-    expect(screen.getByText(/Ready for test users/)).toBeInTheDocument()
+    expect(screen.queryByText(/Upcoming|Verification pending|Ready for test users/i)).not.toBeInTheDocument()
   })
 
   it('shows Gmail verification help only on the Gmail integration', () => {
     render(<GmailIntegrationCard metadata={null} oauthBlocked />)
-    expect(screen.getByText(/Google blocked Gmail connection/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
-    expect(screen.getByText('Gmail requires Google data-access verification')).toBeInTheDocument()
-    expect(screen.getByText(/Google Auth Platform → Audience → Test users/)).toBeInTheDocument()
+    expect(screen.getByText(/Gmail connection failed/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect Gmail' }))
+    expect(screen.getByText('Gmail read-only access')).toBeInTheDocument()
     expect(screen.getByText('https://www.googleapis.com/auth/gmail.readonly')).toBeInTheDocument()
+  })
+
+  it('shows only missing environment variable names when setup is incomplete', () => {
+    render(<GmailIntegrationCard metadata={null} available={false} missingEnv={['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET']} />)
+    expect(screen.getByText(/GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeDisabled()
+  })
+
+  it('explains beta gating and keeps an allowlisted beta user enabled', () => {
+    render(<GmailIntegrationCard metadata={null} available betaGated betaUser />)
+    expect(screen.getByText(/available to approved beta users while Google restricted-scope verification is finishing/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeEnabled()
+    expect(screen.getByText('Beta access')).toBeInTheDocument()
+  })
+
+  it('blocks a non-beta user and explains why', () => {
+    render(<GmailIntegrationCard metadata={null} available={false} betaGated />)
+    expect(screen.getByText(/not currently on the approved beta list/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeDisabled()
   })
 
   it('shows sync controls when Gmail is configured', () => {
@@ -42,7 +60,7 @@ describe('GmailIntegrationCard', () => {
 
     expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/gmail')
     expect(screen.getByRole('button', { name: 'Configure' })).toBeInTheDocument()
-    expect(screen.getByText('Sync Now')).toBeInTheDocument()
+    expect(screen.getByText('Sync Gmail')).toBeInTheDocument()
     expect(screen.getByText('Nuclear Reset')).toBeInTheDocument()
     expect(screen.getByText('Connected')).toBeInTheDocument()
   })
@@ -76,7 +94,7 @@ describe('GmailIntegrationCard', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('Sync Now'))
+    fireEvent.click(screen.getByText('Sync Gmail'))
     fireEvent.click(await screen.findByText('Change Gmail filters'))
 
     await waitFor(() => {

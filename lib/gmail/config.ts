@@ -5,6 +5,24 @@ export const DEFAULT_GMAIL_LABEL_NAMES = ['Inbox', 'Sent'] as const
 export const GOOGLE_SIGNIN_IDENTITY_SCOPES = ['openid', 'email', 'profile'] as const
 export const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'] as const
 
+function positiveInt(key: string, fallback: number, max: number): number {
+  const parsed = Number.parseInt(process.env[key] ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, max) : fallback
+}
+
+export function getGmailDefaultLabels(): string[] {
+  const configured = process.env.GMAIL_SYNC_LABELS?.split(',').map((value) => value.trim().toUpperCase()).filter(Boolean)
+  return configured?.length ? configured : [...DEFAULT_GMAIL_LABELS]
+}
+
+export function getGmailLookbackDays(): number {
+  return positiveInt('GMAIL_LOOKBACK_DAYS', 30, 3650)
+}
+
+export function getGmailMaxThreadsPerRun(): number {
+  return positiveInt('GMAIL_MAX_THREADS_PER_RUN', 100, 500)
+}
+
 export function getGmailAppUrl(): string {
   return getAppUrl()
 }
