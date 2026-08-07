@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db'
 import { generateEmbedding, openai } from '@/lib/openai'
 import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { trackValidationEvent } from '@/lib/activity'
-import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/persistence'
+import { createOrAppendConversation, loadRecentConversationMessages, storeAssistantMessage } from '@/lib/chat/persistence'
 import { searchDocumentAttachments } from '@/lib/documents/search'
 import { validateApiKey } from '@/lib/api-auth'
 
@@ -22,6 +22,8 @@ jest.mock('@/lib/db', () => ({
     emailThread: { findMany: jest.fn() },
     queryLog: { create: jest.fn() },
     activityEvent: { count: jest.fn(), findFirst: jest.fn() },
+    task: { findMany: jest.fn() },
+    decision: { findMany: jest.fn() },
   },
 }))
 jest.mock('@/lib/openai', () => ({
@@ -32,6 +34,7 @@ jest.mock('@/lib/pinecone', () => ({ searchSimilar: jest.fn(), searchInNamespace
 jest.mock('@/lib/activity', () => ({ trackValidationEvent: jest.fn() }))
 jest.mock('@/lib/chat/persistence', () => ({
   createOrAppendConversation: jest.fn(),
+  loadRecentConversationMessages: jest.fn(),
   storeAssistantMessage: jest.fn(),
 }))
 jest.mock('@/lib/documents/search', () => ({ searchDocumentAttachments: jest.fn() }))
@@ -51,6 +54,7 @@ const mockChat = jest.mocked(openai.chat.completions.create)
 const mockTrackEvent = jest.mocked(trackValidationEvent)
 const mockEmailThreadFindMany = jest.mocked(prisma.emailThread.findMany)
 const mockCreateOrAppendConversation = jest.mocked(createOrAppendConversation)
+const mockLoadRecentConversationMessages = jest.mocked(loadRecentConversationMessages)
 const mockStoreAssistantMessage = jest.mocked(storeAssistantMessage)
 const mockSearchDocumentAttachments = jest.mocked(searchDocumentAttachments)
 const mockValidateApiKey = jest.mocked(validateApiKey)
@@ -114,6 +118,9 @@ beforeEach(() => {
   jest.mocked(prisma.activityEvent.count).mockResolvedValue(1)
   jest.mocked(prisma.activityEvent.findFirst).mockResolvedValue({ id: 'existing-completion' } as never)
   mockCreateOrAppendConversation.mockResolvedValue({ conversationId: 'conversation-1', relatedLoadId: null })
+  mockLoadRecentConversationMessages.mockResolvedValue([])
+  jest.mocked(prisma.task.findMany).mockResolvedValue([])
+  jest.mocked(prisma.decision.findMany).mockResolvedValue([])
   mockStoreAssistantMessage.mockResolvedValue(undefined)
   mockSearchDocumentAttachments.mockResolvedValue([])
   mockChat.mockResolvedValue(mockStream('Refunds over $500 require manager approval.') as never)
@@ -528,6 +535,51 @@ describe('POST /api/query', () => {
       conversationId: 'conversation-1',
       answer: "I don't have verified information about this yet.",
     }))
+  })
+
+  it('uses conversation context and both HRT aliases for retrieval', async () => {
+    mockLoadRecentConversationMessages.mockResolvedValue([
+      { role: 'user', content: 'How many interviews do I have?' },
+      { role: 'assistant', content: 'I found recruiting activity, but the exact count is uncertain.' },
+    ])
+    mockSearch.mockResolvedValue([])
+    mockPersonalSearch.mockResolvedValue([])
+    mockChunkFindMany.mockResolvedValue([] as never)
+    mockKnowledgeFindMany.mockResolvedValue([] as never)
+
+    const events = await readSSE(await POST(makeRequest({ question: 'What about HRT?', conversationId: 'conversation-1' })))
+
+    expect(mockEmbed).toHaveBeenCalledWith(expect.stringMatching(/HRT or Hudson River Trading/i))
+    expect(mockKnowledgeFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          { content: { contains: 'HRT', mode: 'insensitive' } },
+          { content: { contains: 'Hudson River Trading', mode: 'insensitive' } },
+        ]),
+      }),
+    }))
+    expect(events.find((event) => event.type === 'done')?.answer).toMatch(/exact interview count or status/i)
+    expect(events.find((event) => event.type === 'sources')).not.toHaveProperty('interpretation')
+  })
+
+  it('includes matching Task source cards in interview results', async () => {
+    mockLoadRecentConversationMessages.mockResolvedValue([{ role: 'user', content: 'How many interviews do I have?' }])
+    mockSearch.mockResolvedValue([])
+    mockPersonalSearch.mockResolvedValue([])
+    mockChunkFindMany.mockResolvedValue([] as never)
+    mockKnowledgeFindMany.mockResolvedValue([] as never)
+    jest.mocked(prisma.task.findMany).mockResolvedValue([{
+      id: 'task-hrt', workspaceId: WORKSPACE_ID, title: 'Complete HRT OA', description: 'Finish the Hudson River Trading assessment',
+      status: 'active', priority: 'high', category: 'work', color: null, dueAt: null, completedAt: null,
+      sourceType: 'gmail', sourceId: 'thread-hrt', sourceUrl: 'https://mail.google.com/thread-hrt', sourceTitle: 'HRT assessment',
+      sourceSnippet: 'Complete the OA', extractedFromKnowledgeItemId: null, assignedToUserId: CLERK_ID,
+      createdByUserId: null, confidence: 0.9, metadata: null, dedupeKey: null,
+      createdAt: new Date('2026-08-01T00:00:00Z'), updatedAt: new Date('2026-08-01T00:00:00Z'),
+    }] as never)
+
+    const events = await readSSE(await POST(makeRequest({ question: 'What about HRT?', conversationId: 'conversation-1' })))
+    const sources = events.find((event) => event.type === 'sources')?.sources as Array<{ source: string }> | undefined
+    expect(sources).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'task' })]))
   })
 
   it('returns 500 on unexpected upstream error', async () => {

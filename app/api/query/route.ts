@@ -11,7 +11,9 @@ import { splitRankedSources, type QuerySource } from '@/lib/query/source-ranking
 import { detectQueryIntent, type QueryIntent } from '@/lib/query/intent'
 import { gmailThreadUrl } from '@/lib/gmail/api'
 import { escapeXml } from '@/lib/utils'
-import { createOrAppendConversation, storeAssistantMessage } from '@/lib/chat/persistence'
+import { createOrAppendConversation, loadRecentConversationMessages, storeAssistantMessage } from '@/lib/chat/persistence'
+import { rewriteQuery, type QueryRewriteResult } from '@/lib/query/rewrite'
+import { planQueryAnswer } from '@/lib/query/answer-plan'
 import { searchDocumentAttachments, type DocumentResult } from '@/lib/documents/search'
 import { answerTtEldLocationQuestion, isTtEldLiveQuestion } from '@/lib/tteld/query'
 import { validateApiKey } from '@/lib/api-auth'
@@ -43,11 +45,17 @@ function sendSSE(controller: ReadableStreamDefaultController, data: object) {
   controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`))
 }
 
-function makeEmptyStream(answer: string, conversationId: string | null, confidence = 0): ReadableStream {
+function interpretationPayload(rewrite: QueryRewriteResult) {
+  return process.env.QUERY_DEBUG_INTERPRETATION === 'true'
+    ? { interpretation: rewrite.rewrittenQuery }
+    : {}
+}
+
+function makeEmptyStream(answer: string, conversationId: string | null, confidence = 0, rewrite?: QueryRewriteResult): ReadableStream {
   return new ReadableStream({
     start(controller) {
-      sendSSE(controller, { type: 'sources', sources: [], topSources: [], remainingSources: [], totalSources: 0, documents: [], conversationId, confidence })
-      sendSSE(controller, { type: 'done', answer, sources: [], topSources: [], remainingSources: [], totalSources: 0, documents: [], conversationId, confidence })
+      sendSSE(controller, { type: 'sources', sources: [], topSources: [], remainingSources: [], totalSources: 0, documents: [], conversationId, confidence, ...(rewrite ? interpretationPayload(rewrite) : {}) })
+      sendSSE(controller, { type: 'done', answer, sources: [], topSources: [], remainingSources: [], totalSources: 0, documents: [], conversationId, confidence, ...(rewrite ? interpretationPayload(rewrite) : {}) })
       controller.close()
     },
   })
@@ -60,6 +68,7 @@ function makeStaticAnswerStream(params: {
   conversationId: string | null
   confidence: number
   retrievalDebug?: Record<string, unknown>
+  rewrite?: QueryRewriteResult
 }): ReadableStream {
   return new ReadableStream({
     start(controller) {
@@ -70,6 +79,7 @@ function makeStaticAnswerStream(params: {
         conversationId: params.conversationId,
         confidence: params.confidence,
         ...(params.retrievalDebug ? { retrievalDebug: params.retrievalDebug } : {}),
+        ...(params.rewrite ? interpretationPayload(params.rewrite) : {}),
       })
       sendSSE(controller, { type: 'delta', content: params.answer })
       sendSSE(controller, {
@@ -80,6 +90,7 @@ function makeStaticAnswerStream(params: {
         conversationId: params.conversationId,
         confidence: params.confidence,
         ...(params.retrievalDebug ? { retrievalDebug: params.retrievalDebug } : {}),
+        ...(params.rewrite ? interpretationPayload(params.rewrite) : {}),
       })
       controller.close()
     },
@@ -265,6 +276,16 @@ function sourceDisplayName(source: string): string {
   if (source === 'datatruck') return 'Datatruck'
   if (source === 'teams') return 'Microsoft Teams'
   return source.charAt(0).toUpperCase() + source.slice(1)
+}
+
+function sourceMatchesEntity(source: QuerySource, terms: string[]): boolean {
+  if (terms.length === 0) return true
+  const haystack = `${source.pageTitle} ${source.content} ${source.owner ?? ''} ${source.sourceExternalId ?? ''}`.toLowerCase()
+  return terms.some((term) => {
+    const normalized = term.toLowerCase()
+    if (normalized.length <= 3) return new RegExp(`(^|\\W)${normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|\\W)`, 'i').test(haystack)
+    return haystack.includes(normalized)
+  })
 }
 
 function isTaskQuery(question: string) {
@@ -457,6 +478,95 @@ async function safeSaveQueryLog(
   }
 }
 
+async function findStructuredQuerySources(params: {
+  workspaceId: string
+  entityTerms: string[]
+  includeRecruiting: boolean
+}): Promise<QuerySource[]> {
+  const entityTerms = params.entityTerms.filter((term) => term.length >= 2)
+  const recruitingTerms = params.includeRecruiting
+    ? ['interview', 'recruiter', 'recruiting', 'OA', 'onsite', 'phone screen', 'next step', 'deadline']
+    : []
+  const terms = [...new Set([...entityTerms, ...recruitingTerms])]
+  if (terms.length === 0) return []
+  const structuredTerms = entityTerms.length > 0 ? entityTerms : recruitingTerms
+  const contains = (term: string) => ({ contains: term, mode: 'insensitive' as const })
+  const [tasks, decisions] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        workspaceId: params.workspaceId,
+        OR: structuredTerms.flatMap((term) => [
+          { title: contains(term) },
+          { description: contains(term) },
+          { sourceTitle: contains(term) },
+          { sourceSnippet: contains(term) },
+        ]),
+      },
+      orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { updatedAt: 'desc' }],
+      take: 20,
+    }),
+    prisma.decision.findMany({
+      where: {
+        workspaceId: params.workspaceId,
+        OR: structuredTerms.flatMap((term) => [
+          { title: contains(term) },
+          { decision: contains(term) },
+          { reason: contains(term) },
+        ]),
+      },
+      orderBy: [{ madeAt: 'desc' }, { createdAt: 'desc' }],
+      take: 20,
+    }),
+  ])
+
+  const taskSources: QuerySource[] = tasks.map((task) => ({
+    chunkId: `task:${task.id}`,
+    pageId: null,
+    pageTitle: task.title,
+    notionPageId: null,
+    content: [
+      `Task: ${task.title}`,
+      task.description,
+      `Status: ${task.status}`,
+      `Priority: ${task.priority}`,
+      task.dueAt ? `Due: ${task.dueAt.toISOString()}` : null,
+      task.sourceSnippet ? `Source context: ${task.sourceSnippet}` : null,
+    ].filter(Boolean).join('\n'),
+    labels: ['task', task.status, task.category],
+    source: 'task',
+    sourceUrl: task.sourceUrl,
+    sourceExternalId: task.sourceId,
+    owner: task.assignedToUserId,
+    sourceMetadata: { originalSource: task.sourceType, dueAt: task.dueAt?.toISOString() ?? null },
+    sourceCreatedAt: task.createdAt.toISOString(),
+    updatedAt: task.updatedAt.toISOString(),
+    relevanceScore: 0.85,
+    verified: true,
+  }))
+  const decisionSources: QuerySource[] = decisions.map((decision) => ({
+    chunkId: `decision:${decision.id}`,
+    pageId: null,
+    pageTitle: decision.title,
+    notionPageId: null,
+    content: [
+      `Decision: ${decision.title}`,
+      decision.decision,
+      decision.reason ? `Reason: ${decision.reason}` : null,
+    ].filter(Boolean).join('\n'),
+    labels: ['decision'],
+    source: 'decision',
+    sourceUrl: decision.sourceUrl,
+    sourceExternalId: decision.id,
+    owner: decision.madeBy,
+    sourceMetadata: { originalSource: decision.source },
+    sourceCreatedAt: decision.madeAt?.toISOString() ?? decision.createdAt.toISOString(),
+    updatedAt: decision.createdAt.toISOString(),
+    relevanceScore: 0.85,
+    verified: true,
+  }))
+  return [...taskSources, ...decisionSources]
+}
+
 export async function POST(req: Request) {
   const startedAt = Date.now()
   let failureContext: { workspaceId: string; userId: string; displayName: string; queryLength: number } | null = null
@@ -510,8 +620,27 @@ export async function POST(req: Request) {
 
     const { question, conversationId: requestedConversationId, documentIds } = parsed.data
     failureContext = { workspaceId, userId, displayName, queryLength: question.length }
-    const escapedQuestion = escapeXml(question)
-    const intent = detectQueryIntent(question)
+    let recentMessages: Awaited<ReturnType<typeof loadRecentConversationMessages>> = []
+    try {
+      recentMessages = await loadRecentConversationMessages({
+        workspaceId,
+        userId,
+        conversationId: requestedConversationId,
+        take: 6,
+      })
+    } catch (err) {
+      console.error('[query] conversation context unavailable', err instanceof Error ? err.message : 'unknown error')
+    }
+    const rewrite = rewriteQuery({ currentQuery: question, history: recentMessages })
+    const retrievalQuery = rewrite.rewrittenQuery
+    const escapedQuestion = escapeXml(retrievalQuery)
+    const rewrittenIntent = detectQueryIntent(retrievalQuery)
+    const intent = {
+      ...rewrittenIntent,
+      // Only an explicitly named integration should create a strict source filter.
+      // Rewrites may mention "emails" as one evidence type without excluding Tasks.
+      requestedSources: detectQueryIntent(question).requestedSources,
+    }
     let conversationId: string | null = null
     let relatedLoadId: string | null = null
 
@@ -530,6 +659,13 @@ export async function POST(req: Request) {
         userId,
         question,
         conversationId: requestedConversationId,
+        messageMetadata: {
+          rewrittenQuery: rewrite.rewrittenQuery,
+          detectedEntities: rewrite.detectedEntities,
+          detectedIntent: rewrite.detectedIntent,
+          sourceHints: rewrite.sourceHints,
+          needsClarification: rewrite.needsClarification,
+        },
       })
       conversationId = conversation.conversationId
       relatedLoadId = conversation.relatedLoadId
@@ -542,6 +678,24 @@ export async function POST(req: Request) {
       select: { name: true },
     })
     const workspaceName = workspace?.name ?? 'your workspace'
+
+    if (rewrite.needsClarification && rewrite.clarificationQuestion) {
+      const answer = rewrite.clarificationQuestion
+      const ranked = splitRankedSources([], 3, { query: retrievalQuery })
+      if (conversationId) void storeAssistantMessage({
+        workspaceId,
+        userId,
+        conversationId,
+        answer,
+        sourceReferences: [],
+        documentReferences: [],
+        relatedLoadId,
+        metadata: { confidence: 0, answerPlan: planQueryAnswer(rewrite, []) as unknown as Prisma.InputJsonValue },
+      }).catch(() => null)
+      return new Response(makeStaticAnswerStream({ answer, ranked, documents: [], conversationId, confidence: 0, rewrite }), {
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
 
     const telegramCapabilityAnswer = telegramModeCapabilityAnswer(question)
     if (telegramCapabilityAnswer) {
@@ -598,7 +752,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const embedding = await generateEmbedding(question)
+    const embedding = await generateEmbedding(retrievalQuery)
     const personalNamespace = `${workspaceId}:${userId}`
 
     const [teamMatches, personalMatches] = await Promise.all([
@@ -617,7 +771,7 @@ export async function POST(req: Request) {
 
     let documentResults: DocumentResult[] = []
     try {
-      documentResults = await searchDocumentAttachments(workspaceId, question)
+      documentResults = await searchDocumentAttachments(workspaceId, retrievalQuery)
     } catch (err) {
       console.error('[query] document search failed', err instanceof Error ? err.message : 'unknown error')
     }
@@ -658,9 +812,35 @@ export async function POST(req: Request) {
       }
     }
 
-    if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0) {
+    // Entity aliases are searched explicitly in Postgres in addition to vector
+    // retrieval so acronyms such as HRT cannot lose their expanded form.
+    if (rewrite.entitySearchTerms.length > 0) {
+      const entityFilters = rewrite.entitySearchTerms.flatMap((term) => [
+        { content: { contains: term, mode: 'insensitive' as const } },
+        { title: { contains: term, mode: 'insensitive' as const } },
+        { notionPageTitle: { contains: term, mode: 'insensitive' as const } },
+        { owner: { contains: term, mode: 'insensitive' as const } },
+      ])
+      const entityItems = await findKnowledgeItems({
+        ...visibilityWhere(workspaceId, userId),
+        OR: entityFilters,
+      }, 30, [{ sourceCreatedAt: 'desc' }, { updatedAt: 'desc' }])
+      const byId = new Map(knowledgeItems.map((item) => [item.id, item]))
+      for (const item of entityItems) {
+        if (!byId.has(item.id)) knowledgeItems.push(item)
+        scoreMap.set(item.id, Math.max(scoreMap.get(item.id) ?? 0, 0.9))
+      }
+    }
+
+    const structuredSources = await findStructuredQuerySources({
+      workspaceId,
+      entityTerms: rewrite.entitySearchTerms,
+      includeRecruiting: /interview|recruiter|online assessment|\boa\b/i.test(retrievalQuery),
+    })
+
+    if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0 && structuredSources.length === 0) {
       // Pinecone returned nothing — fall back to Postgres keyword search
-      const keywords = question.trim().split(/\s+/).filter(w => w.length > 2)
+      const keywords = [...new Set([...rewrite.entitySearchTerms, ...retrievalQuery.trim().split(/\s+/)])].filter(w => w.length > 2)
       if (keywords.length > 0) {
         const keywordFilter = keywords.map(w => ({ content: { contains: w, mode: 'insensitive' as const } }))
         ;[chunks, knowledgeItems] = await Promise.all([
@@ -680,12 +860,14 @@ export async function POST(req: Request) {
       }
     }
 
-    if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0) {
+    if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0 && structuredSources.length === 0) {
       const noInfoAnswer = intent.requestedSources.includes('slack')
         ? "I don’t see synced Slack messages yet. Connect Slack Personal Access and choose channels to sync."
         : intent.requestedSources.includes('telegram')
           ? "I don’t see synced Telegram messages yet. Connect Telegram Account Sync, choose chats, and sync selected messages."
-        : "I don't have verified information about this yet."
+        : /interview|recruiter|online assessment|\boa\b/i.test(retrievalQuery)
+          ? `I couldn’t find enough synced data to confirm the exact interview count or status${rewrite.detectedEntities.length ? ` for ${rewrite.detectedEntities.join(', ')}` : ''}. I checked the available workspace knowledge, email-derived memory, tasks, and decisions, but no supporting source matched. I won’t infer dates, recruiters, or next steps without evidence.`
+          : "I don't have verified information about this yet."
       if (conversationId) {
         void storeAssistantMessage({
           workspaceId,
@@ -695,12 +877,12 @@ export async function POST(req: Request) {
           sourceReferences: [],
           documentReferences: [],
           relatedLoadId,
-          metadata: { confidence: 0, totalSources: 0, documentCount: 0 },
+          metadata: { confidence: 0, totalSources: 0, documentCount: 0, rewrittenQuery: retrievalQuery, detectedEntities: rewrite.detectedEntities, detectedIntent: rewrite.detectedIntent },
         }).catch((err) => console.error('[query] assistant persistence failed', err))
       }
       void safeSaveQueryLog(workspaceId, userId, displayName, question, noInfoAnswer, [])
       await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: [], resultCount: 0, hasAnswer: true, confidence: 0, latencyMs: Date.now() - startedAt })
-      return new Response(makeEmptyStream(noInfoAnswer, conversationId), { headers: { 'Content-Type': 'text/event-stream' } })
+      return new Response(makeEmptyStream(noInfoAnswer, conversationId, 0, rewrite), { headers: { 'Content-Type': 'text/event-stream' } })
     }
 
     const gmailThreadIds = [...new Set(knowledgeItems.filter((item) => item.source === 'gmail' && item.sourceExternalId).map((item) => item.sourceExternalId!))]
@@ -804,19 +986,45 @@ export async function POST(req: Request) {
       conflictNote: item.conflictNote,
     }})
 
-    const ranked = splitRankedSources([...chunkSources, ...knowledgeSources], 3, {
+    const candidateSources = [...chunkSources, ...knowledgeSources, ...structuredSources]
+      .filter((source) => sourceMatchesEntity(source, rewrite.entitySearchTerms))
+    const ranked = splitRankedSources(candidateSources, 3, {
       requestedSources: intent.requestedSources,
       temporalType: intent.temporalIntent.type,
-      query: question,
+      query: retrievalQuery,
+      entityTerms: rewrite.entitySearchTerms,
     })
+    if (ranked.totalSources === 0 && rewrite.entitySearchTerms.length > 0) {
+      const answer = /interview|recruiter|online assessment|\boa\b/i.test(retrievalQuery)
+        ? `I couldn’t find enough synced data to confirm the exact interview count or status for ${rewrite.detectedEntities.join(', ')}. I won’t infer dates, recruiters, or next steps without a matching source.`
+        : `I couldn’t find a synced source that mentions ${rewrite.detectedEntities.join(', ')}. I don’t have verified information about this yet.`
+      if (conversationId) void storeAssistantMessage({
+        workspaceId,
+        userId,
+        conversationId,
+        answer,
+        sourceReferences: [],
+        documentReferences: [],
+        relatedLoadId,
+        metadata: { confidence: 0, rewrittenQuery: retrievalQuery, detectedEntities: rewrite.detectedEntities, detectedIntent: rewrite.detectedIntent },
+      }).catch(() => null)
+      void safeSaveQueryLog(workspaceId, userId, displayName, question, answer, [])
+      return new Response(makeStaticAnswerStream({ answer, ranked, documents: [], conversationId, confidence: 0, rewrite }), {
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
     const answerContextSources = ranked.sources.slice(0, intent.queryType === 'summary' ? 12 : 8)
     const context = [
       attachedDocumentContext(attachedDocuments),
       ...answerContextSources.map((source, index) => formatSourceForModel(source, index)),
       documentContext(documentResults),
     ].filter(Boolean).join('\n\n')
+    const answerPlan = planQueryAnswer(rewrite, answerContextSources)
+    const conversationContext = recentMessages
+      .map((message) => `${message.role}: ${message.content.slice(0, 800)}`)
+      .join('\n')
     const retrievalDebug = retrievalDebugPayload({
-      query: question,
+      query: retrievalQuery,
       intent,
       sources: ranked.sources,
       passedToModelCount: answerContextSources.length,
@@ -864,8 +1072,11 @@ export async function POST(req: Request) {
             requestedSources: intent.requestedSources,
             temporalIntent: intent.temporalIntent.type,
             queryType: intent.queryType,
-          }))}</intent>\n\n<answer_rules>
+            detectedIntent: rewrite.detectedIntent,
+            detectedEntities: rewrite.detectedEntities,
+          }))}</intent>\n\n<recent_conversation>${escapeXml(conversationContext)}</recent_conversation>\n\n<internal_answer_plan>${escapeXml(JSON.stringify(answerPlan))}</internal_answer_plan>\n\n<answer_rules>
 Use the provided workspace knowledge. If sources are present, summarize or explain those sources; do not claim there is no information unless the provided sources are genuinely irrelevant. Do not recommend public official channels for workspace questions.
+For interview or recruiting questions: start with a direct sourced count/status when supported, then list status and evidence. State clearly when the exact count, date, recruiter, or next step is not supported. Never invent dates, people, interview stages, or statuses. Mention Gmail and Task evidence using their source citations. End by offering a follow-up task/reminder only when useful.
 </answer_rules>\n\n<knowledge_items>\n${context}\n</knowledge_items>`,
         },
       ],
@@ -874,7 +1085,7 @@ Use the provided workspace knowledge. If sources are present, summarize or expla
 
     const readable = new ReadableStream({
       async start(controller) {
-        sendSSE(controller, { type: 'sources', ...ranked, documents: documentResults, conversationId, confidence, ...(retrievalDebug ? { retrievalDebug } : {}) })
+        sendSSE(controller, { type: 'sources', ...ranked, documents: documentResults, conversationId, confidence, ...(retrievalDebug ? { retrievalDebug } : {}), ...interpretationPayload(rewrite) })
         let fullAnswer = ''
         try {
           for await (const chunk of openaiStream as AsyncIterable<{ choices: Array<{ delta?: { content?: string }; finish_reason?: string | null }> }>) {
@@ -901,13 +1112,17 @@ Use the provided workspace knowledge. If sources are present, summarize or expla
                 confidence,
                 totalSources: ranked.totalSources,
                 documentCount: documentResults.length,
+                rewrittenQuery: retrievalQuery,
+                detectedEntities: rewrite.detectedEntities,
+                detectedIntent: rewrite.detectedIntent,
+                answerPlan: answerPlan as unknown as Prisma.InputJsonValue,
                 ...(documentIds.length > 0 ? { uploadedDocumentIds: documentIds } : {}),
               },
             }).catch((err) => console.error('[query] assistant persistence failed', err))
           }
           const answer = fullAnswer.trim() || 'I could not find enough information to answer confidently, but these are the closest sources I found.'
           await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: ranked.sources, resultCount: ranked.totalSources, hasAnswer: Boolean(answer.trim()), confidence, latencyMs: Date.now() - startedAt })
-          sendSSE(controller, { type: 'done', answer, ...ranked, documents: documentResults, conversationId, confidence, ...(retrievalDebug ? { retrievalDebug } : {}) })
+          sendSSE(controller, { type: 'done', answer, ...ranked, documents: documentResults, conversationId, confidence, ...(retrievalDebug ? { retrievalDebug } : {}), ...interpretationPayload(rewrite) })
         } finally {
           controller.close()
         }

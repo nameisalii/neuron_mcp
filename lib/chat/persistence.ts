@@ -35,6 +35,7 @@ export async function createOrAppendConversation(params: {
   question: string
   conversationId?: string | null
   sourceContext?: Prisma.InputJsonValue
+  messageMetadata?: Prisma.InputJsonValue
 }) {
   const relatedLoadId = extractRelatedLoadId(params.question)
   const existing = params.conversationId
@@ -76,6 +77,7 @@ export async function createOrAppendConversation(params: {
       role: 'user',
       content: params.question,
       relatedLoadId,
+      metadata: params.messageMetadata ?? Prisma.JsonNull,
     },
   })
 
@@ -88,6 +90,31 @@ export async function createOrAppendConversation(params: {
   })
 
   return { conversationId: conversation.id, relatedLoadId }
+}
+
+export async function loadRecentConversationMessages(params: {
+  workspaceId: string
+  userId: string
+  conversationId?: string | null
+  take?: number
+}): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  if (!params.conversationId) return []
+  const conversation = await prisma.chatConversation.findFirst({
+    where: { id: params.conversationId, workspaceId: params.workspaceId, userId: params.userId },
+    select: {
+      messages: {
+        where: { role: { in: ['user', 'assistant'] } },
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(Math.max(params.take ?? 6, 1), 6),
+        select: { role: true, content: true },
+      },
+    },
+  })
+  if (!conversation) return []
+  return conversation.messages.reverse().map((message) => ({
+    role: message.role as 'user' | 'assistant',
+    content: message.content,
+  }))
 }
 
 export async function storeAssistantMessage(params: {

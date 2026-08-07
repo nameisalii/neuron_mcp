@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { createOrAppendConversation, storeAssistantMessage, titleFromQuestion } from '../persistence'
+import { createOrAppendConversation, loadRecentConversationMessages, storeAssistantMessage, titleFromQuestion } from '../persistence'
 import { generateConversationTitle } from '../title'
 
 jest.mock('@/lib/db', () => ({
@@ -143,6 +143,28 @@ describe('chat persistence helpers', () => {
         sourceReferences: [],
         documentReferences: [],
       }),
+    }))
+  })
+
+  it('loads only recent messages from the accessible conversation in chronological order', async () => {
+    mockConversationFindFirst.mockResolvedValue({
+      messages: [
+        { role: 'assistant', content: 'Most recent answer' },
+        { role: 'user', content: 'Earlier question' },
+      ],
+    } as never)
+
+    await expect(loadRecentConversationMessages({
+      workspaceId: 'workspace-1',
+      userId: 'user-1',
+      conversationId: 'conversation-1',
+      take: 6,
+    })).resolves.toEqual([
+      { role: 'user', content: 'Earlier question' },
+      { role: 'assistant', content: 'Most recent answer' },
+    ])
+    expect(mockConversationFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'conversation-1', workspaceId: 'workspace-1', userId: 'user-1' },
     }))
   })
 })

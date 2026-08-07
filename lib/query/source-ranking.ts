@@ -22,6 +22,7 @@ export interface SourceRankingIntent {
   requestedSources?: string[]
   temporalType?: string
   query?: string
+  entityTerms?: string[]
 }
 
 const CATEGORY_PRIORITY: Record<string, number> = {
@@ -65,6 +66,12 @@ function exactMatchBoost(source: QuerySource, query: string | undefined): number
   return Math.min(matches / Math.max(terms.length, 1), 1)
 }
 
+function entityMatchBoost(source: QuerySource, entityTerms: string[] | undefined): number {
+  if (!entityTerms?.length) return 0
+  const haystack = `${source.pageTitle} ${source.content} ${source.owner ?? ''} ${source.sourceExternalId ?? ''}`.toLowerCase()
+  return entityTerms.some((term) => haystack.includes(term.toLowerCase())) ? 1 : 0
+}
+
 function recencyBoost(source: QuerySource): number {
   const time = timestamp(source)
   if (!time) return 0
@@ -81,11 +88,13 @@ function hybridScore(source: QuerySource, intent?: SourceRankingIntent): number 
   const sourceMatch = requested.length === 0 ? 0 : requested.includes(source.source) ? 1 : -0.5
   const recency = intent?.temporalType && intent.temporalType !== 'all_time' ? recencyBoost(source) : 0
   const exact = exactMatchBoost(source, intent?.query)
+  const entity = entityMatchBoost(source, intent?.entityTerms)
   return (
-    source.relevanceScore * 0.55 +
+    source.relevanceScore * 0.45 +
     sourceMatch * 0.2 +
     recency * 0.15 +
-    exact * 0.1
+    exact * 0.1 +
+    entity * 0.1
   )
 }
 

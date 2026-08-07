@@ -18,6 +18,7 @@ type ChatMessage = {
   documents?: DocumentResultItem[]
   complete?: boolean
   attachedFileName?: string
+  interpretation?: string
 }
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // Keep in sync with /api/documents/upload
@@ -276,11 +277,13 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
               conversationId?: string | null
               content?: string
               answer?: string
+              interpretation?: string
             }
             if (json.type === 'sources') {
               updateAssistantMessage(assistantId, {
                 sources: json.sources ?? [],
                 documents: json.documents ?? [],
+                interpretation: json.interpretation,
               })
               if (json.conversationId) {
                 setConversationId(json.conversationId)
@@ -471,6 +474,11 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
                             <span aria-hidden="true">·</span>
                             <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</time>
                           </div>
+                          {message.interpretation && (
+                            <p className="mb-2 text-xs text-gray-400" data-testid="query-interpretation">
+                              Interpreted as: {message.interpretation}
+                            </p>
+                          )}
                           {message.content || message.complete || (message.sources?.length ?? 0) > 0 ? (
                             <QueryResults
                               answer={message.content}
