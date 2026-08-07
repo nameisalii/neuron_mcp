@@ -592,18 +592,35 @@ describe('POST /api/query', () => {
     mockKnowledgeFindMany.mockResolvedValue([] as never)
     mockEmailChunkFindMany.mockResolvedValue([{
       id: 'email-chunk-1', emailThreadId: 'thread-db-1', workspaceId: WORKSPACE_ID,
-      content: 'The Trade Desk recruiter would like to schedule a technical interview next week.',
+      content: `Thank you for booking time with me to speak about the 2027 North America Software Engineering Internship role.
+Date/Time: Aug 7, 2026 11:00am–11:30am (GMT-07:00) Pacific Time (US & Canada)
+Interviewers: Rachel Levine
+Zoom: https://thetradedesk.zoom.us/j/94726662353`,
       blockType: 'email_message', position: 0, pineconeId: null, labels: [], labeledBy: [],
       visibility: 'personal', visibilitySetBy: CLERK_ID,
-      metadata: { messageId: 'gmail-message-1', from: 'Recruiting', date: '2026-08-01T00:00:00Z' },
+      metadata: { messageId: 'gmail-message-1', from: 'Rachel Levine <rachel.levine@thetradedesk.com>', date: '2026-08-01T00:00:00Z' },
       createdAt: new Date('2026-08-01T00:00:00Z'), updatedAt: new Date('2026-08-01T00:00:00Z'),
-      thread: { id: 'thread-db-1', gmailThreadId: 'gmail-thread-1', subject: 'Following up', labelNames: ['INBOX'], lastMessageAt: new Date('2026-08-01T00:00:00Z') },
+      thread: { id: 'thread-db-1', gmailThreadId: 'gmail-thread-1', subject: 'Your Screening Interview is Confirmed! [The Trade Desk]', labelNames: ['INBOX'], lastMessageAt: new Date('2026-08-01T00:00:00Z') },
+    }, {
+      id: 'email-chunk-2', emailThreadId: 'thread-db-2', workspaceId: WORKSPACE_ID,
+      content: 'You are invited to complete a CodeSignal Online Assessment at https://app.codesignal.com/assessment/abc',
+      blockType: 'email_message', position: 0, pineconeId: null, labels: [], labeledBy: [],
+      visibility: 'personal', visibilitySetBy: CLERK_ID,
+      metadata: { messageId: 'gmail-message-2', from: 'The Trade Desk Recruiting', date: '2026-08-01T00:00:00Z' },
+      createdAt: new Date('2026-08-01T00:00:00Z'), updatedAt: new Date('2026-08-01T00:00:00Z'),
+      thread: { id: 'thread-db-2', gmailThreadId: 'gmail-thread-2', subject: 'The Trade Desk | Invitation to Complete Online Assessment', labelNames: ['INBOX'], lastMessageAt: new Date('2026-08-01T00:00:00Z') },
     }] as never)
 
     const events = await readSSE(await POST(makeRequest({ question: 'Do I have an interview with trade desk?' })))
     const done = events.find((event) => event.type === 'done')
     expect(done?.answer).toMatch(/Yes.*interview with The Trade Desk/i)
-    expect(done?.sources).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'gmail', content: expect.stringContaining('technical interview') })]))
+    expect(done?.answer).toContain('2027 North America Software Engineering Internship')
+    expect(done?.answer).toContain('Aug 7, 2026, 11:00am–11:30am')
+    expect(done?.answer).toContain('Rachel Levine')
+    expect(done?.answer).toContain('https://thetradedesk.zoom.us/j/94726662353')
+    expect(done?.answer).toContain('CodeSignal')
+    expect(done?.answer).not.toMatch(/review the source cards for exact details/i)
+    expect(done?.sources).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'gmail', content: expect.stringContaining('Interviewers: Rachel Levine') })]))
     expect(mockChat).not.toHaveBeenCalled()
   })
 

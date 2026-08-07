@@ -209,3 +209,26 @@ it('shows honest linked-page attribution and parent source context', () => {
   expect(screen.getByText(/Linked from #eng-decisions · Slack/)).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Open source' })).toHaveAttribute('href', 'https://example.com/spec')
 })
+
+it('expands Gmail details and renders safe meeting links without breaking long URLs', () => {
+  const zoomUrl = `https://thetradedesk.zoom.us/j/${'9'.repeat(80)}`
+  render(
+    <QueryResults
+      answer="Your interview is confirmed."
+      sources={[source(1, {
+        pageTitle: 'Your Screening Interview is Confirmed! [The Trade Desk]',
+        source: 'gmail', sourceUrl: 'https://mail.google.com/mail/#inbox/thread-1', labels: ['gmail', 'INBOX'],
+        owner: 'Rachel Levine <rachel.levine@thetradedesk.com>',
+        content: `Date/Time: Aug 7, 2026 11:00am–11:30am Pacific Time\nInterviewers: Rachel Levine\nZoom: ${zoomUrl}`,
+        sourceMetadata: { from: 'Rachel Levine <rachel.levine@thetradedesk.com>' },
+        sourceCreatedAt: '2026-08-04T17:41:00.000Z',
+      })]}
+      complete copied={false} onCopy={jest.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'From integrations (1)' }))
+  expect(screen.getByText(/Rachel Levine.*Gmail.*Aug 4, 2026/)).toBeInTheDocument()
+  fireEvent.click(screen.getByText('View email details'))
+  expect(screen.getByRole('link', { name: 'Open Zoom link' })).toHaveAttribute('href', zoomUrl)
+  expect(screen.getByRole('link', { name: 'Open source' })).toHaveAttribute('href', 'https://mail.google.com/mail/#inbox/thread-1')
+})

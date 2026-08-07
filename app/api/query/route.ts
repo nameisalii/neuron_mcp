@@ -15,6 +15,7 @@ import { escapeXml } from '@/lib/utils'
 import { createOrAppendConversation, loadRecentConversationMessages, storeAssistantMessage } from '@/lib/chat/persistence'
 import { rewriteQuery, type QueryRewriteResult } from '@/lib/query/rewrite'
 import { planQueryAnswer } from '@/lib/query/answer-plan'
+import { buildDetailedInterviewAnswer } from '@/lib/query/interview-details'
 import { searchDocumentAttachments, type DocumentResult } from '@/lib/documents/search'
 import { answerTtEldLocationQuestion, isTtEldLiveQuestion } from '@/lib/tteld/query'
 import { validateApiKey } from '@/lib/api-auth'
@@ -354,24 +355,6 @@ function sourceMatchesEntity(source: QuerySource, terms: string[]): boolean {
     if (normalized.length <= 3) return new RegExp(`(^|\\W)${normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|\\W)`, 'i').test(haystack)
     return haystack.includes(normalized)
   })
-}
-
-const INTERVIEW_EVIDENCE = /\b(interview|phone screen|technical round|behavioral round|onsite|final round|recruiter call|schedule(?:d| an)? (?:a |the )?(?:call|interview)|availability for (?:a |the )?(?:call|interview))\b/i
-const RECRUITING_RELATED = /\b(application|applied|online assessment|\bOA\b|codesignal|karat|hackerrank|recruiter|candidate)\b/i
-
-export function buildInterviewEvidenceAnswer(rewrite: QueryRewriteResult, sources: QuerySource[]): string | null {
-  if (!['interview_status', 'count_interviews', 'company_specific_followup'].includes(rewrite.detectedIntent)) return null
-  if (rewrite.detectedEntities.length === 0) return null
-  const company = rewrite.detectedEntities[0]
-  const confirmed = sources.filter((source) => INTERVIEW_EVIDENCE.test(source.content))
-  if (confirmed.length > 0) {
-    return `Yes — I found synced content that supports an interview with ${company}. I found ${confirmed.length} relevant source${confirmed.length === 1 ? '' : 's'}. Review the source cards for the exact message context; I’m not inferring a date, recruiter, or stage unless it appears there.`
-  }
-  const related = sources.filter((source) => RECRUITING_RELATED.test(source.content))
-  if (related.length > 0) {
-    return `I found ${company}-related recruiting content, but I don’t see enough evidence in the synced content to confirm an interview. The available sources appear related to an application, assessment, recruiter, or candidate process rather than a confirmed interview.`
-  }
-  return `I found ${company}-related synced content, but I don’t see evidence inside that content of an interview. A company name in a subject or title alone is not enough to confirm one.`
 }
 
 function isTaskQuery(question: string) {
@@ -1142,7 +1125,7 @@ export async function POST(req: Request) {
         headers: { 'Content-Type': 'text/event-stream' },
       })
     }
-    const interviewEvidenceAnswer = buildInterviewEvidenceAnswer(rewrite, ranked.sources)
+    const interviewEvidenceAnswer = buildDetailedInterviewAnswer(rewrite, ranked.sources)
     if (interviewEvidenceAnswer) {
       const evidenceSources = ranked.sources.slice(0, 8)
       const evidenceRanked = splitRankedSources(evidenceSources, 3, {

@@ -1,6 +1,7 @@
 import { motion, type Variants } from 'framer-motion'
 import { ExternalLink } from 'lucide-react'
 import SourceIcon from '@/components/SourceIcon'
+import { extractInterviewDetails } from '@/lib/query/interview-details'
 import type { QuerySource } from '@/lib/query/source-ranking'
 
 export type SourceItem = QuerySource
@@ -192,6 +193,8 @@ export default function SourceCard({ source, i, variants }: Props) {
   const sourceUrl = source.sourceUrl ?? (source.source === 'notion' && source.pageId ? '/dashboard/knowledge' : null)
   const label = titleCase(source.labels[0] ?? source.source)
   const excerpt = source.content.trim()
+  const gmailDetails = source.source === 'gmail' ? extractInterviewDetails(source, null) : null
+  const detectedLinks = gmailDetails ? [...gmailDetails.meetingLinks, ...gmailDetails.assessmentLinks] : []
 
   return (
     <motion.div variants={variants} data-relevance-rank={i + 1} className="rounded-lg border border-gray-100 bg-gray-50/80 p-3">
@@ -222,6 +225,19 @@ export default function SourceCard({ source, i, variants }: Props) {
         )}
       </div>
       {excerpt && <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-gray-600">{excerpt}</p>}
+      {source.source === 'gmail' && excerpt && (
+        <details className="mt-2 text-xs text-gray-600">
+          <summary className="cursor-pointer font-medium text-indigo-600">View email details</summary>
+          <div className="mt-2 space-y-2 border-t border-gray-200 pt-2">
+            <p className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed">{excerpt.slice(0, 2400)}</p>
+            {detectedLinks.map((url) => (
+              <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block break-all font-medium text-indigo-600 hover:text-indigo-700">
+                {url.includes('zoom.us') ? 'Open Zoom link' : url.includes('meet.google.com') ? 'Open Google Meet link' : url.includes('teams.microsoft.com') ? 'Open Teams link' : 'Open assessment link'}
+              </a>
+            ))}
+          </div>
+        </details>
+      )}
     </motion.div>
   )
 }

@@ -39,4 +39,16 @@ describe('conversation-aware query rewriting', () => {
     expect(result.entitySearchTerms).toEqual(expect.arrayContaining(['The Trade Desk', 'Trade Desk', 'TTD']))
     expect(result.detectedIntent).toBe('interview_status')
   })
+
+  it.each(['What time?', 'Send me the Zoom link', 'What about the CodeSignal?'])('uses prior interview context for %s', (currentQuery) => {
+    const result = rewriteQuery({
+      currentQuery,
+      history: [
+        { role: 'user', content: 'Do I have an interview with The Trade Desk?' },
+        { role: 'assistant', content: 'Yes — you have a confirmed screening interview with The Trade Desk.' },
+      ],
+    })
+    expect(result.rewrittenQuery).toMatch(/Trade Desk.*interview|interview.*Trade Desk/i)
+    expect(result.detectedEntities).toContain('The Trade Desk')
+  })
 })

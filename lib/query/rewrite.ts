@@ -38,7 +38,7 @@ const ENTITY_ALIASES = [
 
 const INTERVIEW_TERMS = /\b(interviews?|recruit(?:er|ing)?|oa|online assessment|onsite|phone screen|technical|behavioral|final round|offer deadline)\b/i
 const TRUCKING_TERMS = /\b(truck(?:ing)?|tms|dispatch|eld|gps|fleet|driver|load|integration)\b/i
-const FOLLOW_UP_START = /^(what about|and\b|also\b|that one\b|it\b|them\b|this\b|when\b|why\b|how many\b|any updates\b)/i
+const FOLLOW_UP_START = /^(what about|what time\b|who(?: is|'s)\b|send me\b|and\b|also\b|that one\b|it\b|them\b|this\b|when\b|why\b|how many\b|any updates\b)/i
 
 function hasAlias(text: string, alias: string): boolean {
   const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
@@ -110,6 +110,10 @@ export function rewriteQuery(input: {
     const previousEntity = previousEntities[0]
     rewrittenQuery = `When is the event, interview, deadline, or next step${previousEntity ? ` related to ${previousEntity.aliases.slice(0, 2).join(' or ')}` : ''} discussed in: ${previousUser}`
     detectedIntent = 'deadline'
+  } else if (followUp && interviewContext && previousUser && /\b(time|when|interviewer|zoom|meet|teams|codesignal|assessment|link|prepare)\b/i.test(originalQuery)) {
+    const previousEntity = previousEntities[0] ?? detectQueryEntities(recentContext, recentContext)[0]
+    rewrittenQuery = `${originalQuery} for the ${previousEntity ? `${previousEntity.aliases.slice(0, 2).join(' or ')} ` : ''}interview or recruiting event discussed in the recent conversation.`
+    detectedIntent = /\b(time|when)\b/i.test(originalQuery) ? 'deadline' : 'company_specific_followup'
   } else if (followUp && entity && !previousUser && (explicitFollowUpPhrase || entityOnly)) {
     const names = entity.canonical === 'Hudson River Trading' ? 'HRT / Hudson River Trading' : entity.aliases.slice(0, 2).join(' / ')
     rewrittenQuery = `Find information related to ${names}.`
