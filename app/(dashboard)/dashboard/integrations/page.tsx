@@ -25,6 +25,7 @@ import { getGmailOAuthFailureMessage } from '@/lib/gmail/oauth'
 import { isGmailIntegrationEnabled, isGmailPublicEnabled, isGmailTestUser } from '@/lib/gmail/access'
 import { getConnectedIntegrationToken } from '@/lib/integrations/connection-server'
 import { getTelegramBotUsername, isTelegramConfigured } from '@/lib/telegram/config'
+import { isGmailArchivedSyncEnabled, isGmailBackfillAllHistoryAllowed, isGmailBackfillEnabled } from '@/lib/gmail/config'
 
 function timeAgo(date: Date): string {
   const s = Math.floor((Date.now() - date.getTime()) / 1000)
@@ -414,6 +415,9 @@ export default async function IntegrationsPage(
           missingEnv={gmailMissingEnv}
           autoOpenSetup={searchParams.connected === 'gmail' || searchParams.error === 'gmail_failed'}
           oauthBlocked={searchParams.error === 'gmail_failed' && ['missing_code', 'oauth_error', 'redirect_uri_mismatch', 'invalid_client', 'invalid_scope', 'insufficient_scope', 'org_internal'].includes(searchParams.reason ?? '')}
+          backfillEnabled={isGmailBackfillEnabled()}
+          allowAllHistory={isGmailBackfillAllHistoryAllowed()}
+          archivedSyncEnabled={isGmailArchivedSyncEnabled()}
         />
 
         <NotionIntegrationCard

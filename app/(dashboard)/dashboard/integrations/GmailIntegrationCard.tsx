@@ -27,6 +27,17 @@ export type GmailMetadata = {
   senderFilter?: string[]
   excludeFilter?: string[]
   maxMessages?: number
+  lastSuccessfulImportAt?: string
+  lastSyncStatus?: 'completed' | 'partial' | 'failed'
+  lastSyncStats?: {
+    processed: number
+    created: number
+    skippedDuplicates: number
+    failed: number
+    hasMore: boolean
+  }
+  backfillCursor?: unknown
+  backfillStatus?: string
 }
 
 interface GmailIntegrationCardProps {
@@ -40,6 +51,9 @@ interface GmailIntegrationCardProps {
   missingEnv?: string[]
   betaGated?: boolean
   betaUser?: boolean
+  backfillEnabled?: boolean
+  allowAllHistory?: boolean
+  archivedSyncEnabled?: boolean
 }
 
 const statTileClass = 'rounded-xl border border-warm/60 bg-cream px-3.5 py-2.5'
@@ -55,8 +69,13 @@ export default function GmailIntegrationCard({
   missingEnv = [],
   betaGated = false,
   betaUser = false,
+  backfillEnabled = true,
+  allowAllHistory = false,
+  archivedSyncEnabled = false,
 }: GmailIntegrationCardProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [backfillDays, setBackfillDays] = useState('90')
+  const [includeArchived, setIncludeArchived] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -118,6 +137,26 @@ export default function GmailIntegrationCard({
                 <p className="mb-0.5 text-xs text-muted">Labels</p>
                 <p className="font-medium text-ink">{selectedLabelSummary || 'Configured labels'}</p>
               </div>
+              {metadata?.lastSyncStats && (
+                <div className={`${statTileClass} col-span-2`} data-testid="gmail-sync-stats">
+                  <p className="mb-0.5 text-xs text-muted">Last sync results</p>
+                  <p className="font-medium text-ink">Processed {metadata.lastSyncStats.processed}, created {metadata.lastSyncStats.created}, skipped duplicates {metadata.lastSyncStats.skippedDuplicates}, failed {metadata.lastSyncStats.failed}</p>
+                  {(metadata.lastSyncStatus === 'partial' || metadata.lastSyncStats.failed > 0) && <p className="mt-1 text-xs text-amber-700">Gmail sync completed partially. Some emails were skipped or failed. View details.</p>}
+                </div>
+              )}
+              {backfillEnabled && (
+                <div className={`${statTileClass} col-span-2 space-y-2`}>
+                  <label className="block text-xs text-muted" htmlFor="gmail-backfill-range">Backfill history</label>
+                  <select id="gmail-backfill-range" value={backfillDays} onChange={(event) => setBackfillDays(event.target.value)} className="w-full rounded-lg border border-warm bg-white px-3 py-2 text-sm text-ink">
+                    <option value="30">Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="365">Last 1 year</option>
+                    {allowAllHistory && <option value="all">All available history</option>}
+                  </select>
+                  {archivedSyncEnabled && <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} /> Include archived emails</label>}
+                  <p className="text-xs text-muted">Large Gmail backfills can take multiple runs due to API and processing limits.</p>
+                </div>
+              )}
             </div>
           )}
           {connected && createdAt && (
@@ -137,8 +176,12 @@ export default function GmailIntegrationCard({
                     resultLabel="threads"
                     hideReset
                     onNeedsReconfigure={() => setIsOpen(true)}
-                    label="Sync Gmail"
+                    requestBody={{ mode: 'recent' }}
+                    label="Sync recent emails"
                   />
+                )}
+                {configured && backfillEnabled && (
+                  <SyncButton endpoint="/api/integrations/gmail/backfill" resultLabel="emails" hideReset requestBody={{ lookbackDays: backfillDays === 'all' ? null : Number(backfillDays), includeArchived }} label={metadata?.backfillCursor ? 'Continue backfill' : 'Backfill history'} />
                 )}
                 <button type="button" onClick={() => setIsOpen(true)} className={integrationActionClass}>
                   <Settings className="h-3.5 w-3.5" />

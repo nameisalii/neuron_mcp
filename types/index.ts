@@ -137,6 +137,34 @@ export interface GmailSyncMetadata {
   threadCount?: number
   status?: string
   privacy?: 'personal'
+  lastSyncStatus?: 'completed' | 'partial' | 'failed'
+  lastSyncError?: string | null
+  lastSyncStats?: GmailSyncStats
+  backfillCursor?: GmailBackfillCursor | null
+  backfillStatus?: 'running' | 'partial' | 'completed' | 'failed'
+  backfillStartedAt?: string
+  backfillFinishedAt?: string
+}
+
+export interface GmailSyncStats {
+  mode: 'recent' | 'backfill'
+  fetched: number
+  processed: number
+  created: number
+  updated: number
+  skippedDuplicates: number
+  skippedNoContent: number
+  skippedUnsupported: number
+  failed: number
+  hasMore: boolean
+  errorsSummary: Record<string, number>
+}
+
+export interface GmailBackfillCursor {
+  lookbackDays: number | null
+  includeArchived: boolean
+  pageTokens: Record<string, string>
+  completedSources: string[]
 }
 
 export interface GmailLabelInfo {

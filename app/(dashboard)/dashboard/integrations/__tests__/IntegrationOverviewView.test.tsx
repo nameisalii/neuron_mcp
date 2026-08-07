@@ -92,6 +92,41 @@ describe('IntegrationOverviewView', () => {
     expect(screen.getByText('Launch update')).toBeInTheDocument()
   })
 
+  it('searches synced Gmail memory across titles, content, owners, and labels', () => {
+    render(<IntegrationOverviewView data={makeData({
+      totalCount: 2,
+      items: [
+        ...makeData().items,
+        {
+          ...makeData().items[0],
+          id: 'ki-2',
+          title: 'HRT interview update',
+          content: 'Hudson River Trading recruiter shared next steps.',
+          owner: 'recruiter@example.com',
+          sourceExternalId: 'thread-2',
+        },
+      ],
+    })} />)
+
+    const search = screen.getByRole('searchbox', { name: 'Search synced Gmail memory' })
+    expect(search).toHaveAttribute('placeholder', 'Search people, companies, subjects, interviews, or keywords')
+
+    fireEvent.change(search, { target: { value: 'Hudson River Trading' } })
+    expect(screen.getByText('HRT interview update')).toBeInTheDocument()
+    expect(screen.queryByText('Launch update')).not.toBeInTheDocument()
+    expect(screen.getByText('1 matching item')).toBeInTheDocument()
+
+    fireEvent.change(search, { target: { value: 'missing company' } })
+    expect(screen.getByText('No matching Gmail memory')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(screen.getByText('Launch update')).toBeInTheDocument()
+  })
+
+  it('does not show the Gmail search bar on other integration overviews', () => {
+    render(<IntegrationOverviewView data={makeData({ source: 'slack', title: 'Slack Overview' })} />)
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+  })
+
   it('renders a clean empty state when no items are synced', () => {
     render(<IntegrationOverviewView data={makeData({ items: [] })} />)
 

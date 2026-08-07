@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { ArrowLeft, BookmarkPlus, CheckCircle, ChevronRight, ExternalLink, FileText, Truck } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, CheckCircle, ChevronRight, ExternalLink, FileText, Search, Truck, X } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { BrandTile, type BrandKey } from '@/components/BrandLogo'
 import KnowledgeCard from '@/components/KnowledgeCard'
@@ -77,6 +77,7 @@ export default function IntegrationOverviewView({ data }: Props) {
   const [isDatatruckSetupOpen, setIsDatatruckSetupOpen] = useState(false)
   const [isAddKnowledgeOpen, setIsAddKnowledgeOpen] = useState(false)
   const [connectSourceKey, setConnectSourceKey] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const initialEndpointMapping = useMemo(() => Object.fromEntries(
     (data.datatruckCoverage ?? [])
       .filter((endpoint) => endpoint.configuredBy === 'metadata' && endpoint.path)
@@ -104,7 +105,17 @@ export default function IntegrationOverviewView({ data }: Props) {
     active: filter.key === data.filter,
   }))
   const activeCategory = filterOptions.find((filter) => filter.active)?.category
-  const visibleItems = activeCategory ? items.filter((item) => item.category === activeCategory) : items
+  const categoryItems = activeCategory ? items.filter((item) => item.category === activeCategory) : items
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
+  const visibleItems = normalizedSearch
+    ? categoryItems.filter((item) => [
+      item.title,
+      item.content,
+      item.owner,
+      item.category,
+      ...(item.sourceLabels ?? []),
+    ].filter(Boolean).some((value) => String(value).toLocaleLowerCase().includes(normalizedSearch)))
+    : categoryItems
   const brand = asBrandKey(data.source)
   const summaryCards = data.summaryCards.map((card) => {
     const normalized = card.label.toLowerCase()
@@ -564,6 +575,40 @@ export default function IntegrationOverviewView({ data }: Props) {
         </section>
       )}
 
+      {data.source === 'gmail' && items.length > 0 && (
+        <section aria-label="Search Gmail memory">
+          <label htmlFor="gmail-memory-search" className="mb-2 block text-sm font-semibold text-gray-900">
+            Search synced Gmail memory
+          </label>
+          <div className="relative max-w-2xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+            <input
+              id="gmail-memory-search"
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search people, companies, subjects, interviews, or keywords"
+              className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-10 text-sm text-gray-900 shadow-sm outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear Gmail search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          {normalizedSearch && (
+            <p className="mt-2 text-xs text-gray-500" aria-live="polite">
+              {visibleItems.length} matching item{visibleItems.length === 1 ? '' : 's'}
+            </p>
+          )}
+        </section>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {filterOptions.map((filter) => (
           <Link
@@ -632,6 +677,16 @@ export default function IntegrationOverviewView({ data }: Props) {
             )
           })}
         </div>
+      ) : normalizedSearch ? (
+        <Card padding="md">
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold text-gray-900">No matching Gmail memory</h2>
+            <p className="text-sm text-gray-500">Try a person, company, email subject, or a broader keyword.</p>
+            <button type="button" onClick={() => setSearchQuery('')} className="text-sm font-medium text-indigo-600 hover:text-indigo-700">
+              Clear search
+            </button>
+          </div>
+        </Card>
       ) : (
         <Card padding="md">
           <div className="space-y-3">

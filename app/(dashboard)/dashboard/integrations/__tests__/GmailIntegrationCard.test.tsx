@@ -60,7 +60,7 @@ describe('GmailIntegrationCard', () => {
 
     expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/gmail')
     expect(screen.getByRole('button', { name: 'Configure' })).toBeInTheDocument()
-    expect(screen.getByText('Sync Gmail')).toBeInTheDocument()
+    expect(screen.getByText('Sync recent emails')).toBeInTheDocument()
     expect(screen.getByText('Nuclear Reset')).toBeInTheDocument()
     expect(screen.getByText('Connected')).toBeInTheDocument()
   })
@@ -94,7 +94,7 @@ describe('GmailIntegrationCard', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('Sync Gmail'))
+    fireEvent.click(screen.getByText('Sync recent emails'))
     fireEvent.click(await screen.findByText('Change Gmail filters'))
 
     await waitFor(() => {

@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { syncGmail } from '@/lib/gmail/sync'
 import { trackEvent } from '@/lib/activity'
 import type { GmailSyncMetadata } from '@/types'
+import { Prisma } from '@prisma/client'
+import { isGmailArchivedSyncEnabled, isGmailBackfillAllHistoryAllowed } from '@/lib/gmail/config'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 const SYNC_COOLDOWN_SECONDS = 60
@@ -49,7 +51,17 @@ function emptyResult(error: string) {
   }, { status: 400 })
 }
 
-export async function POST() {
+export async function handleGmailSync(request?: Request, forcedMode?: 'recent' | 'backfill') {
+  const body = await request?.json().catch(() => ({})) ?? {} as {
+    mode?: 'recent' | 'backfill'
+    maxMessages?: number
+    lookbackDays?: number | null
+    includeArchived?: boolean
+  }
+  const mode = forcedMode ?? body.mode ?? 'recent'
+  if (mode === 'backfill' && body.lookbackDays === null && !isGmailBackfillAllHistoryAllowed()) {
+    return NextResponse.json({ error: 'All-history Gmail backfill is disabled' }, { status: 400 })
+  }
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -82,7 +94,7 @@ export async function POST() {
   const secondsSinceSync = integration.lastSyncAt
     ? (Date.now() - integration.lastSyncAt.getTime()) / 1000
     : Infinity
-  if (secondsSinceSync < SYNC_COOLDOWN_SECONDS) {
+  if (mode === 'recent' && secondsSinceSync < SYNC_COOLDOWN_SECONDS) {
     return NextResponse.json({
       success: false,
       selectedLabels: metadata.selectedLabels ?? [],
@@ -138,6 +150,10 @@ export async function POST() {
       syncedByName: member.displayName,
       metadata,
       lastSyncAt: integration.lastSyncAt,
+      mode,
+      lookbackDays: body.lookbackDays,
+      maxMessages: body.maxMessages,
+      includeArchived: isGmailArchivedSyncEnabled() && body.includeArchived === true,
     })
 
     const syncStatusData = {
@@ -219,10 +235,26 @@ export async function POST() {
       diagnosticRecentCount: result.diagnosticRecentCount ?? null,
       diagnosticInboxCount: result.diagnosticInboxCount ?? null,
       diagnosticSentCount: result.diagnosticSentCount ?? null,
+      stats: result.stats,
+      hasMore: result.hasMore,
+      nextPageToken: result.nextPageToken,
+      errorsSummary: result.errorsSummary,
       message: result.message,
     })
   } catch (err) {
     console.error('[gmail/sync]', err)
+    await prisma.integration.update({
+      where: { workspaceId_type: { workspaceId, type: 'gmail' } },
+      data: {
+        metadata: {
+          ...metadata,
+          lastSyncAttemptAt: new Date().toISOString(),
+          lastSyncStatus: 'failed',
+          lastSyncError: err instanceof Error ? err.message.slice(0, 300) : 'Sync failed',
+          ...(mode === 'backfill' ? { backfillStatus: 'failed' } : {}),
+        } as unknown as Prisma.InputJsonValue,
+      },
+    }).catch(() => null)
     await prisma.syncStatus.upsert({
       where: { workspaceId_integration: { workspaceId, integration: 'gmail' } },
       create: {
@@ -285,4 +317,8 @@ export async function POST() {
       error: err instanceof Error ? err.message : 'Sync failed',
     }, { status: 500 })
   }
+}
+
+export async function POST(request?: Request) {
+  return handleGmailSync(request, 'recent')
 }

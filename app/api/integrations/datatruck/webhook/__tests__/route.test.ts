@@ -31,6 +31,7 @@ function request(body: unknown, secret?: string) {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  delete process.env.DATATRUCK_WEBHOOK_SECRET
   mockFindConnector.mockResolvedValue({ id: 'connector-1' } as never)
 })
 

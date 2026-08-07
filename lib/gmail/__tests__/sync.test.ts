@@ -2,7 +2,7 @@
 import { syncGmail, MAX_MESSAGES_PER_SYNC, MESSAGE_BATCH_SIZE } from '../sync'
 import { sleep, buildSearchQuery } from '../api'
 import { generateEmbedding } from '@/lib/openai'
-import { upsertEmbeddingInNamespace, deleteEmbeddingsInNamespace } from '@/lib/pinecone'
+import { upsertEmbeddingInNamespace } from '@/lib/pinecone'
 import { prisma } from '@/lib/db'
 import { extractKnowledgeDetailed } from '@/lib/extraction/extractor'
 import { trackEvent } from '@/lib/activity'
@@ -157,7 +157,6 @@ beforeEach(() => {
   jest.clearAllMocks()
   ;(generateEmbedding as jest.Mock).mockResolvedValue(new Array(1536).fill(0))
   ;(upsertEmbeddingInNamespace as jest.Mock).mockResolvedValue(undefined)
-  ;(deleteEmbeddingsInNamespace as jest.Mock).mockResolvedValue(undefined)
   ;(extractKnowledgeDetailed as jest.Mock).mockResolvedValue({
     items: [],
     diagnostics: {
@@ -330,7 +329,7 @@ describe('syncGmail thread grouping and chunks', () => {
     expect(data).toMatchObject({
       workspaceId: WORKSPACE_ID,
       blockType: 'email_message',
-      pineconeId: expect.stringContaining('gmail'),
+      pineconeId: null,
     })
     expect(data.metadata).toMatchObject({
       threadId: 'thread_a',
@@ -594,9 +593,9 @@ describe('syncGmail limits and attribution', () => {
 
     const result = await syncGmail(baseInput())
 
-    expect(result.messagesProcessed).toBe(MAX_MESSAGES_PER_SYNC)
+    expect(result.messagesProcessed).toBe(100)
     expect(result.capped).toBe(true)
-    expect(result.message).toMatch(/more emails match/i)
+    expect(result.message).toMatch(/more emails are available/i)
   }, 30_000)
 
   it('sleeps between message batches to respect Gmail rate limits', async () => {
@@ -695,16 +694,15 @@ describe('syncGmail limits and attribution', () => {
     expect(result.lastSuccessfulImportAt).toEqual(expect.any(String))
   })
 
-  it('replaces stale chunks and removes their personal-namespace vectors on re-sync', async () => {
+  it('preserves prior chunks and skips the same Gmail message id on re-sync', async () => {
     ;(prisma.emailChunk.findMany as jest.Mock).mockResolvedValue([
-      { pineconeId: 'old_vec_1' },
-      { pineconeId: null },
+      { metadata: { messageId: 'msg_1' } },
     ])
     setupGmailApi([{ id: 'msg_1', threadId: 'thread_a' }])
 
     await syncGmail(baseInput())
 
-    expect(deleteEmbeddingsInNamespace).toHaveBeenCalledWith(['old_vec_1'], PERSONAL_NAMESPACE)
-    expect(prisma.emailChunk.deleteMany).toHaveBeenCalled()
+    expect(prisma.emailChunk.deleteMany).not.toHaveBeenCalled()
+    expect(prisma.emailChunk.create).not.toHaveBeenCalled()
   })
 })

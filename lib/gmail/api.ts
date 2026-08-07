@@ -29,6 +29,7 @@ export interface GmailMessageFull {
   labelIds?: string[]
   internalDate?: string
   payload?: GmailMessagePart & { headers?: GmailHeader[] }
+  snippet?: string
 }
 
 export interface ParsedEmailMessage {
@@ -119,12 +120,16 @@ export function buildSearchQuery(
 export interface MessageIdPage {
   ids: Array<{ id: string; threadId: string }>
   capped: boolean
+  nextPageToken: string | null
+  hasMore: boolean
 }
 
 export interface ListMessageIdsOptions {
   labelIds?: string[]
   query?: string
   cap: number
+  pageSize?: number
+  pageToken?: string | null
 }
 
 // Collects message ids for one Gmail search, paginating until done or `cap` ids are gathered.
@@ -133,7 +138,7 @@ export async function listMessageIds(
   options: ListMessageIdsOptions,
 ): Promise<MessageIdPage> {
   const ids: Array<{ id: string; threadId: string }> = []
-  let pageToken: string | undefined
+  let pageToken: string | undefined = options.pageToken || undefined
   let capped = false
   const labelIds = options.labelIds?.map((labelId) => labelId.trim()).filter(Boolean) ?? []
   const query = options.query?.trim() ?? ''
@@ -142,7 +147,7 @@ export async function listMessageIds(
   do {
     const params = new URLSearchParams({
       q: query,
-      maxResults: String(Math.min(PAGE_SIZE, cap - ids.length)),
+      maxResults: String(Math.min(options.pageSize ?? PAGE_SIZE, cap - ids.length)),
       includeSpamTrash: 'false',
     })
     for (const labelId of labelIds) params.append('labelIds', labelId)
@@ -163,7 +168,7 @@ export async function listMessageIds(
     }
   } while (pageToken)
 
-  return { ids, capped }
+  return { ids, capped, nextPageToken: pageToken ?? null, hasMore: Boolean(pageToken) }
 }
 
 export async function listRecentMessageIds(
@@ -241,7 +246,7 @@ function getHeader(headers: GmailHeader[], name: string): string {
 export function parseMessage(raw: GmailMessageFull): ParsedEmailMessage | null {
   if (!raw.payload) return null
   const headers = raw.payload.headers ?? []
-  const body = extractBody(raw.payload)
+  const body = extractBody(raw.payload) || raw.snippet?.trim() || ''
   if (!body) return null
 
   const dateMs = raw.internalDate

@@ -16,8 +16,16 @@ export function getGmailDefaultLabels(): string[] {
 }
 
 export function getGmailLookbackDays(): number {
-  return positiveInt('GMAIL_LOOKBACK_DAYS', 30, 3650)
+  return positiveInt('GMAIL_SYNC_LOOKBACK_DAYS', positiveInt('GMAIL_LOOKBACK_DAYS', 30, 3650), 3650)
 }
+
+export function getGmailSyncMaxMessages(): number { return positiveInt('GMAIL_SYNC_MAX_MESSAGES_PER_RUN', 100, 500) }
+export function getGmailBackfillMaxMessages(): number { return positiveInt('GMAIL_BACKFILL_MAX_MESSAGES_PER_RUN', 500, 500) }
+export function getGmailBackfillPageSize(): number { return positiveInt('GMAIL_BACKFILL_PAGE_SIZE', 50, 100) }
+export function getGmailBackfillDefaultLookbackDays(): number { return positiveInt('GMAIL_BACKFILL_DEFAULT_LOOKBACK_DAYS', 90, 3650) }
+export function isGmailBackfillEnabled(): boolean { return process.env.GMAIL_BACKFILL_ENABLED !== 'false' }
+export function isGmailBackfillAllHistoryAllowed(): boolean { return process.env.GMAIL_BACKFILL_ALLOW_ALL_HISTORY === 'true' }
+export function isGmailArchivedSyncEnabled(): boolean { return process.env.GMAIL_SYNC_INCLUDE_ARCHIVED === 'true' }
 
 export function getGmailMaxThreadsPerRun(): number {
   return positiveInt('GMAIL_MAX_THREADS_PER_RUN', 100, 500)

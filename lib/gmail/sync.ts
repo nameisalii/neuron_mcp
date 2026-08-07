@@ -2,12 +2,12 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { generateEmbedding } from '@/lib/openai'
-import { upsertEmbeddingInNamespace, deleteEmbeddingsInNamespace } from '@/lib/pinecone'
+import { upsertEmbeddingInNamespace } from '@/lib/pinecone'
 import { extractKnowledgeDetailed, type ExtractionDiagnostics } from '@/lib/extraction/extractor'
 import { trackEvent } from '@/lib/activity'
 import { escapeXml } from '@/lib/utils'
-import { getGmailNamespace } from './config'
-import type { GmailSyncMetadata, SlackMessage } from '@/types'
+import { getGmailNamespace, getGmailSyncMaxMessages, getGmailBackfillMaxMessages, getGmailBackfillPageSize } from './config'
+import type { GmailBackfillCursor, GmailSyncMetadata, GmailSyncStats, SlackMessage } from '@/types'
 import {
   buildSearchQuery,
   getAccessToken,
@@ -46,6 +46,10 @@ export interface GmailSyncInput {
   syncedByName: string
   metadata: GmailSyncMetadata
   lastSyncAt?: Date | null
+  mode?: 'recent' | 'backfill'
+  lookbackDays?: number | null
+  maxMessages?: number
+  includeArchived?: boolean
 }
 
 export interface GmailSyncResult {
@@ -56,6 +60,8 @@ export interface GmailSyncResult {
   aiExtractedKnowledgeItems: number
   fallbackKnowledgeItems: number
   chunksEmbedded: number
+  skippedDuplicates?: number
+  embeddingFailures?: number
   extractionDiagnostics: GmailExtractionDiagnostics
   deleted: number
   skipped: number
@@ -88,6 +94,10 @@ export interface GmailSyncResult {
   diagnosticInboxCount?: number
   diagnosticSentCount?: number
   message?: string
+  stats?: GmailSyncStats
+  hasMore?: boolean
+  nextPageToken?: GmailBackfillCursor | null
+  errorsSummary?: Record<string, number>
 }
 
 export interface GmailExtractionDiagnostics extends ExtractionDiagnostics {
@@ -155,6 +165,7 @@ async function collectMessages(
   accessToken: string,
   metadata: GmailSyncMetadata,
   query: string,
+  options: { mode: 'recent' | 'backfill'; maxMessages: number; lookbackDays: number | null; includeArchived: boolean; cursor?: GmailBackfillCursor | null },
 ): Promise<{
   messages: ParsedEmailMessage[]
   skipped: number
@@ -162,28 +173,41 @@ async function collectMessages(
   messagesFoundBeforeFiltering: number
   labelIdsUsed: string[]
   skippedReasons: Record<string, number>
+  cursor: GmailBackfillCursor | null
 }> {
   const seen = new Map<string, { id: string; threadId: string }>()
   const seenThreads = new Set<string>()
   let capped = false
-  const maxMessages = Math.max(1, Math.min(metadata.maxMessages ?? MAX_MESSAGES_PER_SYNC, MAX_MESSAGES_PER_SYNC))
+  const maxMessages = Math.max(1, Math.min(options.maxMessages, MAX_MESSAGES_PER_SYNC))
   let messagesFoundBeforeFiltering = 0
   const skippedReasons: Record<string, number> = {}
   const labelIdsUsed = resolveSelectedLabelIds(metadata.selectedLabels)
+  const sources = options.includeArchived ? ['ARCHIVED'] : labelIdsUsed
+  const pageTokens: Record<string, string> = { ...(options.cursor?.pageTokens ?? {}) }
+  const completedSources = new Set(options.cursor?.completedSources ?? [])
+  const perSourceBudget = Math.max(1, Math.ceil(maxMessages / Math.max(1, sources.length)))
 
-  for (const labelId of labelIdsUsed) {
+  for (const labelId of sources) {
+    if (completedSources.has(labelId)) continue
     if (seen.size >= maxMessages) {
       capped = true
       break
     }
     const page = await listMessageIds(accessToken, {
-      labelIds: [labelId],
+      labelIds: labelId === 'ARCHIVED' ? undefined : [labelId],
       query,
-      cap: maxMessages - seen.size,
+      cap: Math.min(perSourceBudget, maxMessages - seen.size),
+      pageSize: options.mode === 'backfill' ? getGmailBackfillPageSize() : undefined,
+      pageToken: pageTokens[labelId],
     })
     messagesFoundBeforeFiltering += page.ids.length
     for (const ref of page.ids) seen.set(ref.id, ref)
-    if (page.capped) capped = true
+    if (page.nextPageToken) pageTokens[labelId] = page.nextPageToken
+    else {
+      delete pageTokens[labelId]
+      completedSources.add(labelId)
+    }
+    if (page.hasMore) capped = true
   }
 
   const refs = [...seen.values()]
@@ -207,14 +231,23 @@ async function collectMessages(
           skippedReasons.parse_failed = (skippedReasons.parse_failed ?? 0) + 1
         }
       } catch (err) {
-        console.error(`[gmail/sync] message ${ref.id} failed, skipping`, err)
+        console.error('[gmail/sync] message fetch failed; continuing', err instanceof GmailApiError ? { status: err.status } : { type: 'unknown' })
         skipped++
         skippedReasons.message_fetch_failed = (skippedReasons.message_fetch_failed ?? 0) + 1
       }
     }
   }
 
-  return { messages, skipped, capped, messagesFoundBeforeFiltering, labelIdsUsed, skippedReasons }
+  const hasMore = completedSources.size < sources.length || Object.keys(pageTokens).length > 0
+  return {
+    messages, skipped, capped: capped || hasMore, messagesFoundBeforeFiltering, labelIdsUsed, skippedReasons,
+    cursor: hasMore ? {
+      lookbackDays: options.lookbackDays,
+      includeArchived: options.includeArchived,
+      pageTokens,
+      completedSources: [...completedSources],
+    } : null,
+  }
 }
 
 function groupByThread(messages: ParsedEmailMessage[]): Map<string, ParsedEmailMessage[]> {
@@ -298,7 +331,6 @@ async function createFallbackKnowledgeItem(
 
   const contentHash = `gmail:${input.syncedBy}:${threadId}`.slice(0, 100)
   try {
-    const embedding = await generateEmbedding(boundedEmailText(content, MAX_EMAIL_EMBEDDING_CHARS))
     const dbItem = await prisma.knowledgeItem.create({
       data: {
         workspaceId: input.workspaceId,
@@ -319,6 +351,7 @@ async function createFallbackKnowledgeItem(
       select: { id: true },
     })
     try {
+      const embedding = await generateEmbedding(boundedEmailText(content, MAX_EMAIL_EMBEDDING_CHARS))
       await upsertEmbeddingInNamespace(
         dbItem.id,
         embedding,
@@ -331,10 +364,9 @@ async function createFallbackKnowledgeItem(
       })
       return 1
     } catch (err) {
-      await prisma.knowledgeItem.delete({ where: { id: dbItem.id } }).catch(() => null)
-      diagnostics.fallbackCreateFailed++
-      console.error('[gmail/sync] fallback vector upsert failed', err)
-      return 0
+      diagnostics.embeddingUpsertFailed++
+      console.error('[gmail/sync] fallback embedding failed; source record preserved', err instanceof Error ? err.name : 'unknown')
+      return 1
     }
   } catch (err) {
     diagnostics.fallbackCreateFailed++
@@ -354,6 +386,8 @@ async function syncThread(
   deleted: number
   chunksCreated: number
   chunksEmbedded: number
+  skippedDuplicates: number
+  embeddingFailures: number
   extractionDiagnostics: GmailExtractionDiagnostics
 }> {
   const { workspaceId, syncedBy, metadata } = input
@@ -384,32 +418,37 @@ async function syncThread(
     },
   })
 
-  // Replace stale chunks (and their personal-namespace vectors) on re-sync
-  const staleChunks = await prisma.emailChunk.findMany({
+  // Preserve prior chunks. A bounded page may contain only part of a thread,
+  // so replacing the thread here used to discard messages from earlier runs.
+  const existingChunks = await prisma.emailChunk.findMany({
     where: { emailThreadId: dbThread.id },
-    select: { pineconeId: true },
+    select: { metadata: true },
   })
-  const staleVectorIds = staleChunks.flatMap((c) => (c.pineconeId ? [c.pineconeId] : []))
-  await deleteEmbeddingsInNamespace(staleVectorIds, personalNamespace)
-  await prisma.emailChunk.deleteMany({ where: { emailThreadId: dbThread.id } })
-  let deleted = staleChunks.length
+  const existingMessageIds = new Set(existingChunks.flatMap((chunk) => {
+    const metadata = chunk.metadata as { messageId?: unknown } | null
+    return typeof metadata?.messageId === 'string' ? [metadata.messageId] : []
+  }))
+  const deleted = 0
   let chunksCreated = 0
   let chunksEmbedded = 0
+  let skippedDuplicates = 0
+  let embeddingFailures = 0
 
   for (const [position, message] of messages.entries()) {
+    if (existingMessageIds.has(message.messageId)) {
+      skippedDuplicates++
+      continue
+    }
     const content = escapeXml(message.body)
-    const pineconeId = `${workspaceId}-gmail-${threadId}-${position}`
-    const embedding = await generateEmbedding(boundedEmailText(content, MAX_EMAIL_EMBEDDING_CHARS))
-    await upsertEmbeddingInNamespace(pineconeId, embedding, { workspaceId, source: 'gmail' }, personalNamespace)
-    chunksEmbedded++
+    const pineconeId = `${workspaceId}-gmail-${message.messageId}`
 
-    await prisma.emailChunk.create({
+    const chunk = await prisma.emailChunk.create({
       data: {
         emailThreadId: dbThread.id,
         workspaceId,
         content,
         blockType: 'email_message',
-        position,
+        position: existingChunks.length + position,
         metadata: {
           threadId,
           messageId: message.messageId,
@@ -423,7 +462,7 @@ async function syncThread(
           threadPosition: position,
           url,
         } as Prisma.InputJsonValue,
-        pineconeId,
+        pineconeId: null,
         labels: [] as Prisma.InputJsonValue,
         labeledBy: [] as Prisma.InputJsonValue,
         // Email is private by default — only the syncing user can see it
@@ -432,7 +471,22 @@ async function syncThread(
       },
     })
     chunksCreated++
+    try {
+      const embedding = await generateEmbedding(boundedEmailText(content, MAX_EMAIL_EMBEDDING_CHARS))
+      await upsertEmbeddingInNamespace(pineconeId, embedding, { workspaceId, source: 'gmail' }, personalNamespace)
+      await prisma.emailChunk.update?.({ where: { id: chunk.id }, data: { pineconeId } })
+      chunksEmbedded++
+    } catch {
+      // The source record is still searchable by metadata/content and can be
+      // embedded by a later run. Never lose mail because an AI service failed.
+      embeddingFailures++
+    }
   }
+
+  await prisma.emailThread.update?.({
+    where: { id: dbThread.id },
+    data: { messageCount: existingChunks.length + chunksCreated },
+  })
 
   // Extracted knowledge inherits the same personal privacy as the chunks
   const extractionMessages: SlackMessage[] = messages.map((m) => ({
@@ -459,12 +513,19 @@ async function syncThread(
     deleted,
     chunksCreated,
     chunksEmbedded,
+    skippedDuplicates,
+    embeddingFailures,
     extractionDiagnostics,
   }
 }
 
 export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult> {
   const { workspaceId, syncedBy, syncedByName, metadata, lastSyncAt } = input
+  const mode = input.mode ?? 'recent'
+  const lookbackDays = input.lookbackDays === undefined
+    ? (mode === 'recent' ? 30 : 90)
+    : input.lookbackDays
+  const maxMessages = input.maxMessages ?? (mode === 'backfill' ? getGmailBackfillMaxMessages() : getGmailSyncMaxMessages())
 
   if (!metadata?.selectedLabels?.length) {
     throw new Error('Gmail is not configured — please configure which emails to sync first')
@@ -478,9 +539,11 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
   // used as the query boundary after an empty or failed run.
   const syncAttemptAt = new Date()
   const configuredSyncFrom = metadata.syncFrom ? new Date(metadata.syncFrom) : null
-  const windowStart = configuredSyncFrom && !Number.isNaN(configuredSyncFrom.getTime())
+  const windowStart = lookbackDays === null
+    ? null
+    : configuredSyncFrom && !Number.isNaN(configuredSyncFrom.getTime()) && input.lookbackDays === undefined
     ? configuredSyncFrom
-    : new Date(Date.now() - metadata.timeWindow * DAY_MS)
+    : new Date(Date.now() - lookbackDays * DAY_MS)
   const previousSuccessfulImportAt = metadata.lastSuccessfulImportAt
     ? new Date(metadata.lastSuccessfulImportAt)
     : null
@@ -488,14 +551,15 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
     && !Number.isNaN(previousSuccessfulImportAt.getTime())
     ? previousSuccessfulImportAt
     : null
-  const afterDate = validPreviousSuccessfulImportAt && validPreviousSuccessfulImportAt > windowStart
+  const afterDate = mode === 'recent' && windowStart && validPreviousSuccessfulImportAt && validPreviousSuccessfulImportAt > windowStart
     ? validPreviousSuccessfulImportAt
     : windowStart
-  const query = buildSearchQuery(afterDate, metadata.senderFilter ?? [], metadata.excludeFilter ?? [])
+  const query = `${afterDate ? buildSearchQuery(afterDate, metadata.senderFilter ?? [], metadata.excludeFilter ?? []) : ''} -in:spam -in:trash`.trim()
   const resolvedSelectedLabels = resolveSelectedLabelIds(metadata.selectedLabels)
   const normalizedMetadata: GmailSyncMetadata = {
     ...metadata,
     selectedLabels: resolvedSelectedLabels,
+    maxMessages,
   }
 
   const personalNamespace = getGmailNamespace(workspaceId, syncedBy)
@@ -507,7 +571,18 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
     messagesFoundBeforeFiltering,
     labelIdsUsed,
     skippedReasons,
-  } = await collectMessages(accessToken, normalizedMetadata, query)
+    cursor,
+  } = await collectMessages(accessToken, normalizedMetadata, query, {
+    mode,
+    maxMessages,
+    includeArchived: Boolean(input.includeArchived),
+    lookbackDays,
+    cursor: mode === 'backfill'
+      && metadata.backfillCursor?.lookbackDays === lookbackDays
+      && metadata.backfillCursor.includeArchived === Boolean(input.includeArchived)
+      ? metadata.backfillCursor
+      : null,
+  })
   const threads = groupByThread(messages)
 
   let threadsProcessed = 0
@@ -518,6 +593,8 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
   let deleted = 0
   let chunksCreated = 0
   let chunksEmbedded = 0
+  let skippedDuplicates = 0
+  let embeddingFailures = 0
   const extractionDiagnostics = emptyGmailExtractionDiagnostics()
 
   for (const [threadId, threadMessages] of threads) {
@@ -528,11 +605,13 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
       deleted += result.deleted
       chunksCreated += result.chunksCreated
       chunksEmbedded += result.chunksEmbedded
+      skippedDuplicates += result.skippedDuplicates
+      embeddingFailures += result.embeddingFailures
       addExtractionDiagnostics(extractionDiagnostics, result.extractionDiagnostics)
       threadsProcessed++
       messagesProcessed += threadMessages.length
     } catch (err) {
-      console.error(`[gmail/sync] thread ${threadId} failed, skipping`, err)
+      console.error('[gmail/sync] thread processing failed; continuing', err instanceof Error ? err.name : 'unknown')
       threadsFailed++
       skippedReasons.thread_failed = (skippedReasons.thread_failed ?? 0) + 1
     }
@@ -545,6 +624,19 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
     ? lastSyncAttemptAt
     : metadata.lastSuccessfulImportAt ?? null
   const lastSyncAtAfterRun = lastSyncAttemptAt
+  const stats: GmailSyncStats = {
+    mode,
+    fetched: messagesFoundBeforeFiltering,
+    processed: messagesProcessed,
+    created: chunksCreated,
+    updated: 0,
+    skippedDuplicates,
+    skippedNoContent: skippedReasons.parse_failed ?? 0,
+    skippedUnsupported: 0,
+    failed: threadsFailed + (skippedReasons.message_fetch_failed ?? 0) + embeddingFailures,
+    hasMore: Boolean(cursor),
+    errorsSummary: { ...skippedReasons, ...(embeddingFailures ? { embedding_failed: embeddingFailures } : {}) },
+  }
 
   await prisma.integration.update({
     where: { workspaceId_type: { workspaceId, type: 'gmail' } },
@@ -553,8 +645,17 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
       metadata: {
         ...normalizedMetadata,
         lastSyncAttemptAt,
+        lastSyncStatus: stats.failed > 0 || stats.hasMore ? 'partial' : 'completed',
+        lastSyncError: null,
+        lastSyncStats: stats,
+        ...(mode === 'backfill' ? {
+          backfillCursor: cursor,
+          backfillStatus: cursor ? 'partial' : 'completed',
+          backfillStartedAt: metadata.backfillStartedAt ?? lastSyncAttemptAt,
+          ...(!cursor ? { backfillFinishedAt: lastSyncAttemptAt } : {}),
+        } : {}),
         ...(lastSuccessfulImportAt ? { lastSuccessfulImportAt } : {}),
-      } as Prisma.InputJsonValue,
+      } as unknown as Prisma.InputJsonValue,
     },
   })
 
@@ -620,7 +721,7 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
       skippedReasons,
       syncFrom: metadata.syncFrom ?? null,
       configuredSyncFrom: metadata.syncFrom ?? null,
-      effectiveQueryStart: afterDate.toISOString(),
+      effectiveQueryStart: afterDate?.toISOString() ?? null,
       lastSyncAtBeforeRun,
       lastSyncAtAfterRun,
       lastSyncAttemptAt,
@@ -643,6 +744,8 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
     aiExtractedKnowledgeItems,
     fallbackKnowledgeItems,
     chunksEmbedded,
+    skippedDuplicates,
+    embeddingFailures,
     extractionDiagnostics,
     deleted,
     skipped: skipped + threadsFailed,
@@ -658,7 +761,7 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
     chunksCreated,
     syncFrom: metadata.syncFrom ?? null,
     configuredSyncFrom: metadata.syncFrom ?? null,
-    effectiveQueryStart: afterDate.toISOString(),
+    effectiveQueryStart: afterDate?.toISOString() ?? 'all',
     lastSyncAtBeforeRun,
     lastSyncAtAfterRun,
     lastSyncAttemptAt,
@@ -674,12 +777,16 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
     diagnosticRecentCount: recentMessagesAvailable,
     diagnosticInboxCount: inboxMessagesAvailable,
     diagnosticSentCount: sentMessagesAvailable,
+    stats,
+    hasMore: Boolean(cursor),
+    nextPageToken: cursor,
+    errorsSummary: stats.errorsSummary,
     ...(zeroMessageFallback ? { message: zeroMessageFallback } : {}),
     ...(successfulImport && extractedKnowledgeItems === 0
       ? { message: `${messagesProcessed} emails synced and searchable. No structured memory items were extracted yet.` }
       : {}),
     ...(capped && successfulImport
-      ? { message: `Synced the ${metadata.maxMessages ?? MAX_MESSAGES_PER_SYNC} most recent emails — more emails match your filters. Narrow the time window or sender filter to capture the rest.` }
+      ? { message: `Processed a bounded batch of ${maxMessages} emails. More emails are available; continue the backfill to resume.` }
       : {}),
   }
 }
