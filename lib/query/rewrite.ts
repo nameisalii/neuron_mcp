@@ -30,6 +30,7 @@ const ENTITY_ALIASES = [
   { canonical: 'Jane Street', aliases: ['JS', 'Jane Street'] },
   { canonical: 'Capital One', aliases: ['C1', 'Capital One'] },
   { canonical: 'Citadel', aliases: ['Citadel'] },
+  { canonical: 'The Trade Desk', aliases: ['The Trade Desk', 'Trade Desk', 'TTD'] },
   { canonical: 'DataTruck', aliases: ['DataTruck', 'Data Truck', 'TMS', 'dispatch', 'truck management'] },
   { canonical: 'Five ELD', aliases: ['Five ELD', '5 ELD', 'TT ELD', 'ELD', 'GPS'] },
   { canonical: 'Gmail', aliases: ['Gmail', 'email', 'mail', 'inbox'] },
@@ -59,7 +60,7 @@ export function isShortFollowUp(query: string): boolean {
 
 function detectIntent(text: string): DetectedQueryIntent {
   if (/\bhow many\b/i.test(text) && INTERVIEW_TERMS.test(text)) return 'count_interviews'
-  if (INTERVIEW_TERMS.test(text) && /\b(status|update|where|stage|round)\b/i.test(text)) return 'interview_status'
+  if (INTERVIEW_TERMS.test(text) && /\b(status|update|where|stage|round|do i have|is there|any)\b/i.test(text)) return 'interview_status'
   if (/\b(deadline|due|when is|what date)\b/i.test(text)) return 'deadline'
   if (/\b(next steps?|follow[- ]?ups?|what next)\b/i.test(text)) return 'next_steps'
   if (/\b(tasks?|to[- ]?dos?|action items?)\b/i.test(text)) return 'task_lookup'

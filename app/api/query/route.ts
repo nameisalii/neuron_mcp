@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
@@ -132,6 +133,9 @@ type KnowledgeItemResult = {
   id: string
   title: string | null
   content: string
+  summary: string | null
+  reason: string | null
+  alternatives: string | null
   source: string
   sourceUrl: string | null
   sourceExternalId: string | null
@@ -162,6 +166,9 @@ async function findKnowledgeItems(
     id: true,
     title: true,
     content: true,
+    summary: true,
+    reason: true,
+    alternatives: true,
     source: true,
     sourceUrl: true,
     sourceExternalId: true,
@@ -270,6 +277,67 @@ function formatSourceForModel(source: QuerySource, index: number): string {
   return `[${index + 1}] [${sourceLabel}]${meta ? ` ${meta}` : ''}\n${source.content}`
 }
 
+function safeMetadata(value: Prisma.JsonValue | null | undefined): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+async function findGmailChunkSources(params: {
+  workspaceId: string
+  userId: string
+  pineconeIds: string[]
+  terms: string[]
+}): Promise<QuerySource[]> {
+  const terms = params.terms.map((term) => term.trim()).filter((term) => term.length >= 2)
+  if (params.pineconeIds.length === 0 && terms.length === 0) return []
+  const rows = await prisma.emailChunk.findMany({
+    where: {
+      workspaceId: params.workspaceId,
+      visibility: 'personal',
+      visibilitySetBy: params.userId,
+      OR: [
+        ...(params.pineconeIds.length ? [{ pineconeId: { in: params.pineconeIds } }] : []),
+        ...terms.flatMap((term) => [
+          { content: { contains: term, mode: 'insensitive' as const } },
+          { thread: { subject: { contains: term, mode: 'insensitive' as const } } },
+        ]),
+      ],
+    },
+    include: { thread: { select: { id: true, gmailThreadId: true, subject: true, labelNames: true, lastMessageAt: true } } },
+    orderBy: { updatedAt: 'desc' },
+    take: 40,
+  })
+  return rows.map((row) => {
+    const metadata = safeMetadata(row.metadata)
+    const sender = typeof metadata.from === 'string' ? metadata.from : null
+    const date = metadataDateToIso(metadata, ['date', 'messageDate', 'sourceCreatedAt']) ?? row.thread.lastMessageAt.toISOString()
+    return {
+      chunkId: row.id,
+      pageId: row.thread.id,
+      pageTitle: row.thread.subject || 'Gmail message',
+      notionPageId: null,
+      content: row.content,
+      labels: ['gmail', ...row.thread.labelNames],
+      source: 'gmail',
+      sourceUrl: typeof metadata.url === 'string' ? metadata.url : gmailThreadUrl(row.thread.gmailThreadId),
+      sourceExternalId: typeof metadata.messageId === 'string' ? metadata.messageId : row.thread.gmailThreadId,
+      owner: sender,
+      sourceMetadata: {
+        subject: row.thread.subject,
+        from: sender,
+        date,
+        labelNames: row.thread.labelNames,
+        snippet: row.content.replace(/\s+/g, ' ').trim().slice(0, 280),
+        threadId: row.thread.gmailThreadId,
+      },
+      sourceCreatedAt: date,
+      updatedAt: row.updatedAt.toISOString(),
+      visibility: row.visibility,
+      relevanceScore: params.pineconeIds.includes(row.pineconeId ?? '') ? 0.9 : 0.82,
+      verified: true,
+    }
+  })
+}
+
 function sourceDisplayName(source: string): string {
   if (source === 'five_eld') return 'Five ELD'
   if (source === 'gmail') return 'Gmail'
@@ -286,6 +354,24 @@ function sourceMatchesEntity(source: QuerySource, terms: string[]): boolean {
     if (normalized.length <= 3) return new RegExp(`(^|\\W)${normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|\\W)`, 'i').test(haystack)
     return haystack.includes(normalized)
   })
+}
+
+const INTERVIEW_EVIDENCE = /\b(interview|phone screen|technical round|behavioral round|onsite|final round|recruiter call|schedule(?:d| an)? (?:a |the )?(?:call|interview)|availability for (?:a |the )?(?:call|interview))\b/i
+const RECRUITING_RELATED = /\b(application|applied|online assessment|\bOA\b|codesignal|karat|hackerrank|recruiter|candidate)\b/i
+
+export function buildInterviewEvidenceAnswer(rewrite: QueryRewriteResult, sources: QuerySource[]): string | null {
+  if (!['interview_status', 'count_interviews', 'company_specific_followup'].includes(rewrite.detectedIntent)) return null
+  if (rewrite.detectedEntities.length === 0) return null
+  const company = rewrite.detectedEntities[0]
+  const confirmed = sources.filter((source) => INTERVIEW_EVIDENCE.test(source.content))
+  if (confirmed.length > 0) {
+    return `Yes — I found synced content that supports an interview with ${company}. I found ${confirmed.length} relevant source${confirmed.length === 1 ? '' : 's'}. Review the source cards for the exact message context; I’m not inferring a date, recruiter, or stage unless it appears there.`
+  }
+  const related = sources.filter((source) => RECRUITING_RELATED.test(source.content))
+  if (related.length > 0) {
+    return `I found ${company}-related recruiting content, but I don’t see enough evidence in the synced content to confirm an interview. The available sources appear related to an application, assessment, recruiter, or candidate process rather than a confirmed interview.`
+  }
+  return `I found ${company}-related synced content, but I don’t see evidence inside that content of an interview. A company name in a subject or title alone is not enough to confirm one.`
 }
 
 function isTaskQuery(question: string) {
@@ -491,7 +577,7 @@ async function findStructuredQuerySources(params: {
   if (terms.length === 0) return []
   const structuredTerms = entityTerms.length > 0 ? entityTerms : recruitingTerms
   const contains = (term: string) => ({ contains: term, mode: 'insensitive' as const })
-  const [tasks, decisions] = await Promise.all([
+  const [taskResult, decisionResult] = await Promise.allSettled([
     prisma.task.findMany({
       where: {
         workspaceId: params.workspaceId,
@@ -518,6 +604,8 @@ async function findStructuredQuerySources(params: {
       take: 20,
     }),
   ])
+  const tasks = taskResult.status === 'fulfilled' ? taskResult.value : []
+  const decisions = decisionResult.status === 'fulfilled' ? decisionResult.value : []
 
   const taskSources: QuerySource[] = tasks.map((task) => ({
     chunkId: `task:${task.id}`,
@@ -569,6 +657,8 @@ async function findStructuredQuerySources(params: {
 
 export async function POST(req: Request) {
   const startedAt = Date.now()
+  const requestId = randomUUID()
+  let failureStage = 'auth'
   let failureContext: { workspaceId: string; userId: string; displayName: string; queryLength: number } | null = null
   try {
     const apiWorkspaceId = validateApiKey(req)
@@ -619,6 +709,7 @@ export async function POST(req: Request) {
     }
 
     const { question, conversationId: requestedConversationId, documentIds } = parsed.data
+    failureStage = 'conversation_context'
     failureContext = { workspaceId, userId, displayName, queryLength: question.length }
     let recentMessages: Awaited<ReturnType<typeof loadRecentConversationMessages>> = []
     try {
@@ -632,6 +723,7 @@ export async function POST(req: Request) {
       console.error('[query] conversation context unavailable', err instanceof Error ? err.message : 'unknown error')
     }
     const rewrite = rewriteQuery({ currentQuery: question, history: recentMessages })
+    failureStage = 'retrieval'
     const retrievalQuery = rewrite.rewrittenQuery
     const escapedQuestion = escapeXml(retrievalQuery)
     const rewrittenIntent = detectQueryIntent(retrievalQuery)
@@ -752,13 +844,24 @@ export async function POST(req: Request) {
       }
     }
 
-    const embedding = await generateEmbedding(retrievalQuery)
+    let embedding: number[] | null = null
+    try {
+      embedding = await generateEmbedding(retrievalQuery)
+    } catch (err) {
+      console.error('[query/safe]', { requestId, stage: 'embedding', errorName: err instanceof Error ? err.name : 'UnknownError' })
+    }
     const personalNamespace = `${workspaceId}:${userId}`
 
-    const [teamMatches, personalMatches] = await Promise.all([
-      searchSimilar(embedding, workspaceId, intent.requestedSources.length > 0 ? 20 : 10, 0.3),
-      searchInNamespace(embedding, personalNamespace, 25, 0.3),
-    ])
+    const [teamMatches, personalMatches] = embedding ? await Promise.all([
+      searchSimilar(embedding, workspaceId, intent.requestedSources.length > 0 ? 20 : 10, 0.3).catch((err) => {
+        console.error('[query/safe]', { requestId, stage: 'team_vector_retrieval', errorName: err instanceof Error ? err.name : 'UnknownError' })
+        return []
+      }),
+      searchInNamespace(embedding, personalNamespace, 25, 0.3).catch((err) => {
+        console.error('[query/safe]', { requestId, stage: 'personal_vector_retrieval', errorName: err instanceof Error ? err.name : 'UnknownError' })
+        return []
+      }),
+    ]) : [[], []]
 
     const scoreMap = new Map<string, number>()
     for (const m of [...teamMatches, ...personalMatches]) {
@@ -766,6 +869,12 @@ export async function POST(req: Request) {
     }
 
     const allPineconeIds = [...scoreMap.keys()]
+    const gmailSearchTerms = [...new Set([
+      ...rewrite.entitySearchTerms,
+      ...(/interview|recruiter|online assessment|\boa\b/i.test(retrievalQuery)
+        ? ['interview', 'recruiter', 'technical', 'phone screen', 'onsite', 'next steps', 'assessment', 'CodeSignal', 'Karat', 'HackerRank']
+        : []),
+    ])]
 
     const chunkInclude = { page: { select: { id: true, title: true, notionPageId: true, lastEditedAt: true } } } as const
 
@@ -799,6 +908,18 @@ export async function POST(req: Request) {
 
     knowledgeItems = knowledgeItems as KnowledgeItemResult[]
 
+    let gmailChunkSources: QuerySource[] = []
+    try {
+      gmailChunkSources = await findGmailChunkSources({
+        workspaceId,
+        userId,
+        pineconeIds: allPineconeIds,
+        terms: rewrite.entitySearchTerms.length ? rewrite.entitySearchTerms : gmailSearchTerms,
+      })
+    } catch (err) {
+      console.error('[query/safe]', { requestId, stage: 'gmail_content_retrieval', errorName: err instanceof Error ? err.name : 'UnknownError' })
+    }
+
     const intentKnowledgeItems = await findIntentKnowledgeItems({ workspaceId, userId, intent })
     if (intentKnowledgeItems.length > 0) {
       const byId = new Map(knowledgeItems.map((item) => [item.id, item]))
@@ -817,6 +938,9 @@ export async function POST(req: Request) {
     if (rewrite.entitySearchTerms.length > 0) {
       const entityFilters = rewrite.entitySearchTerms.flatMap((term) => [
         { content: { contains: term, mode: 'insensitive' as const } },
+        { summary: { contains: term, mode: 'insensitive' as const } },
+        { reason: { contains: term, mode: 'insensitive' as const } },
+        { label: { contains: term, mode: 'insensitive' as const } },
         { title: { contains: term, mode: 'insensitive' as const } },
         { notionPageTitle: { contains: term, mode: 'insensitive' as const } },
         { owner: { contains: term, mode: 'insensitive' as const } },
@@ -832,13 +956,18 @@ export async function POST(req: Request) {
       }
     }
 
-    const structuredSources = await findStructuredQuerySources({
-      workspaceId,
-      entityTerms: rewrite.entitySearchTerms,
-      includeRecruiting: /interview|recruiter|online assessment|\boa\b/i.test(retrievalQuery),
-    })
+    let structuredSources: QuerySource[] = []
+    try {
+      structuredSources = await findStructuredQuerySources({
+        workspaceId,
+        entityTerms: rewrite.entitySearchTerms,
+        includeRecruiting: /interview|recruiter|online assessment|\boa\b/i.test(retrievalQuery),
+      })
+    } catch (err) {
+      console.error('[query/safe]', { requestId, stage: 'structured_retrieval', errorName: err instanceof Error ? err.name : 'UnknownError' })
+    }
 
-    if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0 && structuredSources.length === 0) {
+    if (chunks.length === 0 && knowledgeItems.length === 0 && gmailChunkSources.length === 0 && documentResults.length === 0 && structuredSources.length === 0) {
       // Pinecone returned nothing — fall back to Postgres keyword search
       const keywords = [...new Set([...rewrite.entitySearchTerms, ...retrievalQuery.trim().split(/\s+/)])].filter(w => w.length > 2)
       if (keywords.length > 0) {
@@ -860,7 +989,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (chunks.length === 0 && knowledgeItems.length === 0 && documentResults.length === 0 && structuredSources.length === 0) {
+    if (chunks.length === 0 && knowledgeItems.length === 0 && gmailChunkSources.length === 0 && documentResults.length === 0 && structuredSources.length === 0) {
       const noInfoAnswer = intent.requestedSources.includes('slack')
         ? "I don’t see synced Slack messages yet. Connect Slack Personal Access and choose channels to sync."
         : intent.requestedSources.includes('telegram')
@@ -956,7 +1085,7 @@ export async function POST(req: Request) {
         ? (item.sourceExternalId ? gmailThreadMap.get(item.sourceExternalId)?.subject : null) ?? item.notionPageTitle ?? item.category
         : item.notionPageTitle ?? item.category,
       notionPageId: null,
-      content: item.content,
+      content: [item.content, item.summary ? `Summary: ${item.summary}` : null, item.reason ? `Reason: ${item.reason}` : null, item.alternatives ? `Alternatives: ${item.alternatives}` : null].filter(Boolean).join('\n'),
       labels: [
         ...new Set([
           item.category,
@@ -986,7 +1115,7 @@ export async function POST(req: Request) {
       conflictNote: item.conflictNote,
     }})
 
-    const candidateSources = [...chunkSources, ...knowledgeSources, ...structuredSources]
+    const candidateSources = [...gmailChunkSources, ...chunkSources, ...knowledgeSources, ...structuredSources]
       .filter((source) => sourceMatchesEntity(source, rewrite.entitySearchTerms))
     const ranked = splitRankedSources(candidateSources, 3, {
       requestedSources: intent.requestedSources,
@@ -1010,6 +1139,28 @@ export async function POST(req: Request) {
       }).catch(() => null)
       void safeSaveQueryLog(workspaceId, userId, displayName, question, answer, [])
       return new Response(makeStaticAnswerStream({ answer, ranked, documents: [], conversationId, confidence: 0, rewrite }), {
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
+    const interviewEvidenceAnswer = buildInterviewEvidenceAnswer(rewrite, ranked.sources)
+    if (interviewEvidenceAnswer) {
+      const evidenceSources = ranked.sources.slice(0, 8)
+      const evidenceRanked = splitRankedSources(evidenceSources, 3, {
+        query: retrievalQuery,
+        entityTerms: rewrite.entitySearchTerms,
+      })
+      void safeSaveQueryLog(workspaceId, userId, displayName, question, interviewEvidenceAnswer, evidenceSources.map((source) => source.chunkId))
+      if (conversationId) void storeAssistantMessage({
+        workspaceId,
+        userId,
+        conversationId,
+        answer: interviewEvidenceAnswer,
+        sourceReferences: evidenceSources as unknown as Prisma.InputJsonValue,
+        documentReferences: [],
+        relatedLoadId,
+        metadata: { confidence, rewrittenQuery: retrievalQuery, detectedEntities: rewrite.detectedEntities, detectedIntent: rewrite.detectedIntent },
+      }).catch(() => null)
+      return new Response(makeStaticAnswerStream({ answer: interviewEvidenceAnswer, ranked: evidenceRanked, documents: [], conversationId, confidence, rewrite }), {
         headers: { 'Content-Type': 'text/event-stream' },
       })
     }
@@ -1061,6 +1212,7 @@ export async function POST(req: Request) {
       })
     }
 
+    failureStage = 'answer_generation'
     const openaiStream = await openai.chat.completions.create({
       model: 'gpt-4o',
       stream: true,
@@ -1123,6 +1275,15 @@ For interview or recruiting questions: start with a direct sourced count/status 
           const answer = fullAnswer.trim() || 'I could not find enough information to answer confidently, but these are the closest sources I found.'
           await recordSuccessfulQuery({ workspaceId, userId, displayName, queryLength: question.length, sources: ranked.sources, resultCount: ranked.totalSources, hasAnswer: Boolean(answer.trim()), confidence, latencyMs: Date.now() - startedAt })
           sendSSE(controller, { type: 'done', answer, ...ranked, documents: documentResults, conversationId, confidence, ...(retrievalDebug ? { retrievalDebug } : {}), ...interpretationPayload(rewrite) })
+        } catch (err) {
+          console.error('[query/safe]', { requestId, stage: 'answer_stream', errorName: err instanceof Error ? err.name : 'UnknownError' })
+          sendSSE(controller, {
+            type: 'error',
+            ok: false,
+            error: 'query_answer_failed',
+            message: "I couldn't answer this because the query service failed. Please try again.",
+            requestId,
+          })
         } finally {
           controller.close()
         }
@@ -1131,7 +1292,15 @@ For interview or recruiting questions: start with a direct sourced count/status 
 
     return new Response(readable, { headers: { 'Content-Type': 'text/event-stream' } })
   } catch (err) {
-    console.error('[query]', err instanceof Error ? err.message : 'unknown error')
+    console.error('[query/safe]', {
+      requestId,
+      stage: failureStage,
+      errorName: err instanceof Error ? err.name : 'UnknownError',
+      errorMessage: err instanceof Error ? err.message.slice(0, 240) : 'unknown error',
+      hasWorkspace: Boolean(failureContext?.workspaceId),
+      hasUser: Boolean(failureContext?.userId),
+      queryLength: failureContext?.queryLength ?? null,
+    })
     if (failureContext) {
       await safeTrackEvent(
         failureContext.workspaceId,
@@ -1142,7 +1311,12 @@ For interview or recruiting questions: start with a direct sourced count/status 
         { errorCode: 'QUERY_INTERNAL_ERROR', queryLength: failureContext.queryLength, latencyMs: Date.now() - startedAt },
       )
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      ok: false,
+      error: 'query_answer_failed',
+      message: "I couldn't answer this because the query service failed. Please try again.",
+      requestId,
+    }, { status: 500 })
   }
 }
 

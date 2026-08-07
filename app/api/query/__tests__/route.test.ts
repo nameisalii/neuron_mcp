@@ -19,6 +19,7 @@ jest.mock('@/lib/db', () => ({
     workspace: { findUnique: jest.fn() },
     notionChunk: { findMany: jest.fn() },
     knowledgeItem: { findMany: jest.fn() },
+    emailChunk: { findMany: jest.fn() },
     emailThread: { findMany: jest.fn() },
     queryLog: { create: jest.fn() },
     activityEvent: { count: jest.fn(), findFirst: jest.fn() },
@@ -53,6 +54,7 @@ const mockPersonalSearch = jest.mocked(searchInNamespace)
 const mockChat = jest.mocked(openai.chat.completions.create)
 const mockTrackEvent = jest.mocked(trackValidationEvent)
 const mockEmailThreadFindMany = jest.mocked(prisma.emailThread.findMany)
+const mockEmailChunkFindMany = jest.mocked(prisma.emailChunk.findMany)
 const mockCreateOrAppendConversation = jest.mocked(createOrAppendConversation)
 const mockLoadRecentConversationMessages = jest.mocked(loadRecentConversationMessages)
 const mockStoreAssistantMessage = jest.mocked(storeAssistantMessage)
@@ -113,6 +115,7 @@ beforeEach(() => {
   mockChunkFindMany.mockResolvedValue([mockChunk] as never)
   mockKnowledgeFindMany.mockResolvedValue([] as never)
   mockEmailThreadFindMany.mockResolvedValue([] as never)
+  mockEmailChunkFindMany.mockResolvedValue([] as never)
   mockQueryLogCreate.mockResolvedValue({ id: 'log-1' } as never)
   mockTrackEvent.mockResolvedValue({ ok: true, eventId: 'event-1' })
   jest.mocked(prisma.activityEvent.count).mockResolvedValue(1)
@@ -582,12 +585,49 @@ describe('POST /api/query', () => {
     expect(sources).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'task' })]))
   })
 
-  it('returns 500 on unexpected upstream error', async () => {
-    mockEmbed.mockRejectedValue(new Error('OpenAI down'))
+  it('finds Trade Desk interview evidence inside a Gmail body with a generic subject', async () => {
+    mockSearch.mockResolvedValue([])
+    mockPersonalSearch.mockResolvedValue([])
+    mockChunkFindMany.mockResolvedValue([] as never)
+    mockKnowledgeFindMany.mockResolvedValue([] as never)
+    mockEmailChunkFindMany.mockResolvedValue([{
+      id: 'email-chunk-1', emailThreadId: 'thread-db-1', workspaceId: WORKSPACE_ID,
+      content: 'The Trade Desk recruiter would like to schedule a technical interview next week.',
+      blockType: 'email_message', position: 0, pineconeId: null, labels: [], labeledBy: [],
+      visibility: 'personal', visibilitySetBy: CLERK_ID,
+      metadata: { messageId: 'gmail-message-1', from: 'Recruiting', date: '2026-08-01T00:00:00Z' },
+      createdAt: new Date('2026-08-01T00:00:00Z'), updatedAt: new Date('2026-08-01T00:00:00Z'),
+      thread: { id: 'thread-db-1', gmailThreadId: 'gmail-thread-1', subject: 'Following up', labelNames: ['INBOX'], lastMessageAt: new Date('2026-08-01T00:00:00Z') },
+    }] as never)
+
+    const events = await readSSE(await POST(makeRequest({ question: 'Do I have an interview with trade desk?' })))
+    const done = events.find((event) => event.type === 'done')
+    expect(done?.answer).toMatch(/Yes.*interview with The Trade Desk/i)
+    expect(done?.sources).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'gmail', content: expect.stringContaining('technical interview') })]))
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('does not infer an interview from a Trade Desk subject alone', async () => {
+    mockSearch.mockResolvedValue([])
+    mockPersonalSearch.mockResolvedValue([])
+    mockChunkFindMany.mockResolvedValue([] as never)
+    mockKnowledgeFindMany.mockResolvedValue([] as never)
+    mockEmailChunkFindMany.mockResolvedValue([{
+      id: 'email-chunk-2', workspaceId: WORKSPACE_ID, content: 'Weekly company newsletter and product announcements.',
+      pineconeId: null, visibility: 'personal', metadata: null, updatedAt: new Date('2026-08-01T00:00:00Z'),
+      thread: { id: 'thread-db-2', gmailThreadId: 'gmail-thread-2', subject: 'The Trade Desk newsletter', labelNames: ['INBOX'], lastMessageAt: new Date('2026-08-01T00:00:00Z') },
+    }] as never)
+    const events = await readSSE(await POST(makeRequest({ question: 'Do I have an interview with The Trade Desk?' })))
+    expect(events.find((event) => event.type === 'done')?.answer).toMatch(/don’t see evidence inside that content/i)
+  })
+
+  it('returns a safe request id on an unexpected upstream error', async () => {
+    mockWorkspaceFind.mockRejectedValue(new Error('Database unavailable'))
     const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
     expect(res.status).toBe(500)
     const data = await res.json()
-    expect(data.error).toBe('Internal server error')
+    expect(data).toMatchObject({ ok: false, error: 'query_answer_failed', message: expect.stringContaining("couldn't answer") })
+    expect(data.requestId).toEqual(expect.any(String))
     expect(mockTrackEvent).toHaveBeenCalledWith(
       WORKSPACE_ID,
       CLERK_ID,

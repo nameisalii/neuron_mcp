@@ -10,6 +10,7 @@ import TelegramAccountPanel from '@/components/integrations/TelegramAccountPanel
 import {
   ResetLink,
   DisconnectIntegrationButton,
+  IntegrationViewLink,
   integrationActionClass,
   integrationConnectClass,
 } from './IntegrationCardUi'
@@ -184,12 +185,13 @@ export default function TelegramIntegrationCard({
       </div>
 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-warm/60 pt-4">
-        {connected ? (
+        {anyConnected ? (
           <>
             <div className="flex flex-wrap items-center gap-3">
-              <DisconnectIntegrationButton type="telegram" />
+              <IntegrationViewLink href="/dashboard/integrations/telegram" />
+              {connected && <DisconnectIntegrationButton type="telegram" />}
             </div>
-            <ResetLink resetType="telegram" />
+            {connected && <ResetLink resetType="telegram" />}
           </>
         ) : (
           <button type="button" onClick={() => void openSetup()} className={integrationConnectClass}>

@@ -246,8 +246,8 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
       if (!res.ok) {
         let message = 'Query failed'
         try {
-          const data = await res.json() as { error?: string }
-          message = data.error ?? message
+          const data = await res.json() as { error?: string; message?: string; requestId?: string }
+          message = `${data.message ?? data.error ?? message}${data.requestId ? ` (Request ID: ${data.requestId})` : ''}`
         } catch {
           // Keep the generic message when the server did not return JSON.
         }
@@ -278,6 +278,8 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
               content?: string
               answer?: string
               interpretation?: string
+              message?: string
+              requestId?: string
             }
             if (json.type === 'sources') {
               updateAssistantMessage(assistantId, {
@@ -311,6 +313,12 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
                 setPersistenceWarning(null)
               }
               setQueryState('idle')
+            } else if (json.type === 'error') {
+              const streamMessage = `${json.message ?? 'Query service failed.'}${json.requestId ? ` (Request ID: ${json.requestId})` : ''}`
+              setError(streamMessage)
+              setQueryState('idle')
+              setMessages((current) => current.filter((message) => message.id !== assistantId))
+              return
             }
           } catch {
             // Skip malformed SSE block.
@@ -324,6 +332,8 @@ export default function QueryClient({ recentQueries, initialConversationId = nul
       const message = err instanceof Error ? err.message : 'Something went wrong while answering. Please check server logs or try again.'
       const friendly = message.includes('Question must') || message.includes('Please enter')
         ? 'Please enter a question.'
+        : message.includes('Request ID:')
+          ? message
         : /file|upload/i.test(message)
           ? message
           : 'Something went wrong while answering. Please check server logs or try again.'

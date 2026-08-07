@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, ExternalLink, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import SourceIcon from '@/components/SourceIcon'
 import KnowledgeTypePicker from '@/components/KnowledgeTypePicker'
@@ -50,6 +50,7 @@ export default function KnowledgeGrid({
   const [visibleCount, setVisibleCount] = useState(8)
   const [integrationsOpen, setIntegrationsOpen] = useState(false)
   const [detailsOpenId, setDetailsOpenId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const integrationMenuRef = useRef<HTMLDivElement | null>(null)
 
   const sources = useMemo(() => [...new Set(items.map(item => item.source))]
@@ -60,13 +61,16 @@ export default function KnowledgeGrid({
       filter.value === 'all' ? items.length : items.filter(item => item.category === filter.value).length,
     ]),
   ), [items])
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
   const filteredItems = useMemo(() => items.filter(item => (
     (activeType === 'all' || item.category === activeType)
     && (selectedSources.length === 0 || selectedSources.includes(item.source))
-  )), [activeType, items, selectedSources])
+    && (!normalizedSearch || [item.title, item.summary, item.content, item.source, item.category]
+      .some(value => value.toLocaleLowerCase().includes(normalizedSearch)))
+  )), [activeType, items, normalizedSearch, selectedSources])
   const visibleItems = filteredItems.slice(0, visibleCount)
 
-  useEffect(() => setVisibleCount(8), [activeType, selectedSources])
+  useEffect(() => setVisibleCount(8), [activeType, selectedSources, normalizedSearch])
 
   useEffect(() => {
     function closeMenu(event: MouseEvent) {
@@ -87,6 +91,11 @@ export default function KnowledgeGrid({
   return (
     <section aria-label="Knowledge list" className="space-y-5">
       <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+          <input aria-label="Search knowledge" type="search" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Search titles, content, sources, or keywords" className="w-full rounded-xl border border-gray-200 py-2.5 pl-10 pr-10 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100" />
+          {searchQuery && <button type="button" aria-label="Clear knowledge search" onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X className="h-4 w-4" /></button>}
+        </div>
         <div className="flex flex-wrap gap-2" aria-label="Knowledge types">
           {KNOWLEDGE_FILTERS.map(filter => (
             <button
@@ -187,7 +196,7 @@ export default function KnowledgeGrid({
       ) : (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-5 py-10 text-center">
           <p className="text-sm font-medium text-gray-700">No matching knowledge yet.</p>
-          <p className="mt-1 text-xs text-gray-500">Try another type or integration.</p>
+          <p className="mt-1 text-xs text-gray-500">{normalizedSearch ? 'Try a broader search term.' : 'Try another type or integration.'}</p>
         </div>
       )}
 

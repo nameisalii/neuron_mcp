@@ -32,4 +32,11 @@ describe('conversation-aware query rewriting', () => {
     const result = rewriteQuery({ currentQuery: 'HRT' })
     expect(result.entitySearchTerms).toEqual(expect.arrayContaining(['HRT', 'Hudson River Trading']))
   })
+
+  it('detects Trade Desk aliases and direct interview intent', () => {
+    const result = rewriteQuery({ currentQuery: 'Do I have an interview with trade desk?' })
+    expect(result.detectedEntities).toEqual(['The Trade Desk'])
+    expect(result.entitySearchTerms).toEqual(expect.arrayContaining(['The Trade Desk', 'Trade Desk', 'TTD']))
+    expect(result.detectedIntent).toBe('interview_status')
+  })
 })

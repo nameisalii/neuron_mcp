@@ -127,6 +127,29 @@ describe('IntegrationOverviewView', () => {
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
   })
 
+  it('shows the searchable memory section on Telegram overview', () => {
+    render(<IntegrationOverviewView data={makeData({
+      source: 'telegram',
+      title: 'Telegram Overview',
+      subtitle: 'Knowledge extracted from Telegram messages.',
+      items: [{
+        ...makeData().items[0],
+        id: 'telegram-1',
+        source: 'telegram',
+        title: 'HRT recruiting chat',
+        content: 'Recruiter shared the interview next steps in Telegram.',
+        owner: 'Recruiting channel',
+      }],
+    })} />)
+
+    const search = screen.getByRole('searchbox', { name: 'Search synced Telegram memory' })
+    expect(search).toHaveAttribute('placeholder', 'Search chats, people, channels, companies, or keywords')
+    fireEvent.change(search, { target: { value: 'HRT' } })
+    expect(screen.getByText('HRT recruiting chat')).toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'missing' } })
+    expect(screen.getByText('No matching Telegram memory')).toBeInTheDocument()
+  })
+
   it('renders a clean empty state when no items are synced', () => {
     render(<IntegrationOverviewView data={makeData({ items: [] })} />)
 

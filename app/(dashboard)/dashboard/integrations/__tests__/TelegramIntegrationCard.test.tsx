@@ -65,6 +65,7 @@ describe('TelegramIntegrationCard', () => {
     expect(screen.getByText('Connected', { selector: 'span' })).toBeInTheDocument()
     expect(screen.getByText(/Telegram Bot Mode is connected/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Manage discovered chats' })).toHaveAttribute('href', '/dashboard/integrations/telegram')
+    expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/telegram')
     expect(screen.getByText('Sync selected')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
     expect(screen.getByText('Nuclear Reset')).toBeInTheDocument()
@@ -86,6 +87,7 @@ describe('TelegramIntegrationCard', () => {
     expect(screen.getByText('Connected as Ali')).toBeInTheDocument()
     expect(screen.getByText(/3 chats selected/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Manage chats' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/dashboard/integrations/telegram')
     expect(screen.getAllByRole('button', { name: 'Sync selected' }).length).toBeGreaterThan(0)
   })
 

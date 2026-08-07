@@ -11,6 +11,7 @@ import {
   ExternalLink,
   MessageCircle,
   Plus,
+  Search,
   RotateCcw,
   Sparkles,
   ThumbsUp,
@@ -832,7 +833,11 @@ export default function TasksClient({
     [selectedTask, setSelectedTask] = useState<Task | null>(null),
     [archiveCandidate, setArchiveCandidate] = useState<Task | null>(null),
     [archiveNotice, setArchiveNotice] = useState(false),
-    [showAllSuggested, setShowAllSuggested] = useState(false);
+    [showAllSuggested, setShowAllSuggested] = useState(false),
+    [searchQuery, setSearchQuery] = useState("");
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+  const matchesSearch = (task: Task) => !normalizedSearch || [task.title, task.description, task.category, task.priority, task.sourceTitle, task.sourceSnippet, task.sourceType]
+    .filter(Boolean).some((value) => String(value).toLocaleLowerCase().includes(normalizedSearch));
   const nonArchivedTasks = tasks.filter((task) => task.status !== "archived");
   const activeTasks = nonArchivedTasks.filter(
     (task) => task.status === "active",
@@ -840,21 +845,22 @@ export default function TasksClient({
   const suggested = nonArchivedTasks.filter(
     (task) => task.status === "suggested",
   );
+  const searchedSuggested = suggested.filter(matchesSearch);
   const visibleSuggested = showAllSuggested
-    ? suggested
-    : suggested.slice(0, SUGGESTED_PREVIEW_COUNT);
+    ? searchedSuggested
+    : searchedSuggested.slice(0, SUGGESTED_PREVIEW_COUNT);
   const countFor = (value: Filter) =>
     value === "all"
       ? activeTasks.length
       : value === "completed" || value === "declined" || value === "archived"
         ? tasks.filter((task) => task.status === value).length
         : activeTasks.filter((task) => task.category === value).length;
-  const tableTasks =
+  const tableTasks = (
     filter === "completed" || filter === "declined" || filter === "archived"
       ? tasks.filter((task) => task.status === filter)
       : activeTasks.filter(
           (task) => filter === "all" || task.category === filter,
-        );
+        )).filter(matchesSearch);
   const tableTitle =
     filter === "all"
       ? "Active tasks"
@@ -928,6 +934,11 @@ export default function TasksClient({
           <Plus size={17} /> Add task
         </button>
       </header>
+      <div className="relative mt-6 max-w-2xl">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/35" aria-hidden="true" />
+        <input aria-label="Search tasks" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search tasks, descriptions, sources, or keywords" className="w-full rounded-xl border border-black/10 bg-white py-3 pl-10 pr-10 text-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100" />
+        {searchQuery && <button type="button" aria-label="Clear task search" onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/35"><X className="h-4 w-4" /></button>}
+      </div>
       <section className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "Suggested", count: suggested.length, Icon: Sparkles },
@@ -1021,7 +1032,7 @@ export default function TasksClient({
             Review tasks Neuron found from your connected tools.
           </p>
         </div>
-        {suggested.length ? (
+        {searchedSuggested.length ? (
           <>
             <div className="grid gap-3 lg:grid-cols-2">
               {visibleSuggested.map((task) => (
@@ -1033,7 +1044,7 @@ export default function TasksClient({
                 />
               ))}
             </div>
-            {suggested.length > SUGGESTED_PREVIEW_COUNT && (
+            {searchedSuggested.length > SUGGESTED_PREVIEW_COUNT && (
               <button
                 type="button"
                 onClick={() => setShowAllSuggested((current) => !current)}
@@ -1041,7 +1052,7 @@ export default function TasksClient({
               >
                 {showAllSuggested
                   ? "Hide"
-                  : `See more (${suggested.length - SUGGESTED_PREVIEW_COUNT})`}
+                  : `See more (${searchedSuggested.length - SUGGESTED_PREVIEW_COUNT})`}
               </button>
             )}
           </>

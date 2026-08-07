@@ -119,6 +119,22 @@ it('expands the composer for multiline input', () => {
   return waitFor(() => expect(textarea.style.height).toBe('120px'))
 })
 
+it('shows the safe server message and request id when Query fails', async () => {
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: false,
+    json: async () => ({
+      ok: false,
+      error: 'query_answer_failed',
+      message: "I couldn't answer this because the query service failed. Please try again.",
+      requestId: 'request-safe-123',
+    }),
+  } as Response)
+  renderQueryClient()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask Neuron anything' }), { target: { value: 'Do I have an interview with trade desk?' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+  expect(await screen.findByText(/Request ID: request-safe-123/)).toBeInTheDocument()
+})
+
 it('sends on Enter and renders chat bubbles with collapsed sources', async () => {
   renderQueryClient()
   const textarea = screen.getByRole('textbox', { name: 'Ask Neuron anything' })
