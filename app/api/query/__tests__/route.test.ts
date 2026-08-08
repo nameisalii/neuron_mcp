@@ -323,6 +323,23 @@ describe('POST /api/query', () => {
     expect(events.some((event) => event.type === 'delta')).toBe(true)
   })
 
+  it('returns an answer from another source when one database retrieval source closes', async () => {
+    const closed = Object.assign(new Error('Connection terminated unexpectedly'), { code: 'P1017' })
+    mockChunkFindMany.mockRejectedValue(closed)
+    mockSearchDocumentAttachments.mockResolvedValue([{
+      id: 'doc-1', fileName: 'Refund policy.pdf', documentType: 'pdf', source: 'upload',
+      sourceUrl: null, storageUrl: null, externalLoadId: null,
+      snippet: 'Refunds over $500 require manager approval.',
+    }] as never)
+
+    const res = await POST(makeRequest({ question: 'What is the refund policy?' }))
+    const events = await readSSE(res)
+
+    expect(res.status).toBe(200)
+    expect(events.some((event) => event.type === 'delta')).toBe(true)
+    expect(mockChunkFindMany).toHaveBeenCalledTimes(3)
+  })
+
   it('returns the top three ranked distinct sources in the streamed payload', async () => {
     mockSearch.mockResolvedValue([
       { id: 'linear-duplicate', score: 0.99 },

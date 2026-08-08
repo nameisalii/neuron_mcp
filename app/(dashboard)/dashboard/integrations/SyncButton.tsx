@@ -60,6 +60,7 @@ interface SyncResult {
   lastSyncedAt?: string | null
   message?: string
   error?: string
+  requestId?: string
   pagesDeleted?: number
   chunksDeleted?: number
   deliveryMode?: 'webhook'
@@ -183,6 +184,10 @@ export default function SyncButton({ endpoint, showReset = false, resetType, res
     if (syncResult?.requiresAdminApproval) return 'Your workspace requires admin approval.'
     if (syncResult?.requiresReconnect) return 'Reconnect this integration.'
     const raw = syncResult?.error ?? syncResult?.message ?? ''
+    if (syncResult?.error === 'database_connection_closed') {
+      const detail = syncResult.message ?? 'Database connection closed during sync. Some items may have synced. Please continue sync.'
+      return syncResult.requestId ? `${detail} Request ID: ${syncResult.requestId}` : detail
+    }
     if (/setup|configure|configured|credential|connect|auth|token|scope|permission|consent/i.test(raw)) {
       return 'Connection needs setup.'
     }

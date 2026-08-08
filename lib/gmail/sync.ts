@@ -6,6 +6,7 @@ import { upsertEmbeddingInNamespace } from '@/lib/pinecone'
 import { extractKnowledgeDetailed, type ExtractionDiagnostics } from '@/lib/extraction/extractor'
 import { trackEvent } from '@/lib/activity'
 import { escapeXml } from '@/lib/utils'
+import { isTransientPrismaError, withPrismaRetry } from '@/lib/db/retry'
 import { getGmailNamespace, getGmailSyncMaxMessages, getGmailBackfillMaxMessages, getGmailBackfillPageSize } from './config'
 import type { GmailBackfillCursor, GmailSyncMetadata, GmailSyncStats, SlackMessage } from '@/types'
 import {
@@ -27,6 +28,7 @@ export const MAX_MESSAGES_PER_SYNC = 500
 // per batch with a 1s pause stays well under the limit.
 export const MESSAGE_BATCH_SIZE = 40
 const BATCH_DELAY_MS = 1000
+const DB_THREAD_CONCURRENCY = 4
 const DAY_MS = 24 * 60 * 60 * 1000
 const MAX_EMAIL_EMBEDDING_CHARS = 6000
 const MAX_EMAIL_EXTRACTION_CHARS = 12000
@@ -317,7 +319,7 @@ async function createFallbackKnowledgeItem(
   const content = fallbackMemoryContent(candidate, diagnostics)
   if (!content) return 0
 
-  const existing = await prisma.knowledgeItem.findFirst({
+  const existing = await withPrismaRetry(() => prisma.knowledgeItem.findFirst({
     where: {
       workspaceId: input.workspaceId,
       source: 'gmail',
@@ -326,12 +328,12 @@ async function createFallbackKnowledgeItem(
       visibilitySetBy: input.syncedBy,
     },
     select: { id: true },
-  })
+  }))
   if (existing) return 0
 
   const contentHash = `gmail:${input.syncedBy}:${threadId}`.slice(0, 100)
   try {
-    const dbItem = await prisma.knowledgeItem.create({
+    const dbItem = await withPrismaRetry(() => prisma.knowledgeItem.create({
       data: {
         workspaceId: input.workspaceId,
         content,
@@ -349,7 +351,7 @@ async function createFallbackKnowledgeItem(
         notionPageTitle: candidate.subject,
       },
       select: { id: true },
-    })
+    }))
     try {
       const embedding = await generateEmbedding(boundedEmailText(content, MAX_EMAIL_EMBEDDING_CHARS))
       await upsertEmbeddingInNamespace(
@@ -358,10 +360,10 @@ async function createFallbackKnowledgeItem(
         { workspaceId: input.workspaceId, category: 'reference', source: 'gmail' },
         personalNamespace,
       )
-      await prisma.knowledgeItem.update({
+      await withPrismaRetry(() => prisma.knowledgeItem.update({
         where: { id: dbItem.id },
         data: { embeddingId: dbItem.id },
-      })
+      }))
       return 1
     } catch (err) {
       diagnostics.embeddingUpsertFailed++
@@ -388,6 +390,8 @@ async function syncThread(
   chunksEmbedded: number
   skippedDuplicates: number
   embeddingFailures: number
+  databaseFailures: number
+  messageFailures: number
   extractionDiagnostics: GmailExtractionDiagnostics
 }> {
   const { workspaceId, syncedBy, metadata } = input
@@ -396,7 +400,7 @@ async function syncThread(
   const url = gmailThreadUrl(threadId)
   const threadLabelNames = [...new Set(messages.flatMap((m) => labelNamesFor(m, metadata)))]
 
-  const dbThread = await prisma.emailThread.upsert({
+  const dbThread = await withPrismaRetry(() => prisma.emailThread.upsert({
     where: { workspaceId_gmailThreadId: { workspaceId, gmailThreadId: threadId } },
     create: {
       gmailThreadId: threadId,
@@ -416,14 +420,14 @@ async function syncThread(
       syncedBy,
       syncedAt: new Date(),
     },
-  })
+  }))
 
   // Preserve prior chunks. A bounded page may contain only part of a thread,
   // so replacing the thread here used to discard messages from earlier runs.
-  const existingChunks = await prisma.emailChunk.findMany({
+  const existingChunks = await withPrismaRetry(() => prisma.emailChunk.findMany({
     where: { emailThreadId: dbThread.id },
     select: { metadata: true },
-  })
+  }))
   const existingMessageIds = new Set(existingChunks.flatMap((chunk) => {
     const metadata = chunk.metadata as { messageId?: unknown } | null
     return typeof metadata?.messageId === 'string' ? [metadata.messageId] : []
@@ -433,6 +437,8 @@ async function syncThread(
   let chunksEmbedded = 0
   let skippedDuplicates = 0
   let embeddingFailures = 0
+  let databaseFailures = 0
+  let messageFailures = 0
 
   for (const [position, message] of messages.entries()) {
     if (existingMessageIds.has(message.messageId)) {
@@ -442,7 +448,8 @@ async function syncThread(
     const content = escapeXml(message.body)
     const pineconeId = `${workspaceId}-gmail-${message.messageId}`
 
-    const chunk = await prisma.emailChunk.create({
+    try {
+      const chunk = await withPrismaRetry(() => prisma.emailChunk.create({
       data: {
         emailThreadId: dbThread.id,
         workspaceId,
@@ -469,24 +476,31 @@ async function syncThread(
         visibility: 'personal',
         visibilitySetBy: syncedBy,
       },
-    })
-    chunksCreated++
-    try {
-      const embedding = await generateEmbedding(boundedEmailText(content, MAX_EMAIL_EMBEDDING_CHARS))
-      await upsertEmbeddingInNamespace(pineconeId, embedding, { workspaceId, source: 'gmail' }, personalNamespace)
-      await prisma.emailChunk.update?.({ where: { id: chunk.id }, data: { pineconeId } })
-      chunksEmbedded++
-    } catch {
-      // The source record is still searchable by metadata/content and can be
-      // embedded by a later run. Never lose mail because an AI service failed.
-      embeddingFailures++
+      }))
+      chunksCreated++
+      try {
+        const embedding = await generateEmbedding(boundedEmailText(content, MAX_EMAIL_EMBEDDING_CHARS))
+        await upsertEmbeddingInNamespace(pineconeId, embedding, { workspaceId, source: 'gmail' }, personalNamespace)
+        if (prisma.emailChunk.update) {
+          await withPrismaRetry(() => prisma.emailChunk.update({ where: { id: chunk.id }, data: { pineconeId } }))
+        }
+        chunksEmbedded++
+      } catch {
+        embeddingFailures++
+      }
+    } catch (err) {
+      console.error('[gmail/sync] message database write failed; continuing', err instanceof Error ? err.name : 'unknown')
+      if (isTransientPrismaError(err)) databaseFailures++
+      else messageFailures++
     }
   }
 
-  await prisma.emailThread.update?.({
-    where: { id: dbThread.id },
-    data: { messageCount: existingChunks.length + chunksCreated },
-  })
+  if (prisma.emailThread.update) {
+    await withPrismaRetry(() => prisma.emailThread.update({
+      where: { id: dbThread.id },
+      data: { messageCount: existingChunks.length + chunksCreated },
+    }))
+  }
 
   // Extracted knowledge inherits the same personal privacy as the chunks
   const extractionMessages: SlackMessage[] = messages.map((m) => ({
@@ -515,6 +529,8 @@ async function syncThread(
     chunksEmbedded,
     skippedDuplicates,
     embeddingFailures,
+    databaseFailures,
+    messageFailures,
     extractionDiagnostics,
   }
 }
@@ -595,11 +611,25 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
   let chunksEmbedded = 0
   let skippedDuplicates = 0
   let embeddingFailures = 0
+  let databaseFailures = 0
+  let messageFailures = 0
   const extractionDiagnostics = emptyGmailExtractionDiagnostics()
 
-  for (const [threadId, threadMessages] of threads) {
-    try {
-      const result = await syncThread({ ...input, metadata: normalizedMetadata }, threadId, threadMessages, personalNamespace)
+  const threadEntries = [...threads.entries()]
+  for (let offset = 0; offset < threadEntries.length; offset += DB_THREAD_CONCURRENCY) {
+    const batch = threadEntries.slice(offset, offset + DB_THREAD_CONCURRENCY)
+    const results = await Promise.allSettled(batch.map(([threadId, threadMessages]) =>
+      syncThread({ ...input, metadata: normalizedMetadata }, threadId, threadMessages, personalNamespace)
+        .then((result) => ({ result, messageCount: threadMessages.length })),
+    ))
+    for (const settled of results) {
+      if (settled.status === 'rejected') {
+        console.error('[gmail/sync] thread processing failed; continuing', settled.reason instanceof Error ? settled.reason.name : 'unknown')
+        threadsFailed++
+        skippedReasons.thread_failed = (skippedReasons.thread_failed ?? 0) + 1
+        continue
+      }
+      const { result, messageCount } = settled.value
       aiExtractedKnowledgeItems += result.aiExtractedKnowledgeItems
       fallbackKnowledgeItems += result.fallbackKnowledgeItems
       deleted += result.deleted
@@ -607,13 +637,11 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
       chunksEmbedded += result.chunksEmbedded
       skippedDuplicates += result.skippedDuplicates
       embeddingFailures += result.embeddingFailures
+      databaseFailures += result.databaseFailures
+      messageFailures += result.messageFailures
       addExtractionDiagnostics(extractionDiagnostics, result.extractionDiagnostics)
       threadsProcessed++
-      messagesProcessed += threadMessages.length
-    } catch (err) {
-      console.error('[gmail/sync] thread processing failed; continuing', err instanceof Error ? err.name : 'unknown')
-      threadsFailed++
-      skippedReasons.thread_failed = (skippedReasons.thread_failed ?? 0) + 1
+      messagesProcessed += messageCount
     }
   }
 
@@ -633,12 +661,12 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
     skippedDuplicates,
     skippedNoContent: skippedReasons.parse_failed ?? 0,
     skippedUnsupported: 0,
-    failed: threadsFailed + (skippedReasons.message_fetch_failed ?? 0) + embeddingFailures,
+    failed: threadsFailed + (skippedReasons.message_fetch_failed ?? 0) + embeddingFailures + databaseFailures + messageFailures,
     hasMore: Boolean(cursor),
-    errorsSummary: { ...skippedReasons, ...(embeddingFailures ? { embedding_failed: embeddingFailures } : {}) },
+    errorsSummary: { ...skippedReasons, ...(embeddingFailures ? { embedding_failed: embeddingFailures } : {}), ...(databaseFailures ? { database_write_failed: databaseFailures } : {}), ...(messageFailures ? { message_processing_failed: messageFailures } : {}) },
   }
 
-  await prisma.integration.update({
+  await withPrismaRetry(() => prisma.integration.update({
     where: { workspaceId_type: { workspaceId, type: 'gmail' } },
     data: {
       lastSyncAt: syncAttemptAt,
@@ -657,7 +685,7 @@ export async function syncGmail(input: GmailSyncInput): Promise<GmailSyncResult>
         ...(lastSuccessfulImportAt ? { lastSuccessfulImportAt } : {}),
       } as unknown as Prisma.InputJsonValue,
     },
-  })
+  }))
 
   let canReadMailbox = true
   let recentMessagesAvailable: number | undefined

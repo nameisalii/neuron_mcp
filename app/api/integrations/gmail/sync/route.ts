@@ -6,6 +6,8 @@ import { trackEvent } from '@/lib/activity'
 import type { GmailSyncMetadata } from '@/types'
 import { Prisma } from '@prisma/client'
 import { isGmailArchivedSyncEnabled, isGmailBackfillAllHistoryAllowed } from '@/lib/gmail/config'
+import { randomUUID } from 'node:crypto'
+import { isTransientPrismaError } from '@/lib/db/retry'
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'member'])
 const SYNC_COOLDOWN_SECONDS = 60
@@ -52,6 +54,7 @@ function emptyResult(error: string) {
 }
 
 export async function handleGmailSync(request?: Request, forcedMode?: 'recent' | 'backfill') {
+  const requestId = randomUUID()
   const body = await request?.json().catch(() => ({})) ?? {} as {
     mode?: 'recent' | 'backfill'
     maxMessages?: number
@@ -96,6 +99,7 @@ export async function handleGmailSync(request?: Request, forcedMode?: 'recent' |
     : Infinity
   if (mode === 'recent' && secondsSinceSync < SYNC_COOLDOWN_SECONDS) {
     return NextResponse.json({
+      ok: false,
       success: false,
       selectedLabels: metadata.selectedLabels ?? [],
       labelIdsUsed: metadata.selectedLabels ?? [],
@@ -199,8 +203,16 @@ export async function handleGmailSync(request?: Request, forcedMode?: 'recent' |
       ...result,
     })
 
+    const databaseFailures = result.errorsSummary?.database_write_failed ?? 0
     return NextResponse.json({
-      success: true,
+      ok: databaseFailures === 0,
+      success: databaseFailures === 0,
+      partial: Boolean(result.stats?.failed),
+      ...(databaseFailures > 0 ? {
+        error: 'database_connection_closed',
+        message: 'Database connection closed during sync. Some messages may have synced. Please continue sync.',
+        requestId,
+      } : {}),
       selectedLabels: result.selectedLabels,
       labelIdsUsed: result.labelIdsUsed,
       gmailQueryUsed: result.gmailQueryUsed,
@@ -242,6 +254,7 @@ export async function handleGmailSync(request?: Request, forcedMode?: 'recent' |
       message: result.message,
     })
   } catch (err) {
+    const databaseClosed = isTransientPrismaError(err)
     console.error('[gmail/sync]', err)
     await prisma.integration.update({
       where: { workspaceId_type: { workspaceId, type: 'gmail' } },
@@ -314,7 +327,12 @@ export async function handleGmailSync(request?: Request, forcedMode?: 'recent' |
       diagnosticRecentCount: null,
       diagnosticInboxCount: null,
       diagnosticSentCount: null,
-      error: err instanceof Error ? err.message : 'Sync failed',
+      error: databaseClosed ? 'database_connection_closed' : 'gmail_sync_failed',
+      message: databaseClosed
+        ? 'Database connection closed during sync. Some messages may have synced. Please continue sync.'
+        : 'Gmail sync failed. Please try again.',
+      stats: (metadata.lastSyncStats as unknown) ?? null,
+      requestId,
     }, { status: 500 })
   }
 }

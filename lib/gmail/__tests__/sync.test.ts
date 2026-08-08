@@ -289,6 +289,28 @@ describe('syncGmail query building', () => {
   })
 })
 
+describe('syncGmail database resilience', () => {
+  it('continues after one message exhausts transient database retries and returns partial stats', async () => {
+    setupGmailApi([
+      { id: 'msg_failed', threadId: 'thread_a' },
+      { id: 'msg_saved', threadId: 'thread_a' },
+    ])
+    const closed = Object.assign(new Error('Server has closed the connection'), { code: 'P1017' })
+    ;(prisma.emailChunk.create as jest.Mock)
+      .mockRejectedValueOnce(closed)
+      .mockRejectedValueOnce(closed)
+      .mockRejectedValueOnce(closed)
+      .mockRejectedValueOnce(closed)
+      .mockResolvedValueOnce({ id: 'chunk_saved' })
+
+    const result = await syncGmail(baseInput())
+
+    expect(result.importedChunks).toBe(1)
+    expect(result.stats).toMatchObject({ processed: 2, created: 1, failed: 1 })
+    expect(result.errorsSummary).toMatchObject({ database_write_failed: 1 })
+  }, 10_000)
+})
+
 describe('syncGmail thread grouping and chunks', () => {
   it('groups messages by thread with chronologically ordered chunk positions', async () => {
     setupGmailApi([

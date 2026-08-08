@@ -145,8 +145,8 @@ export default function GmailSetupModal({
       setEstimatedMessages(configureData.estimatedMessages ?? null)
 
       const syncRes = await fetch('/api/integrations/gmail/sync', { method: 'POST' })
-      const syncData = await syncRes.json() as { error?: string }
-      if (!syncRes.ok) throw new Error(syncData.error ?? 'Gmail sync failed')
+      const syncData = await syncRes.json() as { error?: string; message?: string; requestId?: string }
+      if (!syncRes.ok) throw new Error(`${syncData.message ?? syncData.error ?? 'Gmail sync failed'}${syncData.requestId ? ` Request ID: ${syncData.requestId}` : ''}`)
 
       onConfigured()
       onClose()

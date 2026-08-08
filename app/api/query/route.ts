@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { withPrismaRetry } from '@/lib/db/retry'
 import { openai, generateEmbedding } from '@/lib/openai'
 import { searchSimilar, searchInNamespace } from '@/lib/pinecone'
 import { trackValidationEvent } from '@/lib/activity'
@@ -876,16 +877,31 @@ export async function POST(req: Request) {
       ]
     }
 
+    const safeDbSource = async <T>(source: string, operation: () => Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await withPrismaRetry(operation, { retries: 2 })
+      } catch (err) {
+        console.error('[query/safe]', {
+          requestId,
+          stage: 'database_retrieval',
+          source,
+          errorName: err instanceof Error ? err.name : 'UnknownError',
+          errorMessage: err instanceof Error ? err.message.slice(0, 240) : 'unknown error',
+        })
+        return fallback
+      }
+    }
+
     let [chunks, knowledgeItems] = allPineconeIds.length > 0
       ? await Promise.all([
-        prisma.notionChunk.findMany({
+        safeDbSource('notion_chunks', () => prisma.notionChunk.findMany({
           where: { pineconeId: { in: allPineconeIds }, workspaceId },
           include: chunkInclude,
-        }),
-          findKnowledgeItems({
+        }), []),
+        safeDbSource('knowledge_items', () => findKnowledgeItems({
               ...visibilityWhere(workspaceId, userId),
               id: { in: allPineconeIds },
-          }),
+          }), [] as KnowledgeItemResult[]),
         ])
       : [[], []]
 
@@ -903,7 +919,7 @@ export async function POST(req: Request) {
       console.error('[query/safe]', { requestId, stage: 'gmail_content_retrieval', errorName: err instanceof Error ? err.name : 'UnknownError' })
     }
 
-    const intentKnowledgeItems = await findIntentKnowledgeItems({ workspaceId, userId, intent })
+    const intentKnowledgeItems = await safeDbSource('intent_knowledge', () => findIntentKnowledgeItems({ workspaceId, userId, intent }), [])
     if (intentKnowledgeItems.length > 0) {
       const byId = new Map(knowledgeItems.map((item) => [item.id, item]))
       for (const item of intentKnowledgeItems) {
@@ -928,10 +944,10 @@ export async function POST(req: Request) {
         { notionPageTitle: { contains: term, mode: 'insensitive' as const } },
         { owner: { contains: term, mode: 'insensitive' as const } },
       ])
-      const entityItems = await findKnowledgeItems({
+      const entityItems = await safeDbSource('entity_knowledge', () => findKnowledgeItems({
         ...visibilityWhere(workspaceId, userId),
         OR: entityFilters,
-      }, 30, [{ sourceCreatedAt: 'desc' }, { updatedAt: 'desc' }])
+      }, 30, [{ sourceCreatedAt: 'desc' }, { updatedAt: 'desc' }]), [] as KnowledgeItemResult[])
       const byId = new Map(knowledgeItems.map((item) => [item.id, item]))
       for (const item of entityItems) {
         if (!byId.has(item.id)) knowledgeItems.push(item)
@@ -956,18 +972,18 @@ export async function POST(req: Request) {
       if (keywords.length > 0) {
         const keywordFilter = keywords.map(w => ({ content: { contains: w, mode: 'insensitive' as const } }))
         ;[chunks, knowledgeItems] = await Promise.all([
-          prisma.notionChunk.findMany({
+          safeDbSource('keyword_notion_chunks', () => prisma.notionChunk.findMany({
             where: { workspaceId, OR: keywordFilter },
             include: chunkInclude,
             take: 10,
             orderBy: { position: 'asc' },
-          }),
-          findKnowledgeItems({
+          }), []),
+          safeDbSource('keyword_knowledge_items', () => findKnowledgeItems({
               ...visibilityWhere(workspaceId, userId),
               AND: [
                 { OR: keywordFilter },
               ],
-            }, 10),
+            }, 10), [] as KnowledgeItemResult[]),
         ])
       }
     }
@@ -999,7 +1015,7 @@ export async function POST(req: Request) {
 
     const gmailThreadIds = [...new Set(knowledgeItems.filter((item) => item.source === 'gmail' && item.sourceExternalId).map((item) => item.sourceExternalId!))]
     const gmailThreads = gmailThreadIds.length > 0
-      ? await prisma.emailThread.findMany({
+      ? await safeDbSource('gmail_threads', () => prisma.emailThread.findMany({
           where: { workspaceId, gmailThreadId: { in: gmailThreadIds } },
           select: {
             gmailThreadId: true,
@@ -1012,7 +1028,7 @@ export async function POST(req: Request) {
               select: { metadata: true },
             },
           },
-        })
+        }), [])
       : []
     const gmailThreadMap = new Map(gmailThreads.map((thread) => {
       const firstChunkMeta = (thread.chunks[0]?.metadata as Record<string, unknown> | null) ?? {}
