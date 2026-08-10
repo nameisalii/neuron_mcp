@@ -242,6 +242,9 @@ export default function KnowledgeSphereView({ graph }: { graph: KnowledgeGraphDa
         <div className="pointer-events-none absolute left-4 top-4 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-slate-400">
           {depth > 13 ? 'Outside the mesh' : depth > 7 ? 'Crossing the surface' : 'Inside the mesh'} · orbit {depth.toFixed(1)}
         </div>
+        <div className="pointer-events-none absolute right-4 top-4 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-right text-xs text-slate-400">
+          <span className="font-semibold text-slate-100">{graph.stats.totalKnowledge.toLocaleString()}</span> knowledge · {graph.stats.totalSources} sources · {graph.stats.totalEdges} connections
+        </div>
         <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
           {graph.nodes.slice(0, 8).map(node => <button key={node.id} type="button" onClick={() => setSelected(node)} className="rounded-full border border-slate-700 bg-slate-950/75 px-3 py-1.5 text-xs text-slate-300 hover:border-blue-500"><span className="mr-2 inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: node.color }} />{node.label}</button>)}
         </div>
