@@ -40,17 +40,21 @@ export default function KnowledgeGrid({
   activeType,
   onTypeChange,
   onItemCategoryChange,
+  initialSource = '',
+  initialSearch = '',
 }: {
   items: KnowledgeGridItem[]
   activeType: 'all' | KnowledgeDisplayCategory
   onTypeChange: (filter: 'all' | KnowledgeDisplayCategory) => void
   onItemCategoryChange?: (itemId: string, next: KnowledgeDisplayCategory) => void
+  initialSource?: string
+  initialSearch?: string
 }) {
-  const [selectedSources, setSelectedSources] = useState<string[]>([])
+  const [selectedSources, setSelectedSources] = useState<string[]>(initialSource ? [initialSource] : [])
   const [visibleCount, setVisibleCount] = useState(8)
   const [integrationsOpen, setIntegrationsOpen] = useState(false)
   const [detailsOpenId, setDetailsOpenId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(initialSearch)
   const integrationMenuRef = useRef<HTMLDivElement | null>(null)
 
   const sources = useMemo(() => [...new Set(items.map(item => item.source))]

@@ -7,7 +7,7 @@ import type { WorkspaceType } from '@/types'
 export default async function QueryPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ conversationId?: string | string[]; taskId?: string | string[] }>
+  searchParams?: Promise<{ conversationId?: string | string[]; taskId?: string | string[]; q?: string | string[] }>
 }) {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
@@ -49,11 +49,12 @@ export default async function QueryPage({
   const taskContext = task
     ? `Help me with this task: ${task.title}. Context: ${task.description || task.sourceSnippet || 'No additional context provided.'}`
     : ''
+  const questionContext = typeof params.q === 'string' ? params.q.slice(0, 1000) : ''
 
   return (
     <div className="flex h-[calc(100dvh-6.5rem)] min-h-0 w-full flex-col gap-4 overflow-hidden lg:h-[calc(100dvh-4rem)]">
       <h1 className="text-2xl font-bold text-gray-900">Chat</h1>
-      <QueryClient workspaceType={workspaceType} recentQueries={recentQueries} initialConversationId={initialConversationId} initialPrompt={taskContext} />
+      <QueryClient workspaceType={workspaceType} recentQueries={recentQueries} initialConversationId={initialConversationId} initialPrompt={taskContext || questionContext} />
     </div>
   )
 }

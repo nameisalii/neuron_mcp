@@ -11,7 +11,7 @@ const TYPE_FILTERS = new Set(['all', 'rules', 'decisions', 'ideas', 'facts', 'pr
 export default async function KnowledgePage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>
+  searchParams: Promise<{ type?: string; source?: string; search?: string }>
 }) {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
@@ -22,7 +22,8 @@ export default async function KnowledgePage({
   })
   if (!user?.workspace) redirect('/setup')
   const workspaceId = user.workspace.id
-  const requestedType = (await searchParams).type ?? 'all'
+  const params = await searchParams
+  const requestedType = params.type ?? 'all'
   const initialType = (TYPE_FILTERS.has(requestedType) ? requestedType : 'all') as 'all' | KnowledgeDisplayCategory
 
   const visibleKnowledge = {
@@ -109,6 +110,8 @@ export default async function KnowledgePage({
       }}
       items={items}
       initialType={initialType}
+      initialSource={params.source ?? ''}
+      initialSearch={params.search ?? ''}
     />
   )
 }
