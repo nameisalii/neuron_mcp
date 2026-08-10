@@ -236,16 +236,9 @@ export default function KnowledgeSphereView({ graph }: { graph: KnowledgeGraphDa
 
   return (
     <section aria-label="3D Knowledge Map" className="overflow-hidden rounded-2xl border border-slate-700 bg-[#050a16] text-slate-100 shadow-xl">
-      <div className="border-b border-slate-800 px-5 py-4">
-        <h2 className="text-lg font-semibold">3D Knowledge Map</h2>
-        <p className="mt-1 text-xs text-slate-400">Node size is based on how much knowledge exists in that source/entity. Lines show related knowledge.</p>
-      </div>
-      <div className="relative h-[min(72vh,720px)] min-h-[520px]">
+      <div className="relative h-[calc(100dvh-11rem)] min-h-[620px]">
         <div ref={mountRef} data-testid="knowledge-sphere-canvas" className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,#15264e_0%,#071022_45%,#03060f_100%)]" />
-        {graph.nodes.length === 0 && <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 w-[min(420px,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-700/80 bg-slate-950/80 px-6 py-5 text-center backdrop-blur">
-          <p className="font-medium text-slate-100">No knowledge to map yet.</p>
-          <p className="mt-1 text-sm text-slate-400">The sphere is ready. Connect an integration or add knowledge to grow your map.</p>
-        </div>}
+        {graph.nodes.length === 0 && <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 rounded-full border border-slate-700/80 bg-slate-950/80 px-4 py-2 text-center text-xs text-slate-400 backdrop-blur">No mapped nodes yet · the sphere remains available for exploration</div>}
         <div className="pointer-events-none absolute left-4 top-4 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-slate-400">
           {depth > 13 ? 'Outside the mesh' : depth > 7 ? 'Crossing the surface' : 'Inside the mesh'} · orbit {depth.toFixed(1)}
         </div>

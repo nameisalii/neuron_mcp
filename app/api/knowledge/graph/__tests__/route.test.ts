@@ -53,3 +53,21 @@ test('returns an empty normalized graph', async () => {
   const response = await GET()
   expect(await response.json()).toEqual({ nodes: [], edges: [], stats: { totalKnowledge: 0, totalSources: 0, totalEdges: 0, largestNodeSize: 0 } })
 })
+
+test('keeps null metadata items and filters only explicitly archived items', async () => {
+  const base = {
+    content: 'Workspace knowledge', summary: 'Summary', reason: null, label: null,
+    category: 'fact', source: 'manual', sourceExternalId: null,
+    createdAt: new Date('2026-08-01'), updatedAt: new Date('2026-08-01'), verified: false, confidence: 0.8,
+  }
+  findKnowledge.mockResolvedValue([
+    { ...base, id: 'visible-null', sourceMetadata: null },
+    { ...base, id: 'visible-malformed', sourceMetadata: 'legacy' },
+    { ...base, id: 'archived', sourceMetadata: { knowledgeStatus: 'archived' } },
+  ] as never)
+  const response = await GET()
+  const graph = await response.json()
+  expect(graph.stats.totalKnowledge).toBe(2)
+  expect(graph.nodes[0].relatedItemIds).toEqual(expect.arrayContaining(['visible-null', 'visible-malformed']))
+  expect(graph.nodes[0].relatedItemIds).not.toContain('archived')
+})

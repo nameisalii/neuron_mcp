@@ -94,7 +94,7 @@ export default function KnowledgePageClient({
         </div>
       </header>
 
-      <section aria-label="Knowledge overview" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {view === 'list' && <section aria-label="Knowledge overview" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map(({ label, value, note, icon: Icon }) => (
           <div key={label} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
             <span className="inline-flex rounded-xl bg-gray-50 p-2 text-gray-600"><Icon className="h-5 w-5" /></span>
@@ -103,7 +103,7 @@ export default function KnowledgePageClient({
             <p className="text-xs text-gray-500">{note}</p>
           </div>
         ))}
-      </section>
+      </section>}
 
       {view === 'list' ? <KnowledgeGrid
         items={liveItems}

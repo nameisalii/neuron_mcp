@@ -21,10 +21,6 @@ export async function GET() {
           { visibility: 'team' },
           { visibility: 'personal', visibilitySetBy: userId },
         ],
-        NOT: [
-          { sourceMetadata: { path: ['knowledgeStatus'], equals: 'archived' } },
-          { sourceMetadata: { path: ['archived'], equals: true } },
-        ],
       },
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
       take: 5000,
@@ -54,5 +50,11 @@ export async function GET() {
     }),
   ])
 
-  return NextResponse.json(buildKnowledgeGraph(items, tasks, decisions))
+  const visibleItems = items.filter(item => {
+    if (!item.sourceMetadata || typeof item.sourceMetadata !== 'object' || Array.isArray(item.sourceMetadata)) return true
+    const metadata = item.sourceMetadata as Record<string, unknown>
+    return metadata.knowledgeStatus !== 'archived' && metadata.archived !== true
+  })
+
+  return NextResponse.json(buildKnowledgeGraph(visibleItems, tasks, decisions))
 }
