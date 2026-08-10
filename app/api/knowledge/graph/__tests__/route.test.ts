@@ -1,30 +1,32 @@
 import { GET } from '../route'
 import { prisma } from '@/lib/db'
-import { knowledgeRequestContext } from '@/lib/knowledge/api'
+import { auth } from '@clerk/nextjs/server'
 
 jest.mock('next/server', () => ({ NextResponse: { json: (body: unknown, init?: { status?: number }) => ({ status: init?.status ?? 200, json: async () => body }) } }))
-jest.mock('@/lib/knowledge/api', () => ({ knowledgeRequestContext: jest.fn() }))
+jest.mock('@clerk/nextjs/server', () => ({ auth: jest.fn() }))
 jest.mock('@/lib/db', () => ({
   prisma: {
+    user: { findUnique: jest.fn() },
     knowledgeItem: { findMany: jest.fn() },
     task: { findMany: jest.fn() },
     decision: { findMany: jest.fn() },
   },
 }))
 
-const context = jest.mocked(knowledgeRequestContext)
+const mockAuth = jest.mocked(auth)
 const findKnowledge = jest.mocked(prisma.knowledgeItem.findMany)
 
 beforeEach(() => {
   jest.clearAllMocks()
-  context.mockResolvedValue({ response: null, userId: 'user-1', workspaceId: 'workspace-1' })
+  mockAuth.mockResolvedValue({ userId: 'user-1' } as never)
+  jest.mocked(prisma.user.findUnique).mockResolvedValue({ workspace: { id: 'workspace-1' } } as never)
   findKnowledge.mockResolvedValue([])
   jest.mocked(prisma.task.findMany).mockResolvedValue([])
   jest.mocked(prisma.decision.findMany).mockResolvedValue([])
 })
 
-test('requires authentication through the shared request context', async () => {
-  context.mockResolvedValue({ response: { status: 401, json: async () => ({ error: 'Unauthorized' }) } as never })
+test('requires authentication', async () => {
+  mockAuth.mockResolvedValue({ userId: null } as never)
   const response = await GET()
   expect(response.status).toBe(401)
   expect(findKnowledge).not.toHaveBeenCalled()
@@ -32,6 +34,10 @@ test('requires authentication through the shared request context', async () => {
 
 test('is workspace and visibility scoped and selects no KnowledgeItem title', async () => {
   await GET()
+  expect(prisma.user.findUnique).toHaveBeenCalledWith({
+    where: { clerkId: 'user-1' },
+    select: { workspace: { select: { id: true } } },
+  })
   expect(findKnowledge).toHaveBeenCalledWith(expect.objectContaining({
     where: expect.objectContaining({
       workspaceId: 'workspace-1',

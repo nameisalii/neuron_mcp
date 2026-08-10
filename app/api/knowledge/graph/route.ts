@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
-import { knowledgeRequestContext } from '@/lib/knowledge/api'
 import { buildKnowledgeGraph } from '@/lib/knowledge/graph'
 
 export async function GET() {
-  const context = await knowledgeRequestContext()
-  if (context.response) return context.response
-  const workspaceId = context.workspaceId!
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    select: { workspace: { select: { id: true } } },
+  })
+  if (!user?.workspace) return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+  const workspaceId = user.workspace.id
 
   const [items, tasks, decisions] = await Promise.all([
     prisma.knowledgeItem.findMany({
@@ -14,7 +19,7 @@ export async function GET() {
         workspaceId,
         OR: [
           { visibility: 'team' },
-          { visibility: 'personal', visibilitySetBy: context.userId },
+          { visibility: 'personal', visibilitySetBy: userId },
         ],
         NOT: [
           { sourceMetadata: { path: ['knowledgeStatus'], equals: 'archived' } },
