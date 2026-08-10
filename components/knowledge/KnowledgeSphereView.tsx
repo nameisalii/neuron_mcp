@@ -16,7 +16,7 @@ export default function KnowledgeSphereView({ graph }: { graph: KnowledgeGraphDa
 
   useEffect(() => {
     const mount = mountRef.current
-    if (!mount || graph.nodes.length === 0) return
+    if (!mount) return
     const scene = new THREE.Scene()
     scene.fog = new THREE.FogExp2(0x050a16, 0.018)
     const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 200)
@@ -228,13 +228,6 @@ export default function KnowledgeSphereView({ graph }: { graph: KnowledgeGraphDa
     }
   }, [graph])
 
-  if (graph.nodes.length === 0) return (
-    <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-16 text-center">
-      <p className="font-medium text-gray-800">No knowledge to map yet.</p>
-      <p className="mt-1 text-sm text-gray-500">Connect an integration or add knowledge first.</p>
-    </div>
-  )
-
   const connections = selected ? graph.edges.filter(edge => edge.from === selected.id || edge.to === selected.id) : []
   const viewItemsHref = selected?.kind === 'entity'
     ? `/dashboard/knowledge?search=${encodeURIComponent(selected.label)}`
@@ -249,6 +242,10 @@ export default function KnowledgeSphereView({ graph }: { graph: KnowledgeGraphDa
       </div>
       <div className="relative h-[min(72vh,720px)] min-h-[520px]">
         <div ref={mountRef} data-testid="knowledge-sphere-canvas" className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,#15264e_0%,#071022_45%,#03060f_100%)]" />
+        {graph.nodes.length === 0 && <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 w-[min(420px,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-700/80 bg-slate-950/80 px-6 py-5 text-center backdrop-blur">
+          <p className="font-medium text-slate-100">No knowledge to map yet.</p>
+          <p className="mt-1 text-sm text-slate-400">The sphere is ready. Connect an integration or add knowledge to grow your map.</p>
+        </div>}
         <div className="pointer-events-none absolute left-4 top-4 rounded-lg border border-slate-700/70 bg-slate-950/70 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-slate-400">
           {depth > 13 ? 'Outside the mesh' : depth > 7 ? 'Crossing the surface' : 'Inside the mesh'} · orbit {depth.toFixed(1)}
         </div>
