@@ -1,7 +1,10 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import NeuronHero from '@/components/landing/NeuronHero'
 
 export default async function RootPage() {
   const { userId } = await auth()
-  redirect(userId ? '/dashboard' : '/sign-up')
+  if (userId) redirect('/dashboard')
+
+  return <NeuronHero />
 }
