@@ -82,6 +82,8 @@ it('handles an empty workspace with compact empty states', () => {
 it('does not put Knowledge lists, filters, or Activity on Dashboard', () => {
   render(<DashboardOverview data={populatedData} />)
 
+  expect(screen.queryByRole('region', { name: 'Neuron Pulse' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Knowledge Health')).not.toBeInTheDocument()
   expect(screen.queryByTestId('knowledge-grid')).not.toBeInTheDocument()
   expect(screen.queryByRole('group', { name: 'Knowledge types' })).not.toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Recent activity' })).not.toBeInTheDocument()

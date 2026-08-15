@@ -28,7 +28,7 @@ it('renders the Knowledge header, overview cards, and all type filters', () => {
   render(<KnowledgePageClient counts={counts} items={items} initialType="all" />)
 
   expect(screen.getByRole('heading', { name: 'Knowledge' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '3D View' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Universe' })).toBeInTheDocument()
   expect(screen.getByText('Saved context from your integrations and workspace.')).toBeInTheDocument()
   for (const label of ['Total knowledge', 'Rules', 'Decisions', 'Integrations']) {
     expect(screen.getAllByText(label).length).toBeGreaterThan(0)
@@ -41,7 +41,7 @@ it('renders the Knowledge header, overview cards, and all type filters', () => {
 it('loads the 3D graph on demand and returns to the list', async () => {
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ nodes: [], edges: [], stats: { totalKnowledge: 0, totalSources: 0, totalEdges: 0, largestNodeSize: 0 } }) }) as unknown as typeof fetch
   render(<KnowledgePageClient counts={counts} items={items} initialType="all" />)
-  fireEvent.click(screen.getByRole('button', { name: '3D View' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Universe' }))
   expect(screen.getByRole('status')).toHaveTextContent('Loading 3D knowledge map')
   expect(await screen.findByText('No knowledge to map yet.')).toBeInTheDocument()
   expect(global.fetch).toHaveBeenCalledWith('/api/knowledge/graph')
@@ -52,7 +52,7 @@ it('loads the 3D graph on demand and returns to the list', async () => {
 it('shows a graph error state', async () => {
   global.fetch = jest.fn().mockResolvedValue({ ok: false }) as unknown as typeof fetch
   render(<KnowledgePageClient counts={counts} items={items} initialType="all" />)
-  fireEvent.click(screen.getByRole('button', { name: '3D View' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Universe' }))
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not load the knowledge map.'))
 })
 

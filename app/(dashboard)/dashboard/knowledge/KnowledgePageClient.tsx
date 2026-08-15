@@ -90,7 +90,7 @@ export default function KnowledgePageClient({
         <p className="mt-1 text-sm text-gray-500">Saved context from your integrations and workspace.</p></div>
         <div aria-label="Knowledge view" className="inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
           <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')} className={view === 'list' ? 'inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white' : 'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-600'}><List className="h-4 w-4" />List</button>
-          <button type="button" aria-pressed={view === 'sphere'} onClick={() => void showSphere()} className={view === 'sphere' ? 'inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white' : 'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-600'}><Boxes className="h-4 w-4" />3D View</button>
+          <button type="button" aria-pressed={view === 'sphere'} onClick={() => void showSphere()} className={view === 'sphere' ? 'inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white' : 'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-600'}><Boxes className="h-4 w-4" />Universe</button>
         </div>
       </header>
 

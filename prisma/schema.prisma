@@ -21,88 +21,101 @@ model User {
 }
 
 model Workspace {
-  id              String            @id @default(cuid())
-  name            String?
-  type            String            @default("solo")
-  ownerId         String            @unique
-  owner           User              @relation(fields: [ownerId], references: [id])
-  iconUrl         String?
-  plan            String            @default("free")
-  knowledgeItems  KnowledgeItem[]
-  decisions       Decision[]
-  ideas           Idea[]
-  clients         Client[]
-  integrations    Integration[]
-  slackUserConnections SlackUserConnection[]
+  id                         String                      @id @default(cuid())
+  name                       String?
+  type                       String                      @default("solo")
+  ownerId                    String                      @unique
+  owner                      User                        @relation(fields: [ownerId], references: [id])
+  iconUrl                    String?
+  plan                       String                      @default("free")
+  knowledgeItems             KnowledgeItem[]
+  decisions                  Decision[]
+  ideas                      Idea[]
+  clients                    Client[]
+  integrations               Integration[]
+  slackUserConnections       SlackUserConnection[]
   slackSelectedConversations SlackSelectedConversation[]
   telegramAccountConnections TelegramAccountConnection[]
-  telegramSelectedChats TelegramSelectedChat[]
-  notionPages     NotionPage[]
-  emailThreads    EmailThread[]
-  members         WorkspaceMember[]
-  invitations     Invitation[]
-  activityEvents  ActivityEvent[]
-  queryLogs       QueryLog[]
-  chatConversations ChatConversation[]
-  chatMessages    ChatMessage[]
-  chatAnalyticsEvents ChatAnalyticsEvent[]
-  documentAttachments DocumentAttachment[]
-  apiConnectors   ApiConnector[]
-  captureRules    CaptureRule[]
-  captureLogs     CaptureLog[]
-  syncStatuses    SyncStatus[]
-  digests         Digest[]
-  alerts          Alert[]
-  userPreferences UserPreference[]
-  tasks           Task[]
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @default(now()) @updatedAt
+  telegramSelectedChats      TelegramSelectedChat[]
+  notionPages                NotionPage[]
+  emailThreads               EmailThread[]
+  members                    WorkspaceMember[]
+  invitations                Invitation[]
+  activityEvents             ActivityEvent[]
+  queryLogs                  QueryLog[]
+  chatConversations          ChatConversation[]
+  chatMessages               ChatMessage[]
+  chatAnalyticsEvents        ChatAnalyticsEvent[]
+  documentAttachments        DocumentAttachment[]
+  apiConnectors              ApiConnector[]
+  captureRules               CaptureRule[]
+  captureLogs                CaptureLog[]
+  syncStatuses               SyncStatus[]
+  digests                    Digest[]
+  alerts                     Alert[]
+  userPreferences            UserPreference[]
+  tasks                      Task[]
+  knowledgeRelationships     KnowledgeRelationship[]
+  temporalVersions           TemporalKnowledgeVersion[]
+  evidenceClaims             EvidenceClaim[]
+  contradictions             KnowledgeContradiction[]
+  staleFindings              StaleKnowledgeFinding[]
+  intelligenceChanges        IntelligenceChange[]
+  discoveredProcesses        DiscoveredProcess[]
+  intelligenceFeedback       IntelligenceFeedback[]
+  healthSnapshots            KnowledgeHealthSnapshot[]
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @default(now()) @updatedAt
 }
 
 model KnowledgeItem {
-  id               String      @id @default(cuid())
-  workspaceId      String
-  workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  content          String
-  title            String?
-  summary          String?
-  status           String      @default("unverified")
-  tags             String[]    @default([])
-  archivedAt       DateTime?
-  statusUpdatedAt  DateTime?
-  statusUpdatedByUserId String?
-  category         String
-  aiSuggestedCategory String?
-  source           String
-  sourceUrl        String?
-  sourceExternalId String?
-  sourceMetadata   Json?
-  owner            String?
-  verified         Boolean     @default(false)
-  verifiedAt       DateTime?
-  verifiedBy       String?
-  confidence       Float       @default(0.8)
-  embeddingId      String?
-  frozen           Boolean     @default(false)
-  conflictNote     String?
-  reason           String?
-  alternatives     String?
-  contentHash      String?
-  clientId         String?
-  client           Client?     @relation(fields: [clientId], references: [id])
-  label            String?
-  notionPageId     String?
-  notionPage       NotionPage? @relation(fields: [notionPageId], references: [id])
-  notionPageTitle  String?
-  visibility       String      @default("team")
-  visibilitySetBy  String?
-  typeOverriddenByUser Boolean @default(false)
-  typeOverriddenAt DateTime?
+  id                     String                     @id @default(cuid())
+  workspaceId            String
+  workspace              Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content                String
+  title                  String?
+  summary                String?
+  status                 String                     @default("unverified")
+  tags                   String[]                   @default([])
+  archivedAt             DateTime?
+  statusUpdatedAt        DateTime?
+  statusUpdatedByUserId  String?
+  category               String
+  aiSuggestedCategory    String?
+  source                 String
+  sourceUrl              String?
+  sourceExternalId       String?
+  sourceMetadata         Json?
+  owner                  String?
+  verified               Boolean                    @default(false)
+  verifiedAt             DateTime?
+  verifiedBy             String?
+  confidence             Float                      @default(0.8)
+  embeddingId            String?
+  frozen                 Boolean                    @default(false)
+  conflictNote           String?
+  reason                 String?
+  alternatives           String?
+  contentHash            String?
+  clientId               String?
+  client                 Client?                    @relation(fields: [clientId], references: [id])
+  label                  String?
+  notionPageId           String?
+  notionPage             NotionPage?                @relation(fields: [notionPageId], references: [id])
+  notionPageTitle        String?
+  visibility             String                     @default("team")
+  visibilitySetBy        String?
+  typeOverriddenByUser   Boolean                    @default(false)
+  typeOverriddenAt       DateTime?
   typeOverriddenByUserId String?
-  sourceCreatedAt  DateTime?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  extractedTasks   Task[]
+  sourceCreatedAt        DateTime?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+  extractedTasks         Task[]
+  outgoingRelationships  KnowledgeRelationship[]    @relation("RelationshipSource")
+  incomingRelationships  KnowledgeRelationship[]    @relation("RelationshipTarget")
+  temporalVersions       TemporalKnowledgeVersion[]
+  evidenceLinks          EvidenceLink[]
 
   @@unique([workspaceId, contentHash])
   @@index([workspaceId, category])
@@ -110,6 +123,197 @@ model KnowledgeItem {
   @@index([workspaceId, verified])
   @@index([workspaceId, notionPageId])
   @@index([workspaceId, source, sourceExternalId])
+}
+
+model KnowledgeRelationship {
+  id                    String        @id @default(cuid())
+  workspaceId           String
+  workspace             Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceKnowledgeItemId String
+  sourceKnowledgeItem   KnowledgeItem @relation("RelationshipSource", fields: [sourceKnowledgeItemId], references: [id], onDelete: Cascade)
+  targetKnowledgeItemId String
+  targetKnowledgeItem   KnowledgeItem @relation("RelationshipTarget", fields: [targetKnowledgeItemId], references: [id], onDelete: Cascade)
+  relationshipType      String
+  confidence            Float         @default(0.8)
+  metadata              Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@unique([sourceKnowledgeItemId, targetKnowledgeItemId, relationshipType])
+  @@index([workspaceId, sourceKnowledgeItemId, confidence])
+  @@index([workspaceId, targetKnowledgeItemId, confidence])
+  @@index([workspaceId, relationshipType])
+}
+
+model TemporalKnowledgeVersion {
+  id              String                     @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem              @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  subjectKey      String
+  value           Json
+  validFrom       DateTime
+  validUntil      DateTime?
+  isCurrent       Boolean                    @default(true)
+  supersedesId    String?
+  supersedes      TemporalKnowledgeVersion?  @relation("VersionHistory", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy    TemporalKnowledgeVersion[] @relation("VersionHistory")
+  confidence      Float                      @default(0.8)
+  sourceEvidence  Json?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  @@index([workspaceId, subjectKey, isCurrent])
+  @@index([workspaceId, subjectKey, validFrom, validUntil])
+  @@index([knowledgeItemId])
+  @@index([supersedesId])
+}
+
+model EvidenceClaim {
+  id          String         @id @default(cuid())
+  workspaceId String
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  targetType  String
+  targetId    String
+  claim       String
+  confidence  Float
+  reasoning   String?
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  evidence    EvidenceLink[]
+
+  @@index([workspaceId, targetType, targetId])
+  @@index([workspaceId, confidence])
+}
+
+model EvidenceLink {
+  id              String        @id @default(cuid())
+  evidenceClaimId String
+  evidenceClaim   EvidenceClaim @relation(fields: [evidenceClaimId], references: [id], onDelete: Cascade)
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  role            String        @default("SUPPORTS")
+  relationship    String?
+  createdAt       DateTime      @default(now())
+
+  @@unique([evidenceClaimId, knowledgeItemId, role])
+  @@index([knowledgeItemId])
+}
+
+model KnowledgeContradiction {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  subjectKey           String
+  title                String
+  statementIds         String[]  @default([])
+  confidence           Float
+  likelyCurrentTruthId String?
+  status               String    @default("OPEN")
+  resolution           Json?
+  fingerprint          String
+  resolvedBy           String?
+  resolvedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([workspaceId, fingerprint])
+  @@index([workspaceId, status, confidence])
+  @@index([workspaceId, subjectKey])
+}
+
+model StaleKnowledgeFinding {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  knowledgeItemId      String
+  staleScore           Float
+  reason               String
+  status               String    @default("OPEN")
+  lastVerifiedAt       DateTime?
+  relevantNewerItemIds String[]  @default([])
+  recommendedAction    String?
+  dismissedBy          String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([workspaceId, knowledgeItemId])
+  @@index([workspaceId, status, staleScore])
+}
+
+model IntelligenceChange {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  changeType          String
+  title               String
+  before              Json?
+  after               Json?
+  reason              String?
+  occurredAt          DateTime
+  significance        Float
+  evidenceClaimId     String?
+  relatedKnowledgeIds String[]  @default([])
+  fingerprint         String
+  createdAt           DateTime  @default(now())
+
+  @@unique([workspaceId, fingerprint])
+  @@index([workspaceId, occurredAt])
+  @@index([workspaceId, significance, occurredAt])
+}
+
+model DiscoveredProcess {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name              String
+  steps             Json
+  frequency         Int
+  averageDurationMs BigInt?
+  participants      Json?
+  deviations        Json?
+  confidence        Float
+  lastObservedAt    DateTime
+  fingerprint       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([workspaceId, fingerprint])
+  @@index([workspaceId, confidence, lastObservedAt])
+}
+
+model IntelligenceFeedback {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  targetType     String
+  targetId       String
+  action         String
+  previousValue  Json?
+  correctedValue Json?
+  userId         String
+  createdAt      DateTime  @default(now())
+
+  @@index([workspaceId, targetType, targetId])
+  @@index([workspaceId, userId, createdAt])
+}
+
+model KnowledgeHealthSnapshot {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  score        Float
+  coverage     Float
+  freshness    Float
+  consistency  Float
+  connectivity Float
+  distribution Float
+  findings     Json
+  calculatedAt DateTime  @default(now())
+
+  @@index([workspaceId, calculatedAt])
 }
 
 model CrawledPage {
@@ -167,14 +371,14 @@ enum TaskActivityType {
 }
 
 model Task {
-  id                           String       @id @default(cuid())
+  id                           String         @id @default(cuid())
   workspaceId                  String
-  workspace                    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace                    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   title                        String
   description                  String?
-  status                       TaskStatus   @default(suggested)
-  priority                     TaskPriority @default(medium)
-  category                     TaskCategory @default(work)
+  status                       TaskStatus     @default(suggested)
+  priority                     TaskPriority   @default(medium)
+  category                     TaskCategory   @default(work)
   color                        String?
   dueAt                        DateTime?
   completedAt                  DateTime?
@@ -191,8 +395,8 @@ model Task {
   metadata                     Json?
   dedupeKey                    String?
   events                       TaskEvent[]
-  createdAt                    DateTime     @default(now())
-  updatedAt                    DateTime     @updatedAt
+  createdAt                    DateTime       @default(now())
+  updatedAt                    DateTime       @updatedAt
 
   @@unique([workspaceId, dedupeKey])
   @@index([workspaceId, status])
@@ -305,9 +509,9 @@ model Integration {
 }
 
 model SlackUserConnection {
-  id                    String    @id @default(cuid())
+  id                    String                      @id @default(cuid())
   workspaceId           String
-  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace             Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   connectedByUserId     String
   encryptedAccessToken  String
   encryptedRefreshToken String?
@@ -315,14 +519,14 @@ model SlackUserConnection {
   teamName              String?
   externalUserId        String
   externalUserName      String?
-  scopes                String[]  @default([])
+  scopes                String[]                    @default([])
   settings              Json
   tokenExpiresAt        DateTime?
-  installedAt           DateTime  @default(now())
+  installedAt           DateTime                    @default(now())
   lastSyncAt            DateTime?
   lastErrorCode         String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
   selectedConversations SlackSelectedConversation[]
 
   @@unique([workspaceId, connectedByUserId])
@@ -360,21 +564,21 @@ model SlackSelectedConversation {
 }
 
 model TelegramAccountConnection {
-  id                  String    @id @default(cuid())
+  id                  String                 @id @default(cuid())
   workspaceId         String
-  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace           Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId              String
   phoneHash           String?
   externalUserId      String?
   externalUsername    String?
   externalDisplayName String?
   encryptedSession    String?
-  status              String    @default("pending_code")
+  status              String                 @default("pending_code")
   lastSyncAt          DateTime?
   lastError           String?
   metadata            Json?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
   selectedChats       TelegramSelectedChat[]
 
   @@unique([workspaceId, userId])
@@ -534,16 +738,16 @@ model QueryLog {
 }
 
 model ChatConversation {
-  id             String        @id @default(cuid())
-  workspaceId    String
-  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  userId         String
-  title          String
-  relatedLoadId  String?
-  sourceContext  Json?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  messages       ChatMessage[]
+  id              String               @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId          String
+  title           String
+  relatedLoadId   String?
+  sourceContext   Json?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  messages        ChatMessage[]
   analyticsEvents ChatAnalyticsEvent[]
 
   @@index([workspaceId])

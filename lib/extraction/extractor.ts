@@ -7,6 +7,7 @@ import { EXTRACTION_SYSTEM_PROMPT, GMAIL_EXTRACTION_SYSTEM_PROMPT, CONFLICT_SYST
 import { escapeXml } from '@/lib/utils'
 import type { SlackMessage, ExtractedItem } from '@/types'
 import type { Prisma } from '@prisma/client'
+import { safelyPostProcessKnowledgeItem } from '@/lib/intelligence/postProcessingService'
 
 const CHUNK_SIZE = 20
 const CONFIDENCE_THRESHOLD = 0.4
@@ -290,6 +291,7 @@ export async function extractKnowledgeDetailed(
             notionPageTitle: notionPage?.title ?? null,
             sourceCreatedAt: batchSourceCreatedAt,
           })
+          safelyPostProcessKnowledgeItem(dbItem.id, workspaceId)
         } catch (dbErr) {
           console.error('[extractKnowledge] DB write failed, skipping item', dbErr)
           diagnostics.knowledgeItemCreateFailed++

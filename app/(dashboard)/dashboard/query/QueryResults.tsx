@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronDown, Copy, ExternalLink, FileText } from 'lucide-react'
+import { ChevronDown, Copy, ExternalLink, FileText, ShieldCheck } from 'lucide-react'
 import CitationText from './CitationText'
 import SourceCard, { type SourceItem } from './SourceCard'
 
@@ -179,6 +179,7 @@ function MarkdownAnswer({ answer, sources }: { answer: string; sources: SourceIt
 export default function QueryResults({ answer, sources, documents = [], complete, copied, onCopy }: Props) {
   const [sourcesExpanded, setSourcesExpanded] = useState(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(documents.length > 0)
+  const [whyExpanded, setWhyExpanded] = useState(false)
   const displayAnswer = answer.trim() || (complete && sources.length > 0 ? WEAK_ANSWER : '')
   const hasConflicts = sources.some((source) => Boolean(source.conflictNote))
   const hasRecentOrVerified = sources.some((source) => {
@@ -198,7 +199,8 @@ export default function QueryResults({ answer, sources, documents = [], complete
         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" aria-label="Neuron answer">
           <div className="mb-3 flex items-center justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${confidenceLabel === 'High confidence' ? 'bg-emerald-50 text-emerald-700' : confidenceLabel === 'Medium confidence' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>{confidenceLabel}</span>{hasConflicts && <span className="text-xs text-amber-700">Some sources may conflict. Review source cards.</span>}</div>
           {complete && (
-            <div className="mb-3 flex justify-end">
+            <div className="mb-3 flex justify-end gap-2">
+              <button type="button" onClick={() => setWhyExpanded(value => !value)} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50" aria-expanded={whyExpanded}><ShieldCheck className="h-3.5 w-3.5" />Why does Neuron believe this?</button>
               <button
                 type="button"
                 onClick={onCopy}
@@ -210,6 +212,7 @@ export default function QueryResults({ answer, sources, documents = [], complete
               </button>
             </div>
           )}
+          {whyExpanded && <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 text-sm"><p className="font-semibold text-gray-900">{confidenceLabel}</p><p className="mt-1 text-xs text-gray-600">{sources.length ? `Supported by ${sources.length} accessible source${sources.length === 1 ? '' : 's'}. Confidence reflects retrieval quality, verification, freshness, and conflicts.` : 'No supporting workspace evidence was retrieved, so this answer should not be treated as established truth.'}</p>{sources.length > 0 && <ul className="mt-3 space-y-2">{sources.slice(0, 5).map(source => <li key={source.chunkId} className="rounded-lg bg-white p-2 text-xs text-gray-700"><strong>{source.source}</strong>{source.pageTitle ? ` · ${source.pageTitle}` : ''}{source.sourceCreatedAt || source.updatedAt ? ` · ${new Date(source.sourceCreatedAt ?? source.updatedAt!).toLocaleDateString()}` : ''}{source.conflictNote ? <span className="ml-2 text-amber-700">Conflicting evidence</span> : null}</li>)}</ul>}</div>}
           {displayAnswer.toLowerCase().includes('conflict') && (
             <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700">
               I found conflicting saved context. Review the referenced integrations for inconsistencies.

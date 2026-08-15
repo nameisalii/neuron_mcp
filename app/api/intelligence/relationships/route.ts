@@ -1,0 +1,9 @@
+import { auth } from '@clerk/nextjs/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { requireWorkspaceMember } from '@/lib/api/workspace-auth'
+import { RELATIONSHIP_TYPES, findPaths, getNeighbors, upsertRelationship } from '@/lib/intelligence/knowledgeGraphService'
+const schema = z.object({ sourceKnowledgeItemId: z.string().min(1), targetKnowledgeItemId: z.string().min(1), relationshipType: z.enum(RELATIONSHIP_TYPES), confidence: z.number().min(0).max(1), metadata: z.record(z.unknown()).optional() })
+async function access() { const { userId } = await auth(); if (!userId) return null; return requireWorkspaceMember(userId) }
+export async function GET(request: NextRequest) { const result = await access(); if (!result) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status }); const itemId = request.nextUrl.searchParams.get('itemId'); const targetId = request.nextUrl.searchParams.get('targetId'); if (!itemId) return NextResponse.json({ error: 'itemId required' }, { status: 400 }); return NextResponse.json(targetId ? { paths: await findPaths(result.workspaceId, itemId, targetId) } : { neighbors: await getNeighbors(result.workspaceId, itemId) }) }
+export async function POST(request: Request) { const result = await access(); if (!result) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status }); const parsed = schema.safeParse(await request.json()); if (!parsed.success) return NextResponse.json({ error: 'Invalid relationship', details: parsed.error.flatten() }, { status: 400 }); return NextResponse.json(await upsertRelationship({ ...parsed.data, workspaceId: result.workspaceId }), { status: 201 }) }
